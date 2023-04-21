@@ -4,8 +4,8 @@
 
 
 # Byte MLPerf Inference Benchmark Tool
-Byte MLPerf (Inference) is a benchmark tool used by ByteDance to assess the performance and accuracy of different models in the inference system in different deployment scenarios. Compared to MLPerf, Byte MLPerf has the following characteristics:
-- The model and operating environment will be more representative in the actual business scenario;
+Byte MLPerf (Inference) is a benchmark tool used by ByteDance to evaluate the performance and accuracy of different models in different deployment scenarios. Compared to MLPerf, Byte MLPerf has the following characteristics:
+- The model will be more representative in the actual business scenario;
 - In addition to performance and accuracy, the evaluation of ASIC hardware also includes assessing the ease of use and the extent of graph compilation coverage;
 - The performance and accuracy obtained from testing on the Open Model Zoo will serve as a reference for evaluating the introduction of ASIC hardware;
 
