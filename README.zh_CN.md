@@ -44,9 +44,9 @@ python3 lanuch.py --task xxx --hardware_type xxx
     "test_numeric": true,         //精度：是否评估数值误差
     "clients": 3,                 //性能：提交数据的client threads
     "iterations": 100,            //性能：每个thread提交多少iteration
-    "batch_sizes":[1,4,8,16,32,64],//性能：每个thread提交数据时的bs
+    "batch_sizes":[1,4,8,16,32],  //性能：每个thread提交数据时的bs
     "data_percent": 50,           //精度：使用百分多少数据集评估精度, [1-100]
-    "compile_only": false,           //是否仅编译模型
+    "compile_only": false,        //是否仅编译模型
 }
 ```
 
@@ -69,6 +69,7 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | wide&deep | rec | regular | tensorflow | criteo | fp32 |
 | videobert | mm  |popular | onnx | cifra100 | fp32 |
 | albert | nlp | popular | pytorch | squad-1.1 | fp32 |
+| conformer | nlp | popular | onnx | none | fp32 |
 | roformer | nlp | popular | tensorflow | cail2019 | fp32 |
 | yolov5 | cv | popular | onnx | none | fp32 |
 | roberta | nlp | popular | pytorch | squad-1.1 | fp32 |
