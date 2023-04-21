@@ -4,12 +4,12 @@
 
 
 # Byte MLPerf Inference Benchmark Tool
-Byte MLPerf (Inference) is a benchmark tool used by ByteDance to evaluate the performance and accuracy of different models in different deployment scenarios. Compared to MLPerf, Byte MLPerf has the following characteristics:
-- The model will be more representative in the actual business scenario;
-- In addition to performance and accuracy, the evaluation of ASIC hardware also includes assessing the ease of use and the extent of graph compilation coverage;
-- The performance and accuracy obtained from testing on the Open Model Zoo will serve as a reference for evaluating the introduction of ASIC hardware;
+Byte MLPerf(Inference) is an AI Accelerator Benchmark that focuses on evaluating AI Accelerators from practical production perspective, including the ease of use and versatility of software and hardware. Byte MLPerf has the following characteristics:
+- Models and runtime environments are more closely aligned with practical business use cases.
+- For ASIC hardware evaluation, besides evaluate performance and accuracy, it also measure metrics like compiler usability and coverage.
+- Performance and accuracy results obtained from testing on the open Model Zoo serve as reference metrics for evaluating ASIC hardware integration.
 
-Vendors can refer to this document for guidance on how to build a backend:[ByteMLPerf Guide](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof) [[中文版](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf#TDK8of)]
+Vendors can refer to this document for guidance on how to build a byte mlperf backend:[ByteMLPerf Guide](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof) [[中文版](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf#TDK8of)]
 
 ## Usage
 The user uses lanuch.py as the entry point. When using byte mlperf to evaluate the model, you only need to pass in two parameters --task and --hardware_type, as shown below:
@@ -56,7 +56,7 @@ The models supported by Byte MlPerf are collected under the Model Zoo. From the 
 
 Open model collection principles:
 - Basic Model: including Resnet50, Bert and WnD;
-- Business Related Model：Models which are more similar with internal model structures;
+- Popular Model：Includes models currently widely used in the industry;
 - SOTA: including SOTA models corresponding to business domains;
 
 In addition to the complete model structure, Byte MlPerf will also add some typical model substructure subgraphs or OPs (provided that the open model cannot find a suitable model containing such classic substructures), such as transformer encoder/decoder with different sequence lengths , all kinds of common conv ops, such as group conv, depwise-conv, point-wise conv, and rnn common structures, such as gru/lstm, etc.
