@@ -1,0 +1,10 @@
+[
+    {
+        "name": "omp",
+        "note": "是否开始OMP？",
+        "dialog_type": "Yes/No Dialog",
+        "type": "bool",
+        "default": false,
+        "depends": null
+    }
+]

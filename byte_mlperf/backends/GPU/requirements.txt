@@ -1,0 +1,14 @@
+
+opencv-python-headless
+transformers
+tokenization
+bert-tensorflow==1.0.1
+torchvision==0.11.1
+onnx
+onnxruntime-gpu
+torch==1.10.0
+numpy
+flatbuffers==1.12.0
+six==1.15.0
+tensorflow==2.4.0
+sentencepiece

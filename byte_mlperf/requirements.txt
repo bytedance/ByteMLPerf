@@ -1,0 +1,11 @@
+matplotlib
+pandas
+virtualenv==16.7.9
+sklearn
+prompt_toolkit
+tqdm
+opencv-python
+transformers
+tokenization
+fpdf
+typing-extensions==3.7.4.3
