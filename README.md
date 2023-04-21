@@ -9,7 +9,7 @@ Byte MLPerf (Inference) is a benchmark tool used by ByteDance to assess the perf
 - In addition to performance and accuracy, the evaluation of ASIC hardware also includes assessing the ease of use and the extent of graph compilation coverage;
 - The performance and accuracy obtained from testing on the Open Model Zoo will serve as a reference for evaluating the introduction of ASIC hardware;
 
-Vendors can refer to this document for guidance on how to become a backend:[ByteMLPerf Guide](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof) [[中文版](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf#TDK8of)]
+Vendors can refer to this document for guidance on how to build a backend:[ByteMLPerf Guide](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof) [[中文版](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf#TDK8of)]
 
 ## Usage
 The user uses lanuch.py as the entry point. When using byte mlperf to evaluate the model, you only need to pass in two parameters --task and --hardware_type, as shown below:
