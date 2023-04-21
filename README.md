@@ -36,7 +36,7 @@ Note: All hardware types are defined under byte_mlperf/backends, and the name ne
 
 ### Workload Description
 A workload definition needs to contain the following fields:
-```json
+```javascript
 {
     "model": "bert-torch-fp32",   //The name of the model to be evaluated, which needs to be aligned with the model_zoo name
     "test_perf": true,            //Evaluate model performance

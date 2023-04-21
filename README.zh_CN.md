@@ -36,7 +36,7 @@ python3 lanuch.py --task xxx --hardware_type xxx
 
 ### Workload说明
 一个workload定义需包含如下字段:
-```json
+```javascript
 {
     "model": "bert-torch-fp32",   //待评估模型的名字，需要和model_zoo名字对齐
     "test_perf": true,            //是否评估模型性能
