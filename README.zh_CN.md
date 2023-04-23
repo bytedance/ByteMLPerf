@@ -12,9 +12,9 @@ Byte MLPerf（推理）是字节使用的一个基准套件，用于测量推理
 厂商可以参考该文档接入测试：[ByteMLPerf厂商接入指南](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf) [[English Version](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof)]
 
 ## Usage
-用户使用入口为lanuch.py, 在使用byte mlperf评估时，只需传入--task 、--hardware_type 两个参数，如下所示：
+用户使用入口为launch.py, 在使用byte mlperf评估时，只需传入--task 、--hardware_type 两个参数，如下所示：
 ```bash
-python3 lanuch.py --task xxx --hardware_type xxx
+python3 launch.py --task xxx --hardware_type xxx
 ```
 
 1. tasks
