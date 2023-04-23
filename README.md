@@ -14,7 +14,7 @@ Vendors can refer to this document for guidance on building backend: [ByteMLPerf
 ## Usage
 The user uses launch.py as the entry point. When using byte mlperf to evaluate the model, you only need to pass in two parameters --task and --hardware_type, as shown below:
 ```bash
-python3 lanuch.py --tasks xxx --hardware_type xxx
+python3 launch.py --tasks xxx --hardware_type xxx
 ```
 
 1. task
