@@ -5,5 +5,5 @@ torchvision==0.11.2 # for swinT
 tensorflow==2.7.2 # required by datasets solvement for wide_and_deep
 onnxruntime==1.10.0
 sentencepiece
-### added by jackz
 tf2onnx
+wrapt==1.14.1 # version 1.14.1 to avoid error: "TypeError: this __dict__ descriptor does not support '_DictWrapper' objects"
