@@ -1,0 +1,66 @@
+[
+    {
+      "name": "is_shape_inference",
+      "note": "是否使用PopRT的shape inference",
+      "dialog_type": "Yes/No Dialog",
+      "type": "bool",
+      "default": "True",
+      "depends": null
+    },
+    {
+      "name": "is_forced_fp16",
+      "note": "是否开启FP16加速",
+      "dialog_type": "Yes/No Dialog",
+      "type": "bool",
+      "default": "True",
+      "depends": null
+    },
+    {
+      "name": "io_overlap",
+      "note": "是否开启io overlap",
+      "dialog_type": "Yes/No Dialog",
+      "type": "bool",
+      "default": "False",
+      "depends": null
+    },
+    {
+      "name": "efficient_session",
+      "note": "是否开启efficient_session",
+      "dialog_type": "Yes/No Dialog",
+      "type": "bool",
+      "default": "False",
+      "depends": null
+    },
+    {
+      "name": "customized_model_passes",
+      "note": "模型优化的pass",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "",
+      "depends": null
+    },
+    {
+      "name": "num_iotiles",
+      "note": "io tile 数量",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "32",
+      "depends": null
+    },
+    {
+      "name": "use_callbacks",
+      "note": "是否开启callbacks",
+      "dialog_type": "Yes/No Dialog",
+      "type": "bool",
+      "default": "False",
+      "depends": null
+    },
+    {
+      "name": "bps",
+      "note": "更改callback模式默认batch per step (默认值128)",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "128",
+      "depends": null
+    }
+  ]

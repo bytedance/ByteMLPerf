@@ -1,0 +1,9 @@
+numpy==1.23.0
+protobuf==3.20.2
+opencv-python-headless # for swinT
+torchvision==0.11.2 # for swinT
+tensorflow==2.7.2 # required by datasets solvement for wide_and_deep
+onnxruntime==1.10.0
+sentencepiece
+### added by jackz
+tf2onnx

@@ -1,0 +1,17 @@
+{
+  "is_shape_inference": true,
+  "is_forced_fp16": true,
+  "use_iooverlap": false,
+  "use_callbacks": false,
+  "efficient_session": true,
+  "clients": 3,
+  "batch_sizes": [ 2, 12 ],
+  "customized_model_passes": "pre_scale,remove_input_cast,matmul_rotary_embedding,fused_attention,replace_groupnorm_with_fast_norm",
+  "compiler_options" : {
+    "partials_type": "half",
+    "use_128bit_conv_unit_load": true,
+    "enable_fast_reduce": true,
+    "disable_fast_norm": true,
+    "enable_insert_remap": false
+  }
+}
