@@ -152,7 +152,7 @@ class PerfEngine:
 
         best_batch_sizes = self.compile_backend.get_best_batch_size()
         if isinstance(best_batch_sizes, list):
-            self.pre_compile_config['workload'][
+            pre_compile_config['workload'][
                 'batch_sizes'] = best_batch_sizes
 
         log.info("Start to compile the model...")
