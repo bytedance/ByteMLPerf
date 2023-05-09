@@ -67,3 +67,9 @@ elif [ $2 == "open_cifar" ] && [ ! -f "byte_mlperf/download/cifar-100-python.tar
 fi
 
 echo "Extract Done."
+
+# Some models may failed to converted to onnx, please use the converted model below to test
+# wget -O byte_mlperf/download/albert-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/albert-torch-fp32-onnx.tar
+# wget -O byte_mlperf/download/bert-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert-torch-fp32-onnx.tar
+# wget -O byte_mlperf/download/resnet50-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50-torch-fp32-onnx.tar
+# wget -O byte_mlperf/download/roberta-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/roberta-torch-fp32-onnx.tar
