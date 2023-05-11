@@ -10,5 +10,6 @@
     "input_shape": {"new_categorical_placeholder:0": [26, 2], "new_numeric_placeholder:0": [1, 13]},
     "input_type": "INT64,FLOAT32",
     "dataset_name": "open_criteo_kaggle",
+    "best_batch": 2048,
     "max_batch_size": 16384
 }

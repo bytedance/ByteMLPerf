@@ -51,18 +51,22 @@ fi
 # Download Datasets
 if [ $2 == "open_imagenet" ] && [ ! -f "byte_mlperf/download/open_imagenet.tar" ] ; then
     wget -O byte_mlperf/download/open_imagenet.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_imagenet.tar
-    tar xf byte_mlperf/download/open_imagenet.tar -C byte_mlperf/datasets/open_imagenet
+    tar xf byte_mlperf/download/open_imagenet.tar -C byte_mlperf/datasets/
 elif [ $2 == "open_squad" ] && [ ! -f "byte_mlperf/download/open_squad.tar" ]; then
     wget -O byte_mlperf/download/open_squad.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_squad.tar
+    mkdir -p byte_mlperf/datasets/open_squad
     tar xf byte_mlperf/download/open_squad.tar -C byte_mlperf/datasets/open_squad
 elif [ $2 == "open_criteo_kaggle" ] && [ ! -f "byte_mlperf/download/eval.csv" ]; then
     wget -O byte_mlperf/download/eval.csv https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/eval.csv
+    mkdir -p byte_mlperf/datasets/open_criteo_kaggle
     cp byte_mlperf/download/eval.csv byte_mlperf/datasets/open_criteo_kaggle/eval.csv
 elif [ $2 == "open_cail2019" ] && [ ! -f "byte_mlperf/download/open_cail2019.tar" ]; then
     wget -O byte_mlperf/download/open_cail2019.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_cail2019.tar
+    mkdir -p byte_mlperf/datasets/open_cail2019
     tar xf byte_mlperf/download/open_cail2019.tar -C byte_mlperf/datasets/open_cail2019 --strip-components 1
 elif [ $2 == "open_cifar" ] && [ ! -f "byte_mlperf/download/cifar-100-python.tar" ]; then
     wget -O byte_mlperf/download/cifar-100-python.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/cifar-100-python.tar
+    mkdir -p byte_mlperf/datasets/open_cifar
     tar xf byte_mlperf/download/cifar-100-python.tar -C byte_mlperf/datasets/open_cifar
 fi
 

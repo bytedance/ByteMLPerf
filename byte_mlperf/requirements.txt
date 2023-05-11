@@ -1,7 +1,7 @@
 matplotlib
 pandas
 virtualenv==16.7.9
-sklearn
+scikit-learn
 prompt_toolkit
 tqdm
 opencv-python

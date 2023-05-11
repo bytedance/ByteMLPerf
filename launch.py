@@ -52,7 +52,7 @@ if __name__ == '__main__':
     if args.task:
         log.info("******************* Pip Package Installing *******************")
         subprocess.call([
-            'pip3', 'install', '-r', 'byte_mlperf/requirements.txt', '--quiet'])
+            'pip3', 'install', '-r', 'byte_mlperf/requirements.txt', '-i', 'https://pypi.tuna.tsinghua.edu.cn/simple', '--trusted-host', 'pypi.tuna.tsinghua.edu.cn'])
 
         workload = load_workload(args.task)
         with open("byte_mlperf/model_zoo/" + workload['model'] + '.json',
