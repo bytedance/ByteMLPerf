@@ -83,6 +83,7 @@ ByteMLPerf Vendor Backend List will be shown below
 | Vendor |  SKU | Key Parameters | Supplement |
 | ---- | ----| ---- | ---- |
 | Intel | Xeon | - | - |
+| Stream Computing | STC P920 | - | - |
 
 ## Benchmark Summary
 Benchmark Result Will be posted here
