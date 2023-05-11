@@ -11,5 +11,6 @@
     "input_type": "INT32,INT32,INT32",
     "dataset_name": "open_squad",
     "max_batch_size": 64,
+    "best_batch": 2,
     "is_quantized": false
 }

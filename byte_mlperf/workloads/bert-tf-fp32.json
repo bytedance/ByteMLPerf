@@ -5,7 +5,7 @@
     "test_numeric": true,
     "clients": 3,
     "iterations": 100,
-    "batch_sizes":[4,8,16,24],
+    "batch_sizes":[2],
     "data_percent": 100,
     "compile_only": false
 }

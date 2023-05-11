@@ -11,5 +11,6 @@
     "input_type": "LONG,LONG,LONG",
     "dataset_name": "open_squad",
     "max_batch_size": 64,
+    "best_batch": 2,
     "is_quantized": false
 }

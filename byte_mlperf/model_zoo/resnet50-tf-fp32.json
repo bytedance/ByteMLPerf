@@ -11,5 +11,6 @@
     "input_type": "FLOAT32",
     "dataset_name": "open_imagenet",
     "max_batch_size": 64,
+    "best_batch": 16,
     "layout": "NHWC"
 }

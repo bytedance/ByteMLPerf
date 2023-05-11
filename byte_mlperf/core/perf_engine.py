@@ -35,6 +35,8 @@ from byte_mlperf.core.configs.dataset_store import load_dataset
 from byte_mlperf.core.configs.backend_store import init_compile_backend, init_runtime_backend
 from byte_mlperf.tools.build_pdf import build_pdf
 
+from run_engine import engine
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("PerfEngine")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = '3'
@@ -347,8 +349,11 @@ class PerfEngine:
                 exec(open(activate_file).read(), {'__file__': activate_file})
                 pip_path = os.path.join(venv_dir, 'bin', 'pip3')
                 subprocess.call([
+                    pip_path, 'install', '--upgrade', 'pip', '-i', 'https://pypi.tuna.tsinghua.edu.cn/simple', '--trusted-host', 'pypi.tuna.tsinghua.edu.cn'
+                ])
+                subprocess.call([
                     pip_path, 'install', '-r', 'byte_mlperf/backends/' +
-                    hardware_type + '/requirements.txt', '-q'
+                    hardware_type + '/requirements.txt', '-i', 'https://pypi.tuna.tsinghua.edu.cn/simple', '--trusted-host', 'pypi.tuna.tsinghua.edu.cn'
                 ])
             else:
                 exec(open(activate_file).read(), {'__file__': activate_file})
@@ -357,8 +362,11 @@ class PerfEngine:
                 '''
                 pip_path = os.path.join(venv_dir, 'bin', 'pip3')
                 subprocess.call([
+                    pip_path, 'install', '--upgrade', 'pip', '-i', 'https://pypi.tuna.tsinghua.edu.cn/simple', '--trusted-host', 'pypi.tuna.tsinghua.edu.cn'
+                ])
+                subprocess.call([
                     pip_path, 'install', '-r', 'byte_mlperf/backends/' +
-                    hardware_type + '/requirements.txt', '-q'
+                    hardware_type + '/requirements.txt', '-i', 'https://pypi.tuna.tsinghua.edu.cn/simple', '--trusted-host', 'pypi.tuna.tsinghua.edu.cn'
                 ])
 
                 if not hasattr(sys, 'real_prefix'):
