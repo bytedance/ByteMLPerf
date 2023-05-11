@@ -35,6 +35,22 @@ In addition, a variety of tools for monitoring status of NPU devices, debugging 
 
 For more detailed software information, please refer to: https://docs.streamcomputing.com/zh/latest/
 
+# How to run
+1. Prepare environment  
+Prepare a machine with the STCP920 chip, install HPE, install -r byte_mlperf/requirements.txt. Then create a virtual environment, install -r byte_mlperf/backends/STC/requirements.txt, install Tensorturbo and STC_DDK.
+```bash
+export PYTHONPATH=$PYTHONPATH:ByteMLPerf:ByteMLPerf/byte_mlperf/backends/STC
+```
+
+2. Prepare model and dataset  
+Run byte_mlperf/prepare_model_and_dataset.sh to get model and dataset.
+
+3. Run 
+```bash
+python3 launch.py --tasks xxx --hardware_type STC  
+```
+--task parameter is the name of the incoming workload. You need to specify the workload. For example, if you would like to evaluate the workload: bert-tf-fp16.json, you need to specify --task bert-tf-fp16.
+
 
 # Company introduction
 Beijing Stream Computing Technology Co., LTD, is committed to providing cloud service manufacturers with high cost performance and high versatility of AI accelerated chips.
