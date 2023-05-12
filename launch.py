@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import os
-t1 framework
+
 import sys
 import socket
 import random
