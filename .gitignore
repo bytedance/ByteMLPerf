@@ -16,7 +16,8 @@ byte_mlperf/datasets/open_imagenet/preprocessed/
 byte_mlperf/datasets/*
 !byte_mlperf/datasets/fake_dataset
 !*.py
-byte_mlperf/reports/*
+!byte_mlperf/reports/*
+!byte_mlperf/reports/IPU/*.json
 !byte_mlperf/reports/README
 format_code.sh
 init_env.sh

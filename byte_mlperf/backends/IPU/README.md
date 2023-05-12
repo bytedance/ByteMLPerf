@@ -12,6 +12,13 @@ PopRT is a high-performance inference framework specifically for Graphcore IPUs.
 
 You can get PopRT and related documents from [graphcore/PopRT](https://github.com/graphcore/PopRT). Docker images are provided at [graphcorecn/poprt](https://hub.docker.com/r/graphcorecn/poprt).
 
+# Models supported
+
+- conformer-encoder-onnx-fp32
+- resnet50-torch-fp32
+- roformer-tf-fp32
+- widedeep-tf-fp32
+
 # How to run
 
 - Pull the PopRT docker image
