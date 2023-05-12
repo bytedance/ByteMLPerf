@@ -1,0 +1,8 @@
+numpy==1.23.0
+protobuf==3.20.2
+torch
+tensorflow==2.7.2
+tf2onnx
+wrapt==1.14.1
+onnx==1.13.1
+bert-tensorflow==1.0.1

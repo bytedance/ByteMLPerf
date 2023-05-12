@@ -1,0 +1,34 @@
+[
+    {
+      "name": "batch_sizes",
+      "note": "The batch sizes run with benchmark",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "",
+      "depends": null
+    },
+    {
+      "name": "converter_options",
+      "note": "PopRT converter options will be used, please referes to the PopRT documentation",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "{}",
+      "depends": null
+    },
+    {
+      "name": "compiler_options",
+      "note": "PopRT compiler options will be used, please referes to the PopRT documentation",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "{}",
+      "depends": null
+    },
+    {
+      "name": "clients",
+      "note": "The number of clients used to run the benchmark",
+      "dialog_type": "Input Dialog",
+      "type": "str",
+      "default": "1",
+      "depends": null
+    }
+]
