@@ -1,0 +1,34 @@
+{
+    "Model": "WIDEDEEP-TF-FP32",
+    "Backend": "IPU",
+    "Dataset": "OPEN_CRITEO_KAGGLE",
+    "Graph Compile": {
+        "Compile Duration": 89.08642,
+        "Compile Precision": "FP32",
+        "Subgraph Coverage": 100
+    },
+    "Accuracy": {
+        "Data Percent": 100,
+        "Top-1": 0.77393,
+        "Mean Diff": 0.00012,
+        "Std Diff": 0.0001,
+        "Max Diff": 0.00098,
+        "Max Rel-Diff": 1.0,
+        "Mean Rel-Diff": 0.00052,
+        "Diff Dist": "widedeep-tf-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 1024,
+            "QPS": 9070425,
+            "AVG Latency": 0.56,
+            "P99 Latency": 0.73
+        },
+        {
+            "BS": 20000,
+            "QPS": 31617144,
+            "AVG Latency": 3.12,
+            "P99 Latency": 3.13
+        }
+    ]
+}
