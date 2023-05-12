@@ -11,3 +11,4 @@ tensorflow==2.4.0
 onnxruntime
 torch==1.9.1
 sentencepiece==0.1.96
+pandas
