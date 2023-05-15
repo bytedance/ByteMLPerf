@@ -51,7 +51,7 @@ fi
 # Download Datasets
 if [ $2 == "open_imagenet" ] && [ ! -f "byte_mlperf/download/open_imagenet.tar" ] ; then
     wget -O byte_mlperf/download/open_imagenet.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_imagenet.tar
-    tar xf byte_mlperf/download/open_imagenet.tar -C byte_mlperf/datasets/open_imagenet
+    tar xf byte_mlperf/download/open_imagenet.tar -C byte_mlperf/datasets/
 elif [ $2 == "open_squad" ] && [ ! -f "byte_mlperf/download/open_squad.tar" ]; then
     wget -O byte_mlperf/download/open_squad.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_squad.tar
     tar xf byte_mlperf/download/open_squad.tar -C byte_mlperf/datasets/open_squad
@@ -67,9 +67,3 @@ elif [ $2 == "open_cifar" ] && [ ! -f "byte_mlperf/download/cifar-100-python.tar
 fi
 
 echo "Extract Done."
-
-# Some models may failed to converted to onnx, please use the converted model below to test
-# wget -O byte_mlperf/download/albert-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/albert-torch-fp32-onnx.tar
-# wget -O byte_mlperf/download/bert-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert-torch-fp32-onnx.tar
-# wget -O byte_mlperf/download/resnet50-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50-torch-fp32-onnx.tar
-# wget -O byte_mlperf/download/roberta-torch-fp32-onnx.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/roberta-torch-fp32-onnx.tar

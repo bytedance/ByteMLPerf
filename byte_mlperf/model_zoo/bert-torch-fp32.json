@@ -1,8 +1,8 @@
 {
     "model": "bert-torch-fp32",
-    "model_path": "byte_mlperf/model_zoo/regular/open_bert/bert_fp32.pt",
+    "model_path": "byte_mlperf/model_zoo/regular/open_bert/bert-base-uncased-squad-v1.pt",
     "framework": "Pytorch",
-    "framework_version": "1.8.1",
+    "framework_version": "1.9.1",
     "model_format": "pt",
     "model_precision": "FP32",
     "inputs":"input_ids.1,attention_mask.1,input.1",
