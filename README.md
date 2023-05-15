@@ -82,7 +82,7 @@ ByteMLPerf Vendor Backend List will be shown below
 
 | Vendor |  SKU | Key Parameters | Supplement |
 | ---- | ----| ---- | ---- |
-| Intel | Xeon | - | - |
+| Intel | Xeon | - | naive run via framwork |
 
 ## Benchmark Summary
 Benchmark Result Will be posted here
