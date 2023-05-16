@@ -98,7 +98,7 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
             # if 'albert' in self.configs['model']:
             #     (start_logits, end_logits) = (inputs[0][0].cpu().detach().numpy(), inputs[1][0].cpu().detach().numpy())
             # else:
-            if 'xlnet' in self.configs['model']:
+            if 'bert-torch-fp32' or 'roberta' in self.configs['model']:
                 (start_logits, end_logits) = (inputs[0].cpu().detach().numpy(),
                                               inputs[1].cpu().detach().numpy())
             else:

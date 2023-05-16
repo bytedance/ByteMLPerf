@@ -1,8 +1,8 @@
 {
     "model": "albert-torch-fp32",
-    "model_path": "byte_mlperf/model_zoo/popular/open_albert/albert-base.pt",
+    "model_path": "byte_mlperf/model_zoo/popular/open_albert/albert-base-squad.pt",
     "framework": "Pytorch",
-    "framework_version": "1.8.1",
+    "framework_version": "1.9.1",
     "model_format": "pt",
     "model_precision": "FP32",
     "inputs":"input_ids.1,attention_mask.1,token_type_ids.1",

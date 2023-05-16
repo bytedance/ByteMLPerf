@@ -35,11 +35,15 @@ def draw_all_diff(ori_outs, cur_outs, file_name) -> Dict[str, Any]:
 
     length = min(ori_data.shape[0], 300)
     diff = ori_data - cur_data
-    rel_diff = diff / ori_data
 
-    log.info('Mean Diff: {}, Std Diff: {}, Max Diff: {}'.format(
+    
+    ori_data = np.where(ori_data == 0, 1, ori_data)
+    rel_diff = np.divide(diff, ori_data)
+    rel_diff = np.nan_to_num(rel_diff)
+
+    log.info('Mean Diff: {}, Std Diff: {}, Max Diff: {}, Max Rel-Diff: {}, Mean Rel-Diff: {}'.format(
         np.mean(abs(diff)), np.std(abs(diff)),
-        abs(diff).max()))
+        abs(diff).max(), abs(rel_diff).max(), np.mean(abs(rel_diff))))
 
     result = {}
     result["Mean Diff"] = round(float(np.mean(abs(diff))), 5)

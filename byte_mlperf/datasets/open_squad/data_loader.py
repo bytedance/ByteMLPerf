@@ -117,29 +117,19 @@ class DataLoader(data_loader.Dataset):
         for i in tqdm(range(self.batch_num)):
             features = collections.defaultdict(list)
             for j in range(i * self.cur_bs, (i + 1) * self.cur_bs):
-                if "distill" in self.model:
-                    features['attention_mask:0'].append(
-                        self.eval_features[j].input_mask)
-                    features['input_ids:0'].append(
-                        self.eval_features[j].input_ids)
-                elif "roberta" in self.model:
-                    features['input_ids.1'].append(
-                        self.eval_features[j].input_ids)
-                    features['attention_mask.1'].append(
-                        self.eval_features[j].input_mask)
-                elif "albert" in self.model:
+                if "roberta" in self.model:
                     features['input_ids.1'].append(
                         self.eval_features[j].input_ids)
                     features['attention_mask.1'].append(
                         self.eval_features[j].input_mask)
                     features['token_type_ids.1'].append(
-                        self.eval_features[j].segment_ids)
+                        np.zeros((384,)))
                 elif "torch" in self.model:
                     features['input_ids.1'].append(
                         self.eval_features[j].input_ids)
                     features['attention_mask.1'].append(
                         self.eval_features[j].input_mask)
-                    features['input.1'].append(
+                    features['token_type_ids.1'].append(
                         self.eval_features[j].segment_ids)
                 else:
                     features['input_ids:0'].append(
