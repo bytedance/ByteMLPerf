@@ -83,7 +83,7 @@ ByteMLPerf Vendor Backend List will be shown below
 | Vendor |  SKU | Key Parameters | Supplement |
 | ---- | ----| ---- | ---- |
 | Intel | Xeon | - | - |
-| Stream Computing | STC P920 | - | - |
+| Stream Computing | STC P920 | Computational power: (fp16)128TFLOPS, Memory Bandwidth: 119.4GB/S | [README.md](byte_mlperf/backends/STC/README.md) |
 
 ## Benchmark Summary
 Benchmark Result Will be posted here
