@@ -1,0 +1,21 @@
+{
+    "albert-torch-fp32": {
+        "best_batch": 4
+    },
+    "bert-tf-fp32": {
+        "best_batch": 2
+    },
+    "bert-torch-fp32": {
+        "best_batch": 2
+    },
+    "resnet50-tf-fp32": {
+        "best_batch": 16
+    },
+    "robert-torch-fp32": {
+        "best_batch": 8
+    },
+    "widedeep-tf-fp32": {
+        "best_batch": 2048
+    }
+}
+
