@@ -62,15 +62,7 @@ class CompileBackendSTC(compile_backend.CompileBackend):
                 os.remove(tmpfile)
 
     def get_interact_profile(self, config):
-        model_profile = []
-        file_path = "byte_mlperf/backends/STC/" + self.hardware_type + ".json"
-        if os.path.exists(file_path):
-            with open(file_path, "r") as file_reader:
-                model_profile = json.load(file_reader)
-        else:
-            log.info("File path: %s does not exist, please check", file_path)
-
-        return model_profile
+        return []
 
     def version(self):
         return "2.3"
@@ -79,7 +71,10 @@ class CompileBackendSTC(compile_backend.CompileBackend):
         logging.root.level = logging.WARNING
         log.info("Running Backend Pre Compilation...")
         self.model_name = configs["model_info"]["model"]
-        self.best_batch = configs["model_info"]["best_batch"]
+        profile_path = os.path.join(os.path.split(os.path.realpath(__file__))[0], "STC.json")
+        with open(profile_path) as file_reader:
+            model_profile = json.loads(file_reader.read())
+        self.best_batch = model_profile[self.model_name]["best_batch"]
         return configs
 
     def get_best_batch_size(self):
@@ -127,7 +122,6 @@ class CompileBackendSTC(compile_backend.CompileBackend):
 
             for input_name in input_name.split(","):
                 shapes = configs["model_info"]["input_shape"][input_name]
-                best_batch = configs["model_info"]["best_batch"]
                 new_shape = []
                 for shape in shapes:
                     if isinstance(type, str):
@@ -137,7 +131,7 @@ class CompileBackendSTC(compile_backend.CompileBackend):
                             shape = shape.replace(name, f'config["model_info"]["{name}"]')
                         shape = ast.literal_eval(shape)
                     new_shape.append(shape)
-                new_shape[0] *= best_batch
+                new_shape[0] *= self.best_batch
                 input_shapes.append("[" + ",".join(str(val) for val in new_shape) + "]")
 
             input_shapes = ",".join(val for val in input_shapes)

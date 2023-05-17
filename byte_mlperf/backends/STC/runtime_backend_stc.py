@@ -47,6 +47,7 @@ class RuntimeBackendSTC(runtime_backend.RuntimeBackend):
         self.hardware_type = "STC"
         self.tmpdir = os.path.join(os.path.split(os.path.realpath(__file__))[0], "mix_tmp")
         self.best_batch = 1
+        self.thread_num = 8
         self.exec = []
 
     def benchmark(self, dataloader):
@@ -99,13 +100,12 @@ class RuntimeBackendSTC(runtime_backend.RuntimeBackend):
             del self.exec
             self.exec = None
 
-    def load(self, batch_size, thread_num=8):
-        self.best_batch = batch_size
+    def load(self, batch_size):
+        self.best_batch = self.configs["max_batch_size"]
         model_name = self.model_info["model"]
         local_file = os.path.join(self.tmpdir, model_name)
         self.local_file = local_file
-        self.thread_num = thread_num
-        self.exec = engine(local_file, thread_num)
+        self.exec = engine(local_file, self.thread_num)
         self.output_names = self.exec.get_output_names()
         self.input_names = self.exec.get_inputs()
 
