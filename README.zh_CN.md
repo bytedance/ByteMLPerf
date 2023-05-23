@@ -81,8 +81,9 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 目前支持的厂商Backend如下:
 
 | Vendor |  SKU | Key Parameters | Supplement |
-| ---- | ----| ---- | ---- |
+| :---- | :----| :---- | :---- |
 | Intel | Xeon | - | - |
+| Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <bli> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
 
 ## Benchmark Summary
 未来将会展示Benchmark性能Summary
