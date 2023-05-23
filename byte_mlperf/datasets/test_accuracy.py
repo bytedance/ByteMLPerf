@@ -25,7 +25,7 @@ def draw_all_diff(ori_outs, cur_outs, file_name) -> Dict[str, Any]:
     ori_data = ori_outs.flatten()
     cur_data = cur_outs.flatten()
     '''
-    Nan & Inf is not compareable, replece with 0
+    Nan & Inf is not compareable, replece with 0 
     '''
     ori_data[np.isnan(ori_data)] = 0.0
     ori_data[np.isinf(ori_data)] = 0.0
