@@ -33,11 +33,12 @@ In addition, a variety of tools for monitoring status of NPU devices, debugging 
 | stc-hpaa | Stream Computing Half-Precision Accuracy Analysis, for locating the calculation error location and corresponding data  |
 
 
-For more detailed software information, please refer to: https://docs.streamcomputing.com/zh/latest/
+For more detailed software information, please refer to: https://docs.streamcomputing.com/_/sharing/vSxLMI20nalGphdpXdEVoDg6JkUcfEkT?next=/zh/latest/
 
 # How to run
 1. Prepare environment  
-Prepare a machine with the STCP920 chip, install HPE, install -r byte_mlperf/requirements.txt. Then create a virtual environment, install -r byte_mlperf/backends/STC/requirements.txt, install Tensorturbo and STC_DDK.
+Prepare a machine with the STCP920 chip, install HPE, install -r byte_mlperf/requirements.txt. Then create a virtual environment, install -r byte_mlperf/backends/STC/requirements.txt, install Tensorturbo and STC_DDK. These installation packages can be obtained by visiting this link: https://docs.streamcomputing.com/_/sharing/vSxLMI20nalGphdpXdEVoDg6JkUcfEkT?next=/zh/latest/
+
 ```bash
 export PYTHONPATH=$PYTHONPATH:ByteMLPerf:ByteMLPerf/byte_mlperf/backends/STC
 ```
@@ -60,12 +61,13 @@ The first-generation chip achieves 128 TFLOPS in semi-precision floating-point o
 # The technical specifications of the first-generation chip
 | Name  | Value |
 | :-----:| :----: |
-| AI Computational power | fp16: 128 TFLOPS |
+| AI Computation power | 128 TFLOPS @ FP16 |
 | Memory Type | LPDDR4X |
-| Memory Capacity | 16GB |
-| Memory Bandwidth | 119.4GB/S |
-| PCIe Interface | PCI Express 4.0 x 16, support Lane Reversal |
-| Power Consumption | 160W |
+| Memory | 16GB, 119.4GB/S |
+| Last Level Buffer | 8MB, 256GB/s |
+| Level 1 Buffer | 1.25MB, 512GB/s |
+| Host Interface | PCIe 4, 16x, 32GB/s, support Lane Reversal |
+| Thermal Design Power | 160W |
 | Structural Dimension | 268.44mm x 111.15mm, single slot |
 
 # What we have done
