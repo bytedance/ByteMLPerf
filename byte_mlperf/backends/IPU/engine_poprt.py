@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import datetime
 import logging
 import threading as th
 import time
 from queue import Queue
 
+import datetime
 import numpy as np
 import torch
 from poprt import runtime
+from poprt.runtime import RuntimeConfig
 
 from . import engine
 
@@ -27,8 +30,13 @@ log = logging.getLogger("engine_poprt")
 
 
 class PopRT(engine.Engine):
-    def __init__(self, popef_path):
-        self.model_runner = runtime.ModelRunner(popef_path)
+    def __init__(self, popef_path, runtime_config):
+        config = RuntimeConfig()
+        # timeout in nanoseconds, which keep the same name as what it is in poprt, and then convert to ms
+        config.timeout_ns = datetime.timedelta(
+            milliseconds=runtime_config.get("timeout_ns", 5e6) / 1e6
+        )
+        self.model_runner = runtime.ModelRunner(popef_path, config)
 
     def predict(self, feeds):
         input_descriptions = self.model_runner.get_model_inputs()

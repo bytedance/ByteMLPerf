@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import logging
 import os
-import subprocess
+import shutil
+from pathlib import Path
 from typing import Any, Dict
 
 import onnx
@@ -52,24 +54,21 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         # convert model to onnx if it's not
         # configs['workload'] is the content of workloads/<task_name>.json and
         # configs['model_info'] is content of model_zoo/<task_name>.json
-        model_type = configs["model_info"]["model_format"]
-        model_name = configs["model_info"]["model"]
+        model_info = configs["model_info"]
+        model_type = model_info["model_format"]
+        model_name = model_info["model"]
+
+        pre_optimized_root = Path(self.current_dir) / "pre_optimized_models"
+        if not pre_optimized_root.exists():
+            pre_optimized_root.mkdir(parents=True)
+
         model_path = os.path.abspath(configs["model_info"]["model_path"])
-        onnx_path = os.path.join(
-            self.current_dir, "pre_optimized_models", model_name + ".onnx"
-        )
+        onnx_path = pre_optimized_root / (model_name + ".onnx")
+
         if model_type != "onnx":
-            # check and download converted onnx if existing
-            subprocess.call(
-                [
-                    "bash",
-                    os.path.join(self.current_dir, "get_converted_onnx.sh"),
-                    model_name,
-                ]
-            )
-            if os.path.exists(onnx_path):
-                configs["model_info"]["model_path"] = onnx_path
-                log.info("{} file exists, skip ONNX conversion".format(onnx_path))
+            if onnx_path.exists():
+                model_info["model_path"] = onnx_path
+                log.info("{} file exists, skip ONNX conversion".format(onnx_path.name))
             else:
                 # convert the model to onnx
                 log.info(
@@ -80,7 +79,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                 if model_type == "saved_model":
                     saved_to_onnx.savedmodel_to_onnx(model_path, onnx_path)
                 elif model_type == "pt":
-                    torch_to_onnx.torch_to_onnx(model_path, onnx_path)
+                    torch_to_onnx.torch_to_onnx(model_path, str(onnx_path))
                 else:
                     log.error(
                         "Wrong model type: {}, which must be saved_model, pt, or onnx".format(
@@ -90,7 +89,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                     raise TypeError("Model type must be saved_model, pt, or onnx")
 
                 if os.path.exists(onnx_path):
-                    configs["model_info"]["model_path"] = onnx_path
+                    model_info["model_path"] = onnx_path
                     log.info(
                         "Converted the model: {} from format: {} to onnx".format(
                             model_name, model_type
@@ -103,8 +102,23 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                         )
                     )
                     raise RuntimeError("Failed to convert model to onnx")
+                # modify the model for pack solution
+                if self.interact_info.get("pack", False):
+                    self._modify_bert_like_inputs(onnx_path)
         else:
             log.info("{} is onnx model, skip ONNX conversion".format(model_name))
+
+        # modify the model for pack solution
+        if self.interact_info.get("pack", False):
+            self._modify_bert_like_model_info(model_info)
+            src_path = os.path.join(
+                self.current_dir, "datasets", model_info["dataset_name"]
+            )
+            dest_path = os.path.join(
+                os.path.abspath("byte_mlperf"), "datasets", model_info["dataset_name"]
+            )
+            if not os.path.exists(dest_path):
+                shutil.copytree(src_path, dest_path)
 
         if not self.interact_info:
             interact_info = configs.get("interact_info", {})
@@ -130,10 +144,16 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             self.interact_info = config["interact_info"]
         log.info("The interaction info is:\n {}".format(self.interact_info))
 
+        precision = (
+            self.interact_info.get("converter_options", {})
+            .get("precision", "FP32")
+            .upper()
+        )
+
         result = {
             "model": config["model_info"]["model"],
             "framework": config["model_info"]["framework"],
-            "compile_precision": config["model_info"]["model_precision"],
+            "compile_precision": precision,
             "input_type": config["model_info"]["input_type"].split(","),
             "max_batch_size": config["model_info"]["max_batch_size"],
             "compile_status": "success",
@@ -181,7 +201,11 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         return model_profile
 
     def get_best_batch_size(self):
-        """Get Best Batch Size for the model."""
+        """Get Best Batch Size for the model.
+
+        Usually take the max batch size can be loaded to IPU as the
+        best batch size to get highest throughput.
+        """
         return self.interact_info.get("batch_sizes", None)
 
     def _compile(self, batch_size):
@@ -269,3 +293,56 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         )
 
         return popef_path
+
+    def _modify_bert_like_inputs(self, input_model_path):
+        model = onnx.load(input_model_path)
+
+        # for packed bert, we need to export position_ids to model's input
+        # step 1: remove unneed node
+        rm_node_names = [
+            "Shape_7",
+            "Gather_9",
+            "Add_11",
+            "Unsqueeze_12",
+            "Slice_14",
+            "Constant_8",
+            "Constant_10",
+            "Constant_13",
+        ]
+        rm_nodes = []
+        for node in model.graph.node:
+            if node.name in rm_node_names:
+                rm_nodes.append(node)
+
+        assert len(rm_node_names) == len(rm_nodes)
+
+        for node in rm_nodes:
+            model.graph.node.remove(node)
+
+        # step 2: add position_ids to model's input
+        position_ids = copy.deepcopy(model.graph.input[0])
+        position_ids.name = "position_ids"
+        model.graph.input.append(position_ids)
+
+        for node in model.graph.node:
+            if node.op_type == "Gather" and node.name == "Gather_17":
+                node.input[1] = position_ids.name
+
+        save_path = (
+            Path(self.current_dir)
+            / "pre_optimized_models"
+            / Path(input_model_path).name
+        )
+        print("Save preprocessed model to {}".format(save_path))
+        onnx.save(model, save_path)
+
+    def _modify_bert_like_model_info(self, model_info: Dict[str, Any]):
+        assert "input_shape" in model_info
+        assert "inputs" in model_info
+        assert "dataset_name" in model_info
+        assert "input_type" in model_info
+
+        model_info["inputs"] += ",position_ids"
+        model_info["input_type"] += ",LONG"
+        model_info["input_shape"]["position_ids"] = [1, 384]
+        model_info["dataset_name"] = model_info["dataset_name"] + "_ipu"

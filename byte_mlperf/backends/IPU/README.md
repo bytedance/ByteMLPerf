@@ -2,6 +2,18 @@
 
 Byte MLPerf supports the Graphcore [Intelligence Processing Unit (IPU)](https://www.graphcore.ai/products/ipu), built for Artificial Intelligence and Machine Learning.
 
+The Graphcore® C600 IPU-Processor card is a dual-slot, full-height PCI Express Gen4 card containing Graphcore’s Mk2 IPU with <b>FP8 support</b>, designed to accelerate machine intelligence applications for <b>both training and inference</b>. All other components are supplied by industry-standard vendors.
+
+The C600 has a thermal design power (TDP) of 185 W running typical workloads and is passively cooled when installed in a suitable chassis enclosure. The maximum power of the card is capped and can be configured to be higher or lower, should that be required.
+
+All the memory on the card is contained within the IPU, providing extremely high bandwidth to the processing cores. There is a total of 900 MB of In-Processor-Memory in the IPU.
+
+The IPU has 1,472 individual machine intelligence cores, generating up to 560 teraFLOPS of FP8 and 280 teraFLOPS of FP16 compute.
+
+The C600 card supports four IPU-Links with a total of 1 Tbps bi-directional bandwidth. C600 cards can be joined together into a cluster of up to eight C600 cards, with each pair of cards linked together with an IPU-Link cable carrying 2 IPU-Links. This gives a much higher IPU-IPU interconnect speed than is available through the PCIe bus alone.
+
+For more information of the Graphcore® C600, please refer to [C600 cards](https://docs.graphcore.ai/en/latest/hardware.html#c600-cards).
+
 # How to access IPUs
 
 To use IPUs you must have access to a system with IPU devices. To get access see [getting started](https://www.graphcore.ai/getstarted).
@@ -14,10 +26,14 @@ You can get PopRT and related documents from [graphcore/PopRT](https://github.co
 
 # Models supported
 
-- conformer-encoder-onnx-fp32
-- resnet50-torch-fp32
-- roformer-tf-fp32
-- widedeep-tf-fp32
+| Model | Domain | Purpose | Framework | Dataset | Precision |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| albert | nlp | popular | pytorch | squad-1.1 | fp16 |
+| bert-base | nlp | regular | pytorch | squad-1.1 | fp16 |
+| conformer | nlp | popular | onnx | none | fp16 |
+| resnet50-v1.5 | cv | regular | pytorch | imagenet2012 | fp16 |
+| roformer | nlp | popular | tensorflow | cail2019 | fp16 |
+| wide&deep | rec | regular | tensorflow | criteo | fp16 |
 
 # How to run
 
