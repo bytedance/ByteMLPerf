@@ -26,14 +26,14 @@ You can get PopRT and related documents from [graphcore/PopRT](https://github.co
 
 # Models supported
 
-| Model | Domain | Purpose | Framework | Dataset | Precision |
+| Model name |  Precision | QPS | Dataset | Metric name | Metric value |
 | ---- | ---- | ---- | ---- | ---- | ---- |
-| albert | nlp | popular | pytorch | squad-1.1 | fp16 |
-| bert-base | nlp | regular | pytorch | squad-1.1 | fp16 |
-| conformer | nlp | popular | onnx | none | fp16 |
-| resnet50-v1.5 | cv | regular | pytorch | imagenet2012 | fp16 |
-| roformer | nlp | popular | tensorflow | cail2019 | fp16 |
-| wide&deep | rec | regular | tensorflow | criteo | fp16 |
+| albert-torch-fp32 | FP16 | 2,938 | Open Squad 1.1 | F1 Score | 86.4353 |
+| bert-torch-fp32 | FP16 | 2,958 | Open Squad 1.1 | F1 Score | 85.07473 |
+| conformer-encoder-onnx-fp32 | FP16 | 8,372 | Fake Dataset | Mean Diff | 0.00161 |
+| resnet50-torch-fp32 | FP16 | 13,499 | Open Imagenet | Top-1 | 0.76963 |
+| roformer-tf-fp32 | FP16 | 2,520 | OPEN_CAIL2019 | Top-1 | 0.64323 |
+| widedeep-tf-fp32 | FP16 | 31,446,195 | Open Criteo Kaggle | Top-1 | 0.77392 |
 
 # How to run
 
