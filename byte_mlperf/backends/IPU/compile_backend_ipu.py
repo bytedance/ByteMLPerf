@@ -65,6 +65,18 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model_path = os.path.abspath(configs["model_info"]["model_path"])
         onnx_path = pre_optimized_root / (model_name + ".onnx")
 
+        if not self.interact_info:
+            self.interact_info = configs.get("interact_info", {})
+            self.interact_info["clients"] = int(self.interact_info.get("clients", "1"))
+            batch_sizes = self.interact_info.get("batch_sizes", "").split(",")
+            if batch_sizes:
+                self.interact_info["batch_sizes"] = [
+                    int(x.strip()) for x in batch_sizes if x.strip().isdigit()
+                ]
+            for key, value in self.interact_info.items():
+                if '_options' in key and isinstance(value, str):
+                    self.interact_info[key] = json.loads(value)
+
         if model_type != "onnx":
             if onnx_path.exists():
                 model_info["model_path"] = onnx_path
@@ -119,22 +131,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             )
             if not os.path.exists(dest_path):
                 shutil.copytree(src_path, dest_path)
-
-        if not self.interact_info:
-            interact_info = configs.get("interact_info", {})
-            self.interact_info = {}
-            self.interact_info["converter_options"] = interact_info.get(
-                "converter_options", {}
-            )
-            self.interact_info["clients"] = int(interact_info.get("clients", "1"))
-            batch_sizes = interact_info.get("batch_sizes", "").split(",").remove("")
-            if batch_sizes:
-                self.interact_info["batch_sizes"] = [
-                    int(x.strip()) for x in batch_sizes
-                ]
-            self.interact_info["compiler_options"] = json.loads(
-                interact_info.get("compiler_options", "{}")
-            )
 
         return configs
 
