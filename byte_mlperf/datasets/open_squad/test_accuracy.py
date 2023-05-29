@@ -17,6 +17,7 @@ import os
 import collections
 import numpy as np
 import tensorflow as tf
+import torch
 from tqdm import tqdm
 
 from byte_mlperf.datasets.open_squad.bert.accuracy_squad import write_predictions
@@ -49,6 +50,7 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
                               end_logits=end_logits[i]))
 
             diffs.append(start_logits + end_logits)
+
         np.save(self.output_dir + "/{}.npy".format(self.dataloader.name()),
                 diffs)
         data_file = os.path.abspath('.') + "/byte_mlperf/datasets/open_squad/dev-v1.1.json"
@@ -95,18 +97,19 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
                     start_results.append(start_logit)
                     end_results.append(end_logit)
         else:
-            # if 'albert' in self.configs['model']:
-            #     (start_logits, end_logits) = (inputs[0][0].cpu().detach().numpy(), inputs[1][0].cpu().detach().numpy())
-            # else:
-            if 'bert-torch-fp32' or 'roberta' in self.configs['model']:
-                (start_logits, end_logits) = (inputs[0].cpu().detach().numpy(),
-                                              inputs[1].cpu().detach().numpy())
+            if isinstance(inputs, dict):
+                (start_logits, end_logits) = (
+                    inputs["start_logits"],
+                    inputs["end_logits"],
+                )
+            elif isinstance(inputs[0], torch.Tensor):
+                (start_logits, end_logits) = (
+                    inputs[0].cpu().detach().numpy(),
+                    inputs[1].cpu().detach().numpy(),
+                )
             else:
-                if isinstance(inputs, dict):
-                    (start_logits, end_logits) = (inputs["start_logits"],
-                                                  inputs["end_logits"])
-                else:
-                    (start_logits, end_logits) = (inputs[0], inputs[1])
+                (start_logits, end_logits) = (inputs[0], inputs[1])
+
             for i in range(self.dataloader.cur_bs):
                 start_logit = [float(x) for x in start_logits[i].flat]
                 end_logit = [float(x) for x in end_logits[i].flat]

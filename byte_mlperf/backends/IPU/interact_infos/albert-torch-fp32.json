@@ -1,0 +1,20 @@
+{
+  "clients": 1,
+  "batch_sizes": [
+    32
+  ],
+  "pack": true,
+  "runtime_options": {
+    "timeout_ns": 0
+  },
+  "converter_options": {
+    "used_passes": [
+      "insert_attention_mask"
+    ],
+    "precision": "fp16",
+    "disable_fast_norm": true
+  },
+  "compiler_options": {
+    "available_memory_proportion": 0.5
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "clients": 1,
+  "batch_sizes": [
+    12
+  ],
+  "converter_options": {
+    "precision": "fp16",
+    "used_passes": [
+      "pre_scale",
+      "remove_input_cast",
+      "matmul_rotary_embedding",
+      "fused_attention",
+      "replace_groupnorm_with_fast_norm"
+    ],
+    "disable_fast_norm": true
+  },
+  "compiler_options": {
+    "use_128bit_conv_unit_load": true,
+    "enable_fast_reduce": true
+  }
+}

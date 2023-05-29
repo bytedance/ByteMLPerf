@@ -12,23 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-import numpy as np
 import argparse
-import os
 import json
+
+import numpy as np
+import torch
 
 
 def torch_to_onnx(model_path, output_path):
-    model_name = output_path.split('/')[-1][:-4]
-    with open("model_zoo/" + model_name + 'json', 'r') as f:
+    model_name = output_path.split("/")[-1][:-4]
+    with open("byte_mlperf/model_zoo/" + model_name + "json", "r") as f:
         model_info = json.load(f)
     input_shapes = model_info["input_shape"]
     input_type = model_info["input_type"].split(",")
     example_inputs = _get_fake_samples(input_shapes, input_type)
     # import pdb;pdb.set_trace()
 
-    model = torch.jit.load(model_path)
+    model = torch.jit.load(model_path, map_location=torch.device("cpu"))
     model.eval()
 
     inputs = list(model.graph.inputs())
@@ -40,19 +40,21 @@ def torch_to_onnx(model_path, output_path):
 
     example_outputs = model(*example_inputs)
     dynamic_inputs = {}
-    for i in range(1, len(names)):
-        dynamic_inputs[names[i]] = {0: 'batch_size'}
-    outputs = model_info['outputs'].split(',')
+    for i in range(len(names)):
+        dynamic_inputs[names[i]] = {0: "batch_size"}
+    outputs = model_info["outputs"].split(",")
     for output in outputs:
-        dynamic_inputs[output] = {0: 'batch_size'}
-    torch.onnx.export(model,
-                      example_inputs,
-                      output_path,
-                      opset_version=11,
-                      example_outputs=example_outputs,
-                      input_names=names[1:],
-                      output_names=outputs,
-                      dynamic_axes=dynamic_inputs)
+        dynamic_inputs[output] = {0: "batch_size"}
+    torch.onnx.export(
+        model,
+        example_inputs,
+        output_path,
+        opset_version=11,
+        example_outputs=example_outputs,
+        input_names=names,
+        output_names=outputs,
+        dynamic_axes=dynamic_inputs,
+    )
 
 
 def _get_fake_samples(shape, type):
@@ -60,8 +62,7 @@ def _get_fake_samples(shape, type):
     idx = 0
     for key, val in shape.items():
         val = [val[0] * 1] + val[1:]
-        data.append(
-            torch.from_numpy(np.random.random(val).astype(type[idx].lower())))
+        data.append(torch.from_numpy(np.random.random(val).astype(type[idx].lower())))
         idx += 1
     return data
 

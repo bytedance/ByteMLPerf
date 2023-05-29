@@ -1,0 +1,29 @@
+{
+    "Model": "BERT-TORCH-FP32",
+    "Backend": "IPU",
+    "Dataset": "OPEN_SQUAD_IPU",
+    "Graph Compile": {
+        "Compile Duration": 169.07185,
+        "Compile Precision": "FP16",
+        "Subgraph Coverage": 100
+    },
+    "Accuracy": {
+        "Data Percent": 50,
+        "Exact Match": 78.09742,
+        "F1 Score": 85.07473,
+        "Mean Diff": 0.0019,
+        "Std Diff": 0.00315,
+        "Max Diff": 0.52778,
+        "Max Rel-Diff": 429.21297,
+        "Mean Rel-Diff": 0.00101,
+        "Diff Dist": "bert-torch-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 36,
+            "QPS": 2958,
+            "AVG Latency": 22.97,
+            "P99 Latency": 23.19
+        }
+    ]
+}

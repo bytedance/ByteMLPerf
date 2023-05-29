@@ -1,0 +1,28 @@
+{
+    "Model": "RESNET50-TORCH-FP32",
+    "Backend": "IPU",
+    "Dataset": "OPEN_IMAGENET",
+    "Graph Compile": {
+        "Compile Duration": 101.17119,
+        "Compile Precision": "FP16",
+        "Subgraph Coverage": 100
+    },
+    "Accuracy": {
+        "Data Percent": 100,
+        "Top-1": 0.76963,
+        "Mean Diff": 0.00356,
+        "Std Diff": 0.00323,
+        "Max Diff": 0.07512,
+        "Max Rel-Diff": 9847.4707,
+        "Mean Rel-Diff": 0.01948,
+        "Diff Dist": "resnet50-torch-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 32,
+            "QPS": 13499,
+            "AVG Latency": 9.36,
+            "P99 Latency": 11.38
+        }
+    ]
+}

@@ -134,11 +134,6 @@ class PerfEngine:
         if not model_info['dataset_name']:
             model_info['dataset_name'] = 'fake_dataset'
 
-        # Initalize dataset
-        dataset = load_dataset(model_info)
-        dataset.preprocess()
-        base_report['Dataset'] = model_info['dataset_name'].upper(
-        ) if model_info['dataset_name'] else None
 
         '''
         Compile Backend could do some optimization like convert model format here
@@ -146,6 +141,13 @@ class PerfEngine:
         log.info("******************************************* Running Backend Compilation... *******************************************")
         log.info("Running Backend Preoptimization...")
         pre_compile_config = self.compile_backend.pre_optimize(pre_compile_config)
+
+
+        # Initalize dataset
+        dataset = load_dataset(model_info)
+        dataset.preprocess()
+        base_report['Dataset'] = model_info['dataset_name'].upper(
+        ) if model_info['dataset_name'] else None
 
         #Placeholder Only
         segment_info = self.compile_backend.segment(pre_compile_config)
