@@ -87,4 +87,7 @@ ByteMLPerf Vendor Backend List will be shown below
 | Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface：PCIe 4, 8x, 16GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.md) |
 
 ## Benchmark Summary
-Benchmark Result Will be posted here
+Benchmark Result Summary : QPS Perspective
+<div align="center">
+  <img src="byte_mlperf/reports/reports_summary.png">
+</div>
