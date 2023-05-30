@@ -2,8 +2,8 @@
 if [ ! -d "tools/venv" ]; then
     python3 -m virtualenv tools/venv
     source tools/venv/bin/activate
-    tools/venv/bin/python3 -m pip install --upgrade pip
-    tools/venv/bin/python3 -m pip install -r tools/requirements.txt
+    tools/venv/bin/python3 -m pip install --upgrade pip -q
+    tools/venv/bin/python3 -m pip install -r tools/requirements.txt -q
 else
     source tools/venv/bin/activate
 fi

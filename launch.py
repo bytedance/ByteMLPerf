@@ -52,7 +52,7 @@ if __name__ == '__main__':
     if args.task:
         log.info("******************* Pip Package Installing *******************")
         subprocess.call([
-            'python3', '-m', 'pip', 'install', 'pip', '--upgrade'])
+            'python3', '-m', 'pip', 'install', 'pip', '--upgrade', '--quiet'])
 
         subprocess.call([
             'python3', '-m', 'pip', 'install', '-r', 'byte_mlperf/requirements.txt', '--quiet'])
