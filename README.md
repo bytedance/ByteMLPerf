@@ -84,7 +84,7 @@ ByteMLPerf Vendor Backend List will be shown below
 | :---- | :----| :---- | :---- |
 | Intel | Xeon | - | - |
 | Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
-| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface：PCIe 4, 8x, 16GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.md) |
+| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.md) |
 
 ## Benchmark Summary
 Benchmark Result Summary : QPS Perspective
