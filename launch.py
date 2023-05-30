@@ -52,7 +52,10 @@ if __name__ == '__main__':
     if args.task:
         log.info("******************* Pip Package Installing *******************")
         subprocess.call([
-            'pip3', 'install', '-r', 'byte_mlperf/requirements.txt', '--quiet'])
+            'python3', '-m', 'pip', 'install', 'pip', '--upgrade'])
+
+        subprocess.call([
+            'python3', '-m', 'pip', 'install', '-r', 'byte_mlperf/requirements.txt', '--quiet'])
 
         workload = load_workload(args.task)
         with open("byte_mlperf/model_zoo/" + workload['model'] + '.json',

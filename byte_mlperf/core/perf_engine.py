@@ -348,9 +348,12 @@ class PerfEngine:
 
                 virtualenv.create_environment(venv_dir)
                 exec(open(activate_file).read(), {'__file__': activate_file})
-                pip_path = os.path.join(venv_dir, 'bin', 'pip3')
+                python_path = os.path.join(venv_dir, 'bin', 'python3')
                 subprocess.call([
-                    pip_path, 'install', '-r', 'byte_mlperf/backends/' +
+                    python_path, '-m', 'pip', 'install', '--upgrade'
+                ])
+                subprocess.call([
+                    python_path, '-m', 'pip', 'install', '-r', 'byte_mlperf/backends/' +
                     hardware_type + '/requirements.txt', '-q'
                 ])
             else:
@@ -358,9 +361,12 @@ class PerfEngine:
                 '''
                 just in case install failed in pre-run.
                 '''
-                pip_path = os.path.join(venv_dir, 'bin', 'pip3')
+                python_path = os.path.join(venv_dir, 'bin', 'python3')
                 subprocess.call([
-                    pip_path, 'install', '-r', 'byte_mlperf/backends/' +
+                    python_path, '-m', 'pip', 'install', '--upgrade'
+                ])
+                subprocess.call([
+                    python_path, '-m', 'pip', 'install', '-r', 'byte_mlperf/backends/' +
                     hardware_type + '/requirements.txt', '-q'
                 ])
 
