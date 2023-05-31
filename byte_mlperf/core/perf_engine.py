@@ -350,7 +350,7 @@ class PerfEngine:
                 exec(open(activate_file).read(), {'__file__': activate_file})
                 python_path = os.path.join(venv_dir, 'bin', 'python3')
                 subprocess.call([
-                    python_path, '-m', 'pip', 'install', '--upgrade', '--quiet'
+                    python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
                 ])
                 subprocess.call([
                     python_path, '-m', 'pip', 'install', '-r', 'byte_mlperf/backends/' +
@@ -363,7 +363,7 @@ class PerfEngine:
                 '''
                 python_path = os.path.join(venv_dir, 'bin', 'python3')
                 subprocess.call([
-                    python_path, '-m', 'pip', 'install', '--upgrade', '--quiet'
+                    python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
                 ])
                 subprocess.call([
                     python_path, '-m', 'pip', 'install', '-r', 'byte_mlperf/backends/' +

@@ -65,10 +65,9 @@ if __name__ == '__main__':
             subprocess.call([
                 'bash', 'byte_mlperf/prepare_model_and_dataset.sh',
                 model_info['model'], model_info['dataset_name'] or "None"])
-
         # test numeric
         if workload['test_numeric'] and not args.compile_only and not workload['compile_only']:
-            log.info("******************************************* Running Numeric Checker... *******************************************")
+            log.info("******************************************* Running CPU Numeric Checker... *******************************************")
             subprocess.call([
                 'bash', 'byte_mlperf/backends/CPU/calculate_cpu_diff.sh',
                 workload['model'],
