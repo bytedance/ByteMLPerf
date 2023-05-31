@@ -36,6 +36,9 @@ elif [ $1 == "conformer-encoder-onnx-fp32" ]; then
 elif [ $1 == "roberta-torch-fp32" ]; then
     wget -O byte_mlperf/download/open_roberta.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_roberta.tar
     tar xf byte_mlperf/download/open_roberta.tar -C byte_mlperf/model_zoo/popular/
+elif [ $1 == "deberta-torch-fp32" ]; then
+    wget -O byte_mlperf/download/open_deberta.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_deberta.tar
+    tar xf byte_mlperf/download/open_deberta.tar -C byte_mlperf/model_zoo/popular/
 elif [ $1 == "swin-large-torch-fp32" ]; then
     wget -O byte_mlperf/download/swin-large.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/swin-large.tar
     tar xf byte_mlperf/download/swin-large.tar -C byte_mlperf/model_zoo/popular/

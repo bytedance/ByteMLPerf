@@ -72,6 +72,7 @@ In addition to the complete model structure, Byte MlPerf will also add some typi
 | roformer | nlp | popular | tensorflow | cail2019 | fp32 |
 | yolov5 | cv | popular | onnx | none | fp32 |
 | roberta | nlp | popular | pytorch | squad-1.1 | fp32 |
+| deberta | nlp | popular | pytorch | squad-1.1 | fp32 |
 | swin-transformer | cv | popular | pytorch | imagenet2012 | fp32 |
 | gpt2 | nlp | sota | pytorch | none | fp32 |
 | stable diffusion | cv | sota | onnx | none | fp32 |
