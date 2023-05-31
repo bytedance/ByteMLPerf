@@ -26,7 +26,6 @@ def torch_to_onnx(model_path, output_path):
     input_shapes = model_info["input_shape"]
     input_type = model_info["input_type"].split(",")
     example_inputs = _get_fake_samples(input_shapes, input_type)
-    # import pdb;pdb.set_trace()
 
     model = torch.jit.load(model_path, map_location=torch.device("cpu"))
     model.eval()
@@ -36,7 +35,6 @@ def torch_to_onnx(model_path, output_path):
     for i in inputs:
         if "self" not in i.debugName():
             names.append(i.debugName())
-    print(names)
 
     example_outputs = model(*example_inputs)
     dynamic_inputs = {}
