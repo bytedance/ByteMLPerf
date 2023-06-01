@@ -146,12 +146,15 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             .upper()
         )
 
+        for batch_size in config["workload"]["batch_sizes"]:
+            self._compile(batch_size)
+
         result = {
             "model": config["model_info"]["model"],
             "framework": config["model_info"]["framework"],
             "compile_precision": precision,
             "input_type": config["model_info"]["input_type"].split(","),
-            "max_batch_size": config["model_info"]["max_batch_size"],
+            "max_batch_size": config["workload"]["batch_sizes"][-1],
             "compile_status": "success",
             "sg_percent": 100,
             "segments": [
@@ -162,17 +165,15 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                     "output_tensor_map": config["model_info"]["outputs"],
                     "compiled_model": [
                         {
-                            "compiled_bs": 1,
-                            "compiled_obj": config["model_info"]["model_path"],
+                            "compiled_bs": config["workload"]["batch_sizes"][-1],
+                            "compiled_obj": self.popef_path,
                         },
                     ],
                 },
             ],
             "interact_info": self.interact_info,
         }
-
-        for batch_size in config["workload"]["batch_sizes"]:
-            self._compile(batch_size)
+        import pdb;pdb.set_trace()
 
         return result
 
