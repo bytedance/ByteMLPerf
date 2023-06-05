@@ -173,8 +173,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             ],
             "interact_info": self.interact_info,
         }
-        import pdb;pdb.set_trace()
-
         return result
 
     def get_interact_profile(self, config):
