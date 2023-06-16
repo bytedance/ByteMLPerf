@@ -9,12 +9,10 @@ The AMD Instinct™ MI210 accelerator extends AMD industry performance leadershi
 |Compute Units |	104 CU|
 |Stream Processors|6,656|
 |Matrix Cores|416|
-|Peak FP64/FP32|22.6 TF|
-|Vector|45.3 TF|
-|Peak FP64/FP32|181.0 TF|
-|Matrix|181.0 TOPS|
-|Peak FP16/BF16|
-|Peak INT4/INT8|
+|Peak FP64/FP32 Vector|22.6 TF|
+|Peak FP64/FP32 Matrix|45.3 TF|
+|Peak FP16/BF16|181.0 TF|
+|Peak INT4/INT8|181.0 TOPS|
 
 |<div style="width:150px">MEMORY||
 | ----------------- |:-----------------------:|
@@ -36,6 +34,13 @@ The AMD Instinct™ MI210 accelerator extends AMD industry performance leadershi
 |AMD ROCm<small><small><small>TM</small></small></small>|Yes|
 |Compatible|
 
+
+# Software environment
+
+| Software | Version | Description |
+| :-----: | :----: | :----: |
+| ROCm | 5.5 | The first open-source software development platform for HPC/Hyperscale-class GPU computing which is built by AMD |
+| MIGraphX | build from source | Graph inference engine that accelerates machine learning model inference built by AMD |
 
 # Models supported
 
