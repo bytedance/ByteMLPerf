@@ -37,19 +37,6 @@ The AMD Instinct™ MI210 accelerator extends AMD industry performance leadershi
 |Compatible|
 
 
-<!--
-# How to access MI210
-
-To use IPUs you must have access to a system with IPU devices. To get access see [getting started](https://www.graphcore.ai/getstarted).
-
-# PopRT
-
-PopRT is a high-performance inference framework specifically for Graphcore IPUs. It is responsible for deeply optimizing the trained models, generating executable programs that can run on the Graphcore IPUs, and performing low-latency, high-throughput inference.
-
-You can get PopRT and related documents from [graphcore/PopRT](https://github.com/graphcore/PopRT). Docker images are provided at [graphcorecn/poprt](https://hub.docker.com/r/graphcorecn/poprt).
--->
-
-
 # Models supported
 
 | Model name |  Precision | Dataset | Compile time(s) | QPS | P99 Latency |
