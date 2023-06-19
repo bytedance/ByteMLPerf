@@ -59,11 +59,13 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
             self.load()
 
         results = {}
+        # Since in MIGRAPHX, for tensorflow, we just convert it to onnx. The logic is the same for them 
         if self.framework == "Tensorflow" or self.framework == "Onnx":
             params = {}
             key_id = 0
             for key in feeds.keys():
                 ###new_key = key.replace(":", "_")
+                # Some of the axles of the input needs to be converted before passing into the model
                 if( ( 'layout' in self.model_info ) and ( self.model_info['layout'] == 'NHWC' ) and ( feeds[ key ].shape[3] != 3 ) ):
                     params[ key ] = np.ascontiguousarray(np.transpose( feeds[ key ] , axes=[0, 2, 3, 1]))
                 elif( isinstance( feeds[key] , list ) ):
@@ -76,6 +78,7 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
             results = {}
             for model_runtime in self.model_runtimes:
                 _results = model_runtime.run( params )
+                # For videobert, the shape of the output is quite different from that of the other models
                 if( 'videobert' in self.configs['model'] ):
                     if( isinstance( _results , dict ) ):
                         assert( ( len( _results.keys() ) == 1 ) and ( 'output' in _results.keys() ) )
@@ -94,39 +97,18 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
             assert len(results) != 0
 
         elif self.framework == "Pytorch":
-            input_tensors = []
-            i = 0
-            for key, _ in feeds.items():
-                input_tensors.append(
-                    torch.tensor(feeds[key],
-                                 dtype=pt_dtype_map[self.input_type[i]]).to(
-                                     self.device))
-                i += 1
-            with torch.no_grad():
-                for model_runtime in self.model_runtimes:
-                    results = model_runtime(*input_tensors)
-
-            if isinstance(results, dict):
-                for key, val in results.items():
-                    results[key] = val.cpu().detach().numpy()
-            elif isinstance(results, tuple):
-                dic = {}
-                for i, key in enumerate(self.outputs):
-                    dic[key] = list(results)[i]
-            else:
-                results = {self.outputs[0]: results.cpu().numpy()}
+            # currently this path of code has not been implemented yet
+            raise NotImplementedError("MIGraphX backend for models of PyTorch framework has not been implemented yet.")
 
 
         else:
             for model_runtime in self.model_runtimes:
                 results = model_runtime.run(feeds)
-        ##### Modified by Ngaiman Chow on 2023-6-13 for adapting all the code into MIGraphX runtime backend
-        ###return results
+        # for videobert, the output has two components, but for others it only has one
         if( 'videobert' in self.configs['model'] ):
             return results, {}
         else:
             return results
-        ##### Modified by Ngaiman Chow on 2023-6-13 for adapting all the code into MIGraphX runtime backend
 
     def benchmark(self, dataloader):
         batch_sizes = self.workload['batch_sizes']
@@ -187,23 +169,11 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
                 onnx_file_path=os.path.join(onnx_file_path_for_batch_size[0],str(self.batch_size),onnx_file_path_for_batch_size[-1])
                 model=migraphx.load(onnx_file_path,format='msgpack')
             elif self.framework == "Pytorch":
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
-                model = torch.jit.load(
-                    segment['compiled_model'][0]['compiled_obj'],
-                    torch.device(self.device))
-                if torch.cuda.is_available():
-                    model.cuda()
-                inputs = list(model.graph.inputs())
-                names = [i.debugName() for i in inputs]
-                model.eval()
+                raise NotImplementedError("MIGraphX backend for models of PyTorch framework has not been implemented yet.")
             else:
                 # original_model = onnx.load(segment['compiled_model'][0]['compiled_obj'])
                 # model =  onnx_convert.prepare(original_model, device='CUDA:1')
-
-                import onnxruntime
-                model = onnxruntime.InferenceSession(
-                    segment['compiled_model'][0]['compiled_obj'],
-                    providers=['ROCmExecutionProvider'])
+                pass
 
             self.model_runtimes.append(model)
 
