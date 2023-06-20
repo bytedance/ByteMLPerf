@@ -70,9 +70,7 @@ class CompileBackendMIGRAPHX(compile_backend.CompileBackend):
             if not os.path.exists(model_onnx_path):
                 saved_to_onnx.savedmodel_to_onnx(model_path, model_onnx_path)
         elif self.framework == "Pytorch":
-            model_onnx_path = os.path.join(os.path.dirname(model_path), self.model_name + '.onnx')
-            if not os.path.exists(model_onnx_path):
-                saved_to_onnx.torch_to_onnx(model_path, str(model_onnx_path))
+            raise NotImplementedError("MIGraphX backend for models of PyTorch framework has not been implemented yet.")
         batch_sizes = config['workload']['batch_sizes']
         for batch_size in batch_sizes:
             print(batch_sizes)
