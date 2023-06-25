@@ -73,7 +73,6 @@ class CompileBackendMIGRAPHX(compile_backend.CompileBackend):
             raise NotImplementedError("MIGraphX backend for models of PyTorch framework has not been implemented yet.")
         batch_sizes = config['workload']['batch_sizes']
         for batch_size in batch_sizes:
-            print(batch_sizes)
             model_path_for_batch_size = model_onnx_path.rsplit("/",1)
             model_onnx_path_set_batch_size = os.path.join(model_path_for_batch_size[0],str(batch_size),model_path_for_batch_size[1])
             model_dir = os.path.join(model_path_for_batch_size[0],str(batch_size))
