@@ -1,0 +1,29 @@
+{
+    "Model": "ROBERTA-TORCH-FP32",
+    "Backend": "SPU",
+    "Dataset": "OPEN_SQUAD",
+    "Graph Compile": {
+        "Compile Duration": 847.10356,
+        "Compile Precision": "INT8",
+        "Subgraph Coverage": 100
+    },
+    "Accuracy": {
+        "Data Percent": 100,
+        "Exact Match": 79.7619,
+        "F1 Score": 86.63034,
+        "Mean Diff": 4.02471,
+        "Std Diff": 4.16905,
+        "Max Diff": 11.44119,
+        "Max Rel-Diff": 418.54424,
+        "Mean Rel-Diff": 0.4967,
+        "Diff Dist": "roberta-torch-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 64,
+            "QPS": 4389.57,
+            "AVG Latency": 14.58,
+            "P99 Latency": 18.23
+        }
+    ]
+}

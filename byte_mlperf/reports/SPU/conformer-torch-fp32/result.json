@@ -1,0 +1,28 @@
+{
+    "Model": "CONFORMER-TORCH-FP32",
+    "Backend": "SPU",
+    "Dataset": "FAKE_DATASET",
+    "Graph Compile": {
+        "Compile Duration": 553.20133,
+        "Compile Precision": "INT8",
+        "Subgraph Coverage": 100
+    },
+    "Accuracy": {
+        "Data Percent": 100,
+        "Fake Dataset Accuracy": 0,
+        "Mean Diff": 0.231,
+        "Std Diff": 0.295,
+        "Max Diff": 0.624,
+        "Max Rel-Diff": 1.286,
+        "Mean Rel-Diff": 0.017,
+        "Diff Dist": "conformer-torch-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 64,
+            "QPS": 9329.45,
+            "AVG Latency": 6.86,
+            "P99 Latency": 9.46
+        }
+    ]
+}
