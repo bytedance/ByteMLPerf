@@ -53,10 +53,6 @@ For example:
 
 `python3 launch.py --tasks bert-torch-fp32 --hardware_type SPU`
 
-### Reference
-
-[1] http://wiki.moffett.local:8090/pages/viewpage.action?pageId=37183466
-
 ## Contact us
 
 If you are interested in further information about the products, please contact the email: sales@moffett.ai
