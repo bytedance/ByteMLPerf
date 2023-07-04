@@ -12,10 +12,10 @@ For Byte MLPerf, Moffett has submitted performance results of the following mode
 | Model                | Precision | QPS     | Dataset        | Metric name | Metric value | 
 |----------------------|-----------|---------|----------------|-------------|--------------|
 | resnet50-torch-fp32     | INT8      | 59259   | Open Imagenet  | Top-1       | 76.11%      |
-| bert-torch-fp32         | INT8/BF16      | 4407 | Open Squad 1.1 | F1 Score    | 86.09     |
-| albert-torch-fp32       | INT8/BF16      | 4627 | Open Squad 1.1 | F1 Score    | 87.66      |
-| roberta-torch-fp32      | INT8/BF16      | 4389 | Open Squad 1.1 | F1 Score    | 86.63     |
-| conformer-encoder-onnx-fp32 | INT8/BF16      | 9329 | Fake Dataset   | Mean Diff   | 0.231      |
+| bert-torch-fp32         | INT8/BF16      | 4823 | Open Squad 1.1 | F1 Score    | 86.09     |
+| albert-torch-fp32       | INT8/BF16      | 5024 | Open Squad 1.1 | F1 Score    | 87.66      |
+| roberta-torch-fp32      | INT8/BF16      | 4638 | Open Squad 1.1 | F1 Score    | 86.63     |
+| conformer-encoder-onnx-fp32 | INT8/BF16      | 10111 | Fake Dataset   | Mean Diff   | 0.231      |
 
 Besides the performance results, energy efficiency is another significant highlight of Moffett's devices. For example,
 the peak power consumption of S30 is merely
