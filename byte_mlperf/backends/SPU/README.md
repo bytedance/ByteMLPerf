@@ -11,7 +11,7 @@ For Byte MLPerf, Moffett has submitted performance results of the following mode
 
 | Model                | Precision | QPS     | Dataset        | Metric name | Metric value | 
 |----------------------|-----------|---------|----------------|-------------|--------------|
-| resnet50-torch-fp32     | INT8      | 59259   | Open Imagenet  | Top-1       | 76.11%      |
+| resnet50-torch-fp32     | INT8      | 60031   | Open Imagenet  | Top-1       | 76.11%      |
 | bert-torch-fp32         | INT8/BF16      | 4823 | Open Squad 1.1 | F1 Score    | 86.09     |
 | albert-torch-fp32       | INT8/BF16      | 5024 | Open Squad 1.1 | F1 Score    | 87.66      |
 | roberta-torch-fp32      | INT8/BF16      | 4638 | Open Squad 1.1 | F1 Score    | 86.63     |
