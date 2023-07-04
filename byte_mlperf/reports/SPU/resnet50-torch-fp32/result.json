@@ -20,8 +20,8 @@
     "Performance": [
         {
             "BS": 48,
-            "QPS": 59259,
-            "AVG Latency": 0.81,
+            "QPS": 60031,
+            "AVG Latency": 0.80,
             "P99 Latency": 1.4
         }
     ]
