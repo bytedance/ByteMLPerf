@@ -23,7 +23,7 @@
             "BS": 64,
             "QPS": 4637.68,
             "AVG Latency": 13.8,
-            "P99 Latency": 18.2
+            "P99 Latency": 16.9
         }
     ]
 }
