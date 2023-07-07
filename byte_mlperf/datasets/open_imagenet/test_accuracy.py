@@ -55,7 +55,10 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
                 key = list(inputs.keys())[0]
                 inputs = list(inputs[key])
         else:
-            inputs = inputs[list(inputs)[0]]
+            if isinstance(inputs, tuple):
+                inputs = inputs[0].numpy().astype(float)
+            else:
+                inputs = inputs[list(inputs)[0]]
         if framework == "Pytorch" or framework == "Onnx":
             inputs = np.array(
                 [np.insert(inputs[i], 0, 0) for i in range(len(inputs))])
