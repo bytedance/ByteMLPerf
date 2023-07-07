@@ -3,25 +3,26 @@
     "Backend": "SPU",
     "Dataset": "OPEN_IMAGENET",
     "Graph Compile": {
-        "Compile Duration": 382.70135,
+        "Compile Duration": 382.70001,
         "Compile Precision": "INT8",
-        "Subgraph Coverage": 100
+        "Subgraph Coverage": 100,
+        "Sparsity Ratio": "0.9375"
     },
     "Accuracy": {
         "Data Percent": 100,
-        "Top-1": 0.76109,
-        "Mean Diff": 3.96442,
-        "Std Diff": 4.56784,
-        "Max Diff": 9.24381,
-        "Max Rel-Diff": 879.87553,
-        "Mean Rel-Diff": 0.59018,
+        "Top-1": 0.76613,
+        "Mean Diff": 0.08692,
+        "Std Diff": 0.08707,
+        "Max Diff": 1.90154,
+        "Max Rel-Diff": 60575.75853,
+        "Mean Rel-Diff": 0.45681,
         "Diff Dist": "resnet50-torch-fp32.png"
     },
     "Performance": [
         {
             "BS": 48,
-            "QPS": 60031,
-            "AVG Latency": 0.80,
+            "QPS": 59259,
+            "AVG Latency": 0.81,
             "P99 Latency": 1.4
         }
     ]

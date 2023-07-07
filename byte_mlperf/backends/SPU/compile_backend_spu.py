@@ -16,7 +16,6 @@
 import os
 import json
 import logging
-import time
 from typing import Any, Dict, List, Optional
 from byte_mlperf.backends import compile_backend
 from base_compile import Resnet50Builder, BertBaseBuilder, AlbertBuilder, RobertaBuilder, ConformerBuilder
@@ -43,7 +42,8 @@ class CompileBackendSPU(compile_backend.CompileBackend):
         Model compilation interface. Model conversion and compilation 
         can be performed here. The model format can be changed here.
         """
-        name = configs['model']
+        model_info = configs["model_info"]
+        name = model_info ['model']
         builder_dict = {
             "resnet50-torch-fp32": Resnet50Builder,
             "bert-torch-fp32": BertBaseBuilder,
@@ -53,33 +53,55 @@ class CompileBackendSPU(compile_backend.CompileBackend):
         }
 
         if name in builder_dict:
-            sparser_builder = builder_dict[name]
+            SparserBuilder = builder_dict[name]
         else:
             raise NotImplementedError(f"task: {name} not supported")
+        interact_info = self.get_interact_profile(configs)
+        onnx_path = interact_info["onnx_path"]
+        dump_dir=os.path.dirname(os.path.abspath(interact_info["model_path"]))
+        dataset_dir = interact_info["calibration_dir"]
+        dataset_cfg = interact_info["transform_file"]
+        model_precision = interact_info["model_precision"]
+        batch_size = interact_info["batch_size"]
+        verify = interact_info["verify"]
 
-        self.interact_info = self.get_interact_profile(configs)
-        onnx_path = self.interact_info["onnx_path"]
-        dump_dir = self.interact_info["dump_dir"]
-        dataset_dir = self.interact_info["dataset_dir"]
-        dataset_cfg = self.interact_info["dataset_cfg"]
-        dtype = self.interact_info["dtype"]
-        batch_size = self.interact_info["batch_size"]
-        verify = self.interact_info["verify"]
+        builder = SparserBuilder(onnx_path, dump_dir, dataset_dir, dataset_cfg, model_precision, batch_size, verify)
+        compile_info = builder()
 
-        start_time = time.time()
-        builder = sparser_builder(onnx_path, dump_dir, dataset_dir, dataset_cfg, dtype, batch_size, verify)
-        result = builder()
-        end_time = time.time()
-        compilation_time = round(end_time - start_time, 2)
-        assert isinstance(result, dict), "return is not dict"
-        result.update({"compilation_time": compilation_time})
+        result = {
+            "model": configs["model_info"]["model"],
+            "framework": configs["model_info"]["framework"],
+            "compile_precision": model_precision,
+            "input_type": configs["model_info"]["input_type"].split(","),
+            "max_batch_size": configs["workload"]["batch_sizes"][-1],
+            "compile_status":"success",
+            "sg_percent": 100,
+            "sparsity_ratio":compile_info["sparsity_ratio"],
+            "segments": [
+                {
+                    "sg_idx": 0,
+                    "is_fallback": False,
+                    "input_tensor_map": configs["model_info"]["input_shape"],
+                    "output_tensor_map": configs["model_info"]["outputs"],
+                    "compiled_model": [
+                        {
+                            "compiled_bs": batch_size,
+                            "compiled_obj": dump_dir,
+                        },
+                    ],
+                },
+            ],
+            "interact_info": interact_info,
+        }
+
+ 
         return result
 
     def get_interact_profile(self, configs: Dict[str, Any]):
-        model_profile = []
-        file_path = f"backends/{configs['model']}.json"
+
+        file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"interact_info/{configs['model_info']['model']}.json")
         if os.path.exists(file_path):
-            with open(file_path, 'r') as f:
+            with  open(file_path, 'r') as f:
                 model_profile = json.load(f)
             return model_profile
         else:

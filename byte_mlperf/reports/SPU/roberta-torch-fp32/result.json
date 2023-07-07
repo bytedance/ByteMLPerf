@@ -3,19 +3,20 @@
     "Backend": "SPU",
     "Dataset": "OPEN_SQUAD",
     "Graph Compile": {
-        "Compile Duration": 847.10356,
+        "Compile Duration": 847.10001,
         "Compile Precision": "INT8",
-        "Subgraph Coverage": 100
+        "Subgraph Coverage": 100,
+        "Sparsity Ratio": "0.9375"
     },
     "Accuracy": {
         "Data Percent": 100,
         "Exact Match": 79.7619,
         "F1 Score": 86.63034,
-        "Mean Diff": 4.02471,
-        "Std Diff": 4.16905,
-        "Max Diff": 11.44119,
-        "Max Rel-Diff": 418.54424,
-        "Mean Rel-Diff": 0.4967,
+        "Mean Diff": 0.17604,
+        "Std Diff": 0.17594,
+        "Max Diff": 2.89994,
+        "Max Rel-Diff": 38755.94588,
+        "Mean Rel-Diff": 0.03943,
         "Diff Dist": "roberta-torch-fp32.png"
     },
     "Performance": [
@@ -23,7 +24,7 @@
             "BS": 64,
             "QPS": 4637.68,
             "AVG Latency": 13.8,
-            "P99 Latency": 16.9
+            "P99 Latency": 16.95
         }
     ]
 }

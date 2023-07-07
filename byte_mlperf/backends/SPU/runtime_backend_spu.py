@@ -5,6 +5,7 @@ import numpy as np
 import time
 import yaml
 import multiprocessing
+from multiprocessing import Manager
 from byte_mlperf.backends import runtime_backend
 import spu_backend
 from inference import SQUADTester, ImageNetTester, ConformerTester, get_yaml_path, squad_preprocess, squad_postprocess
@@ -44,17 +45,11 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         self.hardware_type = hardware_type
         self.need_reload = False
         self.batch_size = None
-        self.input_rank = []
         self.model_name = ""
-        self.current_batch_size = 4
-        self.dry_run = False
-        self.output_dtype = None
-        self.output_shape = None
         self.configs = None
         self.workload = None
         self.model_info = None
         self.model = None
-        self.order = None
         self.yaml_config = None
         self.need_reload = True
 
@@ -63,12 +58,12 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             log.info("no model_runtime...")
             self.load(self.get_loaded_batch_size())
         if self.model_name == "resnet50-torch-fp32":
-            response = []
-            self.model.inference_async(feeds, callback=lambda output: response.append(output))
-            self.model.synchronized()
-            return response[0]
+            request = [feeds['actual_input']]
+            response = self.model.inference(request)
+            return response
         elif self.model_name == "conformer-encoder-onnx-fp32":
-            response = self.model.inference(feeds)
+            request = [feeds["src"], feeds["src_pad_mask"]]
+            response = self.model.inference(request)
             return response
         elif self.model_name in ["bert-torch-fp32", "albert-torch-fp32", "roberta-torch-fp32"]:
             request, model_info = squad_preprocess(feeds, self.yaml_config)
@@ -81,41 +76,55 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
     def benchmark(self, dataloader):
         batch_sizes = self.workload['batch_sizes']
         reports = []
-        if self.model and self.model_name != "resnet50-torch-fp32":
-            self.model.initialize()
+        iterations = self.workload['iterations']
         for idx, batch_size in enumerate(batch_sizes):
             if batch_size != self.batch_size:
                 continue
-            iterations = self.workload['iterations'][idx]
-            buffer_depth = self.workload['buffer_depth'][idx]
-            buffer_size = self.workload['buffer_size'][idx]
             self.yaml_config.update(
-                {"model": self.configs['model'],
-                 "min_batch_size": self.yaml_config['chunk_size'] * buffer_depth * buffer_size,
-                 "buffer_depth": buffer_depth, "buffer_size": buffer_size,
-                 })
+                {"min_batch_size": self.yaml_config['chunk_size']})
             report = {}
             dataloader.rebatch(batch_size)
-            test_data, _ = dataloader.get_samples(0)
             if self.model_name == "resnet50-torch-fp32":
-                if self.model:
-                    self.model.initialize()
-                self.model = ImageNetTester(self.yaml_config)
-                self.model.load_model()
+                test_data, _ = dataloader.get_samples(0)
+                all_resnet50_start_time_list = []
+                all_resnet50_end_time_list = []
+                model = ImageNetTester(self.yaml_config)
+                model.load_model()
+                request = [test_data['actual_input']]
                 start = time.time()
                 for _ in range(iterations):
-                    self.model.inference(test_data)
+                    resnet50_start_time = time.time()
+                    all_resnet50_start_time_list.append(resnet50_start_time * 1000)
+                    output_data = model.inference(request)
+                    resnet50_end_time = time.time()
+                    all_resnet50_end_time_list.append(resnet50_end_time * 1000)
+                start_time_list = all_resnet50_start_time_list
+                end_time_list = all_resnet50_end_time_list
+
             elif self.model_name == "conformer-encoder-onnx-fp32":
-                if self.model:
-                    self.model.initialize()
+                test_data = dataloader.get_samples(0)
+                all_conformer_start_time_list = []
+                all_conformer_end_time_list = []
                 model = ConformerTester(self.yaml_config)
                 model.load_model()
+                request = [test_data["src"], test_data["src_pad_mask"]]
                 start = time.time()
                 for _ in range(iterations):
-                    model.inference(test_data)
+                    conformer_start_time = time.time()
+                    all_conformer_start_time_list.append(conformer_start_time * 1000)
+                    output_data = model.inference(request)
+                    conformer_end_time = time.time()
+                    all_conformer_end_time_list.append(conformer_end_time * 1000)
+                start_time_list = all_conformer_start_time_list
+                end_time_list = all_conformer_end_time_list
+
             elif self.model_name in ["bert-torch-fp32", "albert-torch-fp32", "roberta-torch-fp32"]:
-                def input_worker(_input_queue, data, iteration):
+                test_data, _ = dataloader.get_samples(0)
+
+                def input_worker(_input_queue, data, iteration, shared_list):
                     for i in range(iteration):
+                        batch_start_time = time.time()
+                        shared_list.append(batch_start_time)
                         _input_queue.put(data)
                     _input_queue.put(None)
                     return
@@ -133,19 +142,16 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                         _info_queue.put(info)
 
                 def inference_worker(_preprocess_queue, _inference_queue, config):
-                    model = SQUADTester(config)
-                    model.load_model(buffer_size=config["buffer_size"],
-                                     buffer_depth=config["buffer_depth"])
-                    min_batch_size = config["min_batch_size"]
+                    _model = SQUADTester(config)
+                    model.load_model()
                     while True:
                         data = _preprocess_queue.get()
                         if data is None:
                             _inference_queue.put(None)
-                            # spu_backend.spu_backend_destroy()
+                            _model.destroy()
                             return
-                        model.multiplier = data[0].shape[0] // min_batch_size
-                        output_data = model.inference1(data)
-                        _inference_queue.put(output_data)
+                        _output_data = model.inference(data)
+                        _inference_queue.put(_output_data)
 
                 def postprocessing_worker(_inference_queue, _postprocess_queue, _info_queue):
                     while True:
@@ -157,14 +163,19 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                             return
                         _postprocess_queue.put(squad_postprocess(data, info))
 
-                def consumer(_postprocess_queue):
+                def consumer(_postprocess_queue, _shared_end_list):
                     ans = []
                     while True:
                         i = _postprocess_queue.get()
+                        batch_end_time = time.time()
+                        _shared_end_list.append(batch_end_time)
                         if i is None:
                             return ans
                         ans.append(i)
 
+                manager = Manager()
+                shared_start_list = manager.list()
+                shared_end_list = manager.list()
                 # Inference Pipeline
                 input_queue = multiprocessing.JoinableQueue()
                 preprocess_queue = multiprocessing.JoinableQueue()
@@ -174,7 +185,7 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
 
                 # [0] 获取数据的进程
                 input_process = multiprocessing.Process(
-                    target=input_worker, args=(input_queue, test_data, iterations))
+                    target=input_worker, args=(input_queue, test_data, iterations, shared_start_list))
                 # [1] 模型前处理进程
                 preprocessing_process = multiprocessing.Process(
                     target=preprocessing_worker, args=(input_queue, preprocess_queue, info_queue, self.yaml_config))
@@ -194,9 +205,12 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                 postprocessing_process.start()
 
                 processes = [input_process, preprocessing_process, inference_process, postprocessing_process]
-                responses = consumer(postprocess_queue)
+                responses = consumer(postprocess_queue, shared_end_list)
                 for p in processes:
                     p.join()
+
+                start_time_list = list(shared_start_list)
+                end_time_list = list(shared_end_list)
             else:
                 raise NotImplementedError(f"task: {self.model_name} not supported")
 
@@ -206,22 +220,23 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             all_latency.sort()
             index = int(len(all_latency) * 0.99)
             tail_latency = all_latency[index] / 1000
-            avg_latency = round(duration / iterations, 2)
+            avg_latency = duration / iterations
             qps = round(1000.0 * batch_size / avg_latency, 2)
-            log.info("\033[32m" + f"report qps is {qps}" + "\033[0m")
+            tail_latency = round(tail_latency, 2)
+            avg_latency = round(avg_latency, 2)
+            qps = round(qps, 2)
             report['BS'] = batch_size
             report['QPS'] = qps
             report['AVG Latency'] = avg_latency
             report['P99 Latency'] = tail_latency
             print(f"AVG Latency:{avg_latency}, P99 Latency:{tail_latency}")
             reports.append(report)
-        return reports[0]
+        return reports
 
     def get_loaded_batch_size(self):
         # only used in accuracy mode, not in benchmark.
         name = self.configs['model']
-        self.yaml_config.update(
-            {"min_batch_size": self.yaml_config['chunk_size'], "buffer_depth": 1, "buffer_size": 1})
+        self.yaml_config.update({"min_batch_size": self.yaml_config['chunk_size']})
         if "bert-torch-fp32" in name or "albert-torch-fp32" in name:
             return 12
         elif "roberta-torch-fp32" in name:
@@ -257,7 +272,6 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             else:
                 raise NotImplementedError(f"dataset_name : {dataset_name} not supported")
             self.model.load_model()
-            self.model.multiplier = 1
             self.need_reload = False
         else:
             log.info("model has been loaded, skip load process")
