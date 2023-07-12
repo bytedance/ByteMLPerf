@@ -257,7 +257,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             if name in not_extended_with_batch:
                 batched_shape = [shape[0]] + shape[1:]
             elif name == "text" and 'videobert' in self.model_info['model']:
-                # the input of videobert
                 batched_shape = [shape[0]] + shape[1:]
             else:
                 batched_shape = [shape[0] * self.batch_size] + shape[1:]

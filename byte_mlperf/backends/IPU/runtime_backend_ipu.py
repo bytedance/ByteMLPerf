@@ -46,6 +46,10 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         # apply samll adjustments to ipu results to align with cpu's
         self._input_adjustment(feeds)
         results = self.engine.predict(feeds)
+
+        if "videobert" in self.workload["model"]:
+            # open_cifar required outputs as: logits_per_image, logits_per_text
+            return results["3034"], results["3035"]
         return results
 
     def _get_engine(self, batch_size):
