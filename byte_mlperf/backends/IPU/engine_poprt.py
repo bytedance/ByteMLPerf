@@ -33,9 +33,7 @@ class PopRT(engine.Engine):
     def __init__(self, popef_path, runtime_config):
         config = RuntimeConfig()
         # timeout in nanoseconds, which keep the same name as what it is in poprt, and then convert to ms
-        config.timeout_ns = datetime.timedelta(
-            milliseconds=runtime_config.get("timeout_ns", 5e6) / 1e6
-        )
+        config.timeout_ns = runtime_config.get("timeout_ns", 5000)
         self.model_runner = runtime.ModelRunner(popef_path, config)
 
     def predict(self, feeds):
