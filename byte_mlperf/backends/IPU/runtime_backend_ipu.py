@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 import os
+
+import numpy as np
+from poprt.runtime import PackAlgorithm, PackRunnerConfig, RuntimeConfig
 
 from byte_mlperf.backends import runtime_backend
 
@@ -30,7 +32,10 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         self.need_reload = False
         self.model_runtimes = []
         self.configs = None
+        self.pack_config = None
         self.batch_size = -1
+        self.pack_bs = -1
+        self.packrunner = False
         self.engine = None
         self.runner_name = "POPRT"
         self.compiled_dir = (
@@ -38,6 +43,8 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         )
 
     def predict(self, feeds, test_benchmark=False):
+        # apply samll adjustments to ipu results to align with cpu's
+        self._input_adjustment(feeds)
         results = self.engine.predict(feeds)
 
         if "videobert" in self.workload["model"]:
@@ -47,13 +54,49 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
 
     def _get_engine(self, batch_size):
         if not self.batch_size == batch_size:
-            self.batch_size = batch_size
+            self.update_packrunner_info()
+            self.batch_size = batch_size if not self.packrunner else 1
 
             interact_info = self.configs.get("interact_info", {})
-            runtime_options = interact_info.get("runtime_options", {})
+            interact_info.get("runtime_options", {})
+
+            is_pack = interact_info.get("pack_config", False)
+            if not is_pack:
+                config = RuntimeConfig()
+            else:
+                config = PackRunnerConfig()
+                # set the time out to 0 since the test_accuracy.py does not support async: let the packing timeout in poprt asap
+                assert interact_info.get(
+                    "pack_config"
+                ), "pack mode requires 'pack_config'"
+                self.pack_config = interact_info["pack_config"]
+                assert (
+                    "dynamic_input_name" in self.pack_config
+                ), "you must specify the name of the input who has dynamic length."
+                assert (
+                    "mask_name" in self.pack_config
+                ), "you must specify the name of 'mask' input for pack runner."
+                assert (
+                    "input_names" in self.pack_config
+                ), "you must specify all input names for pack runner for auto padding removal."
+
+                mask_name = self.pack_config["mask_name"]
+                config.dynamic_input_name = self.pack_config["dynamic_input_name"]
+                config.enable_input_single_row_mode(mask_name)
+                config.timeout_microseconds = self.pack_config.get(
+                    "timeout_microseconds", 15000
+                )
+                # best performance mode
+                config.algorithm = PackAlgorithm.first_fit
+                config.max_valid_num = self.pack_config.get("max_pack_num", 40)
+                # remove user provided padded zeros in pack runner
+                config.enable_padding_remove_mode(
+                    self.pack_config["mask_name"],
+                    [n for n in self.pack_config["input_names"] if n != mask_name],
+                )
 
             if self.runner_name == "POPRT":
-                self.engine = engine_poprt.PopRT(self.popef_path, runtime_options)
+                self.engine = engine_poprt.PopRT(self.popef_path, config)
             else:
                 raise ValueError("engine_name must be POPRT")
         return self.engine
@@ -62,17 +105,12 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         report = {}
         report["BS"] = self.batch_size
         interact_info = self.configs.get("interact_info", {})
-        if interact_info.get("pack", False):
-            # load performance report from acc test for models used pack feature
-            perf_path = "byte_mlperf/reports/IPU/{0}/performance_bs{1}.json".format(
-                self.model_info["model"], self.batch_size
+        if self.packrunner:
+            report["BS"] = self.pack_bs
+            iterations = self.workload["iterations"]
+            qps, avg_latency, tail_latency = self.engine.benchmark_pack(
+                interact_info["pack_config"], iterations
             )
-            assert os.path.exists(perf_path)
-            with open(perf_path, "r") as f:
-                perf = json.load(f)
-                report["QPS"] = perf["QPS"]
-                report["AVG Latency"] = perf["AVG Latency"]
-                report["P99 Latency"] = perf["P99 Latency"]
 
         else:
             iterations = self.workload["iterations"]
@@ -82,9 +120,9 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
                 clients, self.batch_size, iterations
             )
 
-            report["QPS"] = int(qps)
-            report["AVG Latency"] = avg_latency
-            report["P99 Latency"] = tail_latency
+        report["QPS"] = int(qps)
+        report["AVG Latency"] = avg_latency
+        report["P99 Latency"] = tail_latency
 
         return report
 
@@ -93,6 +131,9 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         return self.batch_size
 
     def load(self, batch_size) -> None:
+        self.update_packrunner_info()
+        if self.packrunner:
+            batch_size = self.pack_bs
         self.popef_path = os.path.join(
             self.compiled_dir,
             self.configs["model"],
@@ -100,3 +141,22 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
             "executable.popef",
         )
         self._get_engine(batch_size)
+
+    def update_packrunner_info(self):
+        interact_info = self.configs.get("interact_info", {})
+        is_pack = interact_info.get("pack_config", False)
+        if not is_pack:
+            return
+        pack_config = interact_info["pack_config"]
+        if is_pack:
+            self.packrunner = True
+            self.pack_bs = pack_config["batch_size"]
+
+    def _input_adjustment(self, inputs):
+        # packing mode require "position_ids" for bert-like models
+        if self.packrunner:
+            seq_len = np.count_nonzero(inputs[self.pack_config["mask_name"]])
+            if self.configs["model"] == "roberta-torch-fp32":
+                inputs["position_ids"] = np.arange(seq_len, dtype=np.int32) + 1
+            elif self.configs["model"] in ("albert-torch-fp32", "bert-torch-fp32"):
+                inputs["position_ids"] = np.arange(seq_len, dtype=np.int32)

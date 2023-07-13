@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
+import random
 import threading as th
 import time
 from queue import Queue
 
-import datetime
 import numpy as np
 import torch
 from poprt import runtime
-from poprt.runtime import RuntimeConfig
 
 from . import engine
 
@@ -30,14 +28,12 @@ log = logging.getLogger("engine_poprt")
 
 
 class PopRT(engine.Engine):
-    def __init__(self, popef_path, runtime_config):
-        config = RuntimeConfig()
-        # timeout in nanoseconds, which keep the same name as what it is in poprt, and then convert to ms
-        config.timeout_ns = runtime_config.get("timeout_ns", 5000)
-        self.model_runner = runtime.ModelRunner(popef_path, config)
+    def __init__(self, popef_path, config):
+        self.runner = runtime.Runner(popef_path, config)
+        self.packrunner = True if type(config) == runtime.PackRunnerConfig else False
 
     def predict(self, feeds):
-        input_descriptions = self.model_runner.get_model_inputs()
+        input_descriptions = self.runner.get_model_inputs()
         for desc in input_descriptions:
             if isinstance(feeds[desc.name], list):
                 feeds[desc.name] = np.array(
@@ -55,20 +51,26 @@ class PopRT(engine.Engine):
                 )
 
         # create the output numpy arrays
-        output_descriptions = self.model_runner.get_model_outputs()
+        output_descriptions = self.runner.get_model_outputs()
         results = {}
         for output_desc in output_descriptions:
+            output_shape = output_desc.shape
             results[output_desc.name] = np.zeros(
-                output_desc.shape, dtype=output_desc.numpy_data_type()
+                output_shape, dtype=output_desc.numpy_data_type()
             )
 
-        self.model_runner.execute(feeds, results)
+        if self.packrunner:
+            feeds.pop("position_ids")
+            fut = self.runner.executeAsync(dict(feeds), dict(results))
+            fut.wait()
+        else:
+            self.runner.execute(feeds, results)
         return results
 
     def benchmark(self, clients, batch_size, iterations):
         input_view = runtime.InputMemoryView()
-        input_descriptions = self.model_runner.get_model_inputs()
-        output_descriptions = self.model_runner.get_model_outputs()
+        input_descriptions = self.runner.get_model_inputs()
+        output_descriptions = self.runner.get_model_outputs()
         inputs = {}
         outputs = {}
         for input_desc in input_descriptions:
@@ -82,7 +84,7 @@ class PopRT(engine.Engine):
 
         log.info("Warm up")
         for _ in range(5):
-            self.model_runner.execute(inputs, outputs)
+            self.runner.execute(inputs, outputs)
         log.info("Warm up completed, start the time counting")
 
         q = Queue()
@@ -91,7 +93,7 @@ class PopRT(engine.Engine):
             durations = []
             for _ in range(iteration):
                 start_time = time.time()
-                self.model_runner.execute(inputs, outputs)
+                self.runner.execute(inputs, outputs)
                 end_time = time.time()
                 durations.append((start_time, end_time))
             # remove the first and last 20
@@ -100,9 +102,7 @@ class PopRT(engine.Engine):
             q.put(durations, timeout=10)
 
         thp = [
-            th.Thread(
-                target=perf_count, args=(self.model_runner, iterations, input_view)
-            )
+            th.Thread(target=perf_count, args=(self.runner, iterations, input_view))
             for _ in range(clients)
         ]
         for t in thp:
@@ -135,4 +135,86 @@ class PopRT(engine.Engine):
             f"====== Latency P50: {np.percentile(np_latency, 50)}, P90: {np.percentile(np_latency, 90)}, P99: {np.percentile(np_latency, 99)} ======"
         )
 
+        return qps, avg_latency, tail_latency
+
+    def benchmark_pack(self, pack_config, iterations):
+        output_descriptions = self.runner.get_model_outputs()
+
+        outputs = {}
+        for output_desc in output_descriptions:
+            shape = output_desc.shape
+            shape[0] = 1
+            outputs[output_desc.name] = np.zeros(
+                shape, dtype=output_desc.numpy_data_type()
+            )
+
+        # average sequence length in squad is ~172
+        avg_len = 172
+        max_valid_seq = 384
+
+        bs = pack_config.get("batch_size", 20)
+        sample_num = iterations * bs
+        input_len = np.random.normal(avg_len, avg_len, size=sample_num).astype(np.int32)
+        input_len = np.clip(input_len, 1, max_valid_seq)
+
+        datasets = []
+        for s_len in input_len:
+            sample = {}
+            # set value to 1 does not affect the performance, where attention_mask in pack mode required to be set to 1
+            for input_name in pack_config["input_names"]:
+                sample[input_name] = np.ones(s_len).astype(np.int32)
+
+            datasets.append(sample)
+
+        # each client sent a single data, one pack batch can pack more than 2*bs of data
+        clients = int(bs * 3.5)
+        count_percent = 0.6
+
+        q = Queue()
+
+        def perf_count(model_runner, iteration):
+            durations = []
+            for i in range(sample_num):
+                start_time = time.time()
+                sample_idx = random.randint(0, sample_num-1)
+                self.runner.execute(datasets[sample_idx], outputs)
+                end_time = time.time()
+                durations.append((start_time, end_time))
+            # remove first and last example's time counter
+            ignored_samples = int(sample_num * (1 - count_percent) / 2)
+            durations = durations[ignored_samples:-ignored_samples]
+            q.put(durations, timeout=10)
+
+        thp = [
+            th.Thread(target=perf_count, args=(self.runner, iterations))
+            for _ in range(clients)
+        ]
+        for t in thp:
+            t.start()
+        for t in thp:
+            t.join()
+
+        durations_from_th = []
+        while not q.empty():
+            durations_from_th += q.get()
+        max_timestamp = max(y for _, y in durations_from_th)
+        min_timestamp = min(x for x, _ in durations_from_th)
+        # iterations -40 as line 260
+        qps = clients * (sample_num * count_percent) / (max_timestamp - min_timestamp)
+        times_range = [y - x for x, y in durations_from_th]
+
+        times_range.sort()
+        tail_latency = round(times_range[int(len(times_range) * 0.99)] * 1000, 2)
+        avg_latency = round(sum(times_range) / len(times_range) * 1000, 2)
+
+        log.info(
+            "Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}".format(
+                bs, int(qps), avg_latency, tail_latency
+            )
+        )
+
+        np_latency = np.array(times_range) * 1000.0
+        log.info(
+            f"====== Latency P50: {np.percentile(np_latency, 50)}, P90: {np.percentile(np_latency, 90)}, P99: {np.percentile(np_latency, 99)} ======"
+        )
         return qps, avg_latency, tail_latency

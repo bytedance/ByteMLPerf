@@ -19,6 +19,6 @@
     "disable_fast_norm": true
   },
   "compiler_options": {
-    "available_memory_proportion": 0.5
+    "available_memory_proportion": 0.4
   }
 }
