@@ -240,6 +240,8 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         for name, shape in self.model_info["input_shape"].items():
             if name in not_extended_with_batch:
                 batched_shape = [shape[0]] + shape[1:]
+            elif name == "text" and 'videobert' in self.model_info['model']:
+                batched_shape = [shape[0]] + shape[1:]
             else:
                 batched_shape = [shape[0] * self.batch_size] + shape[1:]
             log.info(
@@ -281,6 +283,8 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         options.rearrange_anchors_on_host = compiler_options.get(
             "rearrange_anchors_on_host", False
         )
+        options.enable_outlining = compiler_options.get("enable_outlining", True)
+        options.outline_threshold = compiler_options.get("outline_threshold", 1.0)
 
         outputs = [o.name for o in converted_model.graph.output]
         Compiler.compile_and_export(

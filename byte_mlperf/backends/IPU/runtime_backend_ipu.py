@@ -39,6 +39,10 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
 
     def predict(self, feeds, test_benchmark=False):
         results = self.engine.predict(feeds)
+
+        if "videobert" in self.workload["model"]:
+            # open_cifar required outputs as: logits_per_image, logits_per_text
+            return results["3034"], results["3035"]
         return results
 
     def _get_engine(self, batch_size):

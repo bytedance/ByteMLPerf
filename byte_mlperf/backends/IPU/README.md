@@ -33,6 +33,7 @@ You can get PopRT and related documents from [graphcore/PopRT](https://github.co
 | conformer-encoder-onnx-fp32 | FP16 | 8,372 | Fake Dataset | Mean Diff | 0.00161 |
 | resnet50-torch-fp32 | FP16 | 13,499 | Open Imagenet | Top-1 | 0.76963 |
 | roformer-tf-fp32 | FP16 | 2,520 | OPEN_CAIL2019 | Top-1 | 0.64323 |
+| videobert-onnx-fp32 | FP16 | 3125 | OPEN_CIFAR | Top-1 | 0.6169 |
 | widedeep-tf-fp32 | FP16 | 31,446,195 | Open Criteo Kaggle | Top-1 | 0.77392 |
 
 # How to run
