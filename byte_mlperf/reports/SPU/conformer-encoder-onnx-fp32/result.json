@@ -1,0 +1,29 @@
+{
+    "Model": "CONFORMER-ENCODER-ONNX-FP32",
+    "Backend": "SPU",
+    "Dataset": "FAKE_DATASET",
+    "Graph Compile": {
+        "Compile Duration": 553.20001,
+        "Compile Precision": "INT8",
+        "Subgraph Coverage": 100,
+        "Sparsity Ratio": "0.9375"
+    },
+    "Accuracy": {
+        "Data Percent": 100,
+        "Fake Dataset Accuracy": 0,
+        "Mean Diff": 0.01735,
+        "Std Diff": 0.01743,
+        "Max Diff": 0.3771,
+        "Max Rel-Diff": 6003532.92988,
+        "Mean Rel-Diff": 1.5049,
+        "Diff Dist": "conformer-encoder-onnx-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 64,
+            "QPS": 10110.58,
+            "AVG Latency": 6.33,
+            "P99 Latency": 7.46
+        }
+    ]
+}

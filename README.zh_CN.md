@@ -81,10 +81,11 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 ## Vendor List
 目前支持的厂商Backend如下:
 
-| Vendor |  SKU | Key Parameters | Supplement |
-| :---- | :----| :---- | :---- |
-| Intel | Xeon | - | - |
+| Vendor |  SKU | Key Parameters                                                                                                                                                                                       | Supplement |
+| :---- | :----|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| :---- |
+| Intel | Xeon | -                                                                                                                                                                                                    | - |
 | Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
+| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf/backends/SPU/README.md) |
 
 ## Benchmark Summary
 评估结果汇总 : QPS 视图

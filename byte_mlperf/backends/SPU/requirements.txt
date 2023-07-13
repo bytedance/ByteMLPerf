@@ -1,0 +1,13 @@
+matplotlib==3.4.2
+mypy-protobuf==2.8
+protobuf==3.19.6
+numpy==1.23.4
+pandas==1.5.1
+torch==1.9.1
+tensorflow==2.8.4
+bert-tensorflow==1.0.1
+torchvision==0.10.1
+sentencepiece==0.1.96
+tokenization
+tensorflow-datasets==4.7.0
+google-cloud-core==2.3.2
