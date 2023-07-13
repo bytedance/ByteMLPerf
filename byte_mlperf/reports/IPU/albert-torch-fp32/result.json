@@ -1,29 +1,29 @@
 {
     "Model": "ALBERT-TORCH-FP32",
     "Backend": "IPU",
-    "Dataset": "OPEN_SQUAD_IPU",
+    "Dataset": "OPEN_SQUAD",
     "Graph Compile": {
-        "Compile Duration": 73.93424,
+        "Compile Duration": 74.05317,
         "Compile Precision": "FP16",
         "Subgraph Coverage": 100
     },
     "Accuracy": {
-        "Data Percent": 50,
-        "Exact Match": 79.40082,
-        "F1 Score": 86.4353,
-        "Mean Diff": 0.01355,
-        "Std Diff": 0.02439,
-        "Max Diff": 5.12738,
-        "Max Rel-Diff": 8359.61958,
-        "Mean Rel-Diff": 0.02534,
+        "Data Percent": 100,
+        "Exact Match": 80.47119,
+        "F1 Score": 87.69675,
+        "Mean Diff": 0.01392,
+        "Std Diff": 0.02451,
+        "Max Diff": 5.39863,
+        "Max Rel-Diff": 12538.86253,
+        "Mean Rel-Diff": 0.02531,
         "Diff Dist": "albert-torch-fp32.png"
     },
     "Performance": [
         {
-            "BS": 32,
-            "QPS": 2938,
-            "AVG Latency": 20.13,
-            "P99 Latency": 20.39
+            "BS": 20,
+            "QPS": 2991,
+            "AVG Latency": 23.06,
+            "P99 Latency": 26.65
         }
     ]
 }

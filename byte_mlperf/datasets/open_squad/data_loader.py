@@ -66,9 +66,6 @@ class DataLoader(data_loader.Dataset):
             elif "albert" in self.config['model']:
                 tokenizer = AutoTokenizer.from_pretrained(
                     "madlag/albert-base-v2-squad")
-            elif "deberta" in self.config['model']:
-                tokenizer = AutoTokenizer.from_pretrained(
-                    "Palak/microsoft_deberta-base_squad")
             else:
                 tokenizer = BertTokenizer(
                     "byte_mlperf/datasets/open_squad/vocab.txt")
@@ -100,6 +97,12 @@ class DataLoader(data_loader.Dataset):
         self.cur_bs = 1
         self.batch_num = int(self.items / self.cur_bs)
 
+        # save mask name to help setting the the results at unmasked positions to zero
+        if "roberta" in self.model or "torch" in self.model:
+            self.mask_name = "attention_mask.1"
+        else:
+            self.mask_name = "input_mask:0"
+
     def name(self):
         return self.config['dataset_name']
 
@@ -120,20 +123,20 @@ class DataLoader(data_loader.Dataset):
         for i in tqdm(range(self.batch_num)):
             features = collections.defaultdict(list)
             for j in range(i * self.cur_bs, (i + 1) * self.cur_bs):
-                if "torch" in self.model:
+                if "roberta" in self.model:
                     features['input_ids.1'].append(
                         self.eval_features[j].input_ids)
                     features['attention_mask.1'].append(
                         self.eval_features[j].input_mask)
-                    if "roberta" in self.model:
-                        features['token_type_ids.1'].append(
-                            np.zeros((384,)))
-                    elif "deberta" in self.model:
-                        features['token_type_ids'].append(
-                            self.eval_features[j].segment_ids)
-                    else:
-                        features['token_type_ids.1'].append(
-                            self.eval_features[j].segment_ids)
+                    features['token_type_ids.1'].append(
+                        np.zeros((384,)))
+                elif "torch" in self.model:
+                    features['input_ids.1'].append(
+                        self.eval_features[j].input_ids)
+                    features['attention_mask.1'].append(
+                        self.eval_features[j].input_mask)
+                    features['token_type_ids.1'].append(
+                        self.eval_features[j].segment_ids)
                 else:
                     features['input_ids:0'].append(
                         self.eval_features[j].input_ids)
