@@ -1,7 +1,7 @@
 {
   "clients": 1,
   "batch_sizes": [
-    36
+    4, 36
   ],
   "pack": true,
   "runtime_options": {
