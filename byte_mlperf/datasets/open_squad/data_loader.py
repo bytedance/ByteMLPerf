@@ -66,6 +66,9 @@ class DataLoader(data_loader.Dataset):
             elif "albert" in self.config['model']:
                 tokenizer = AutoTokenizer.from_pretrained(
                     "madlag/albert-base-v2-squad")
+            elif "deberta" in self.config['model']:
+                tokenizer = AutoTokenizer.from_pretrained(
+                    "Palak/microsoft_deberta-base_squad")
             else:
                 tokenizer = BertTokenizer(
                     "byte_mlperf/datasets/open_squad/vocab.txt")
