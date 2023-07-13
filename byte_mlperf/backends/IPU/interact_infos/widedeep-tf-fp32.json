@@ -1,5 +1,5 @@
 {
-    "batch_sizes": [20000],
+    "batch_sizes": [1024, 20000],
     "clients":5,
     "converter_options":{
         "precision": "fp16"
