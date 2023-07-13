@@ -1,7 +1,7 @@
 {
   "clients": 1,
   "batch_sizes": [
-    12
+    2, 12
   ],
   "converter_options": {
     "precision": "fp16",
