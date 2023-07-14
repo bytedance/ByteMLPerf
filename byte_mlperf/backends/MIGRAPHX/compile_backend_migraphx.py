@@ -101,7 +101,7 @@ class CompileBackendMIGRAPHX(compile_backend.CompileBackend):
             "input_type":
             self.input_type,
             "max_batch_size":
-            config['model_info']['max_batch_size'][-1],
+            config['model_info']['max_batch_size'],
             "compile_status":
             "success",
             "sg_percent":
