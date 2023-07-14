@@ -4,7 +4,7 @@
     "Dataset": "FAKE_DATASET",
     "Graph Compile": {
         "Compile Duration": 553.20001,
-        "Compile Precision": "INT8",
+        "Compile Precision": "INT8/BF16",
         "Subgraph Coverage": 100,
         "Sparsity Ratio": "0.9375"
     },

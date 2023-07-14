@@ -4,7 +4,7 @@
     "Dataset": "OPEN_SQUAD",
     "Graph Compile": {
         "Compile Duration": 847.10001,
-        "Compile Precision": "INT8",
+        "Compile Precision": "INT8/BF16",
         "Subgraph Coverage": 100,
         "Sparsity Ratio": "0.9375"
     },

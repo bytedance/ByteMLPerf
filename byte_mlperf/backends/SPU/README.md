@@ -9,13 +9,15 @@ efficiency, which leads to a lower total cost of ownership (TCO).
 
 For Byte MLPerf, Moffett has submitted performance results of the following models.
 
-| Model                | Precision | QPS   | Dataset        | Metric name | Metric value | 
-|----------------------|-----------|-------|----------------|-------------|--------------|
-| resnet50-torch-fp32     | INT8      | 59259 | Open Imagenet  | Top-1       | 76.61%       |
-| bert-torch-fp32         | INT8/BF16      | 4822  | Open Squad 1.1 | F1 Score    | 86.09        |
-| albert-torch-fp32       | INT8/BF16      | 5023  | Open Squad 1.1 | F1 Score    | 87.66        |
-| roberta-torch-fp32      | INT8/BF16      | 4637  | Open Squad 1.1 | F1 Score    | 86.63        |
-| conformer-encoder-onnx-fp32 | INT8/BF16      | 10110 | Fake Dataset   | Mean Diff   | 1.50       |
+| Model                | Precision | Sparsity* |QPS   | Dataset        | Metric name | Metric value | 
+|----------------------|-----------|----------|-------|----------------|-------------|--------------|
+| resnet50-torch-fp32     | INT8      | 16x      | 59259 | Open Imagenet  | Top-1       | 76.61%       |
+| bert-torch-fp32         | INT8/BF16 | 16x      | 4822  | Open Squad 1.1 | F1 Score    | 86.09        |
+| albert-torch-fp32       | INT8/BF16 | 16x      | 5023  | Open Squad 1.1 | F1 Score    | 87.66        |
+| roberta-torch-fp32      | INT8/BF16 | 16x      | 4637  | Open Squad 1.1 | F1 Score    | 86.63        |
+| conformer-encoder-onnx-fp32 | INT8/BF16 | 8x       | 10110 | Fake Dataset   | Mean Diff   | 1.50       |
+
+\* The sparsity is determined by the ratio of time spent on Matmul operations compared to the overall time of model inference.
 
 Besides the performance results, energy efficiency is another significant highlight of Moffett's devices. For example,
 the peak power consumption of S30 is merely
