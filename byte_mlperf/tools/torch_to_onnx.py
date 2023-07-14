@@ -36,7 +36,6 @@ def torch_to_onnx(model_path, output_path):
         if "self" not in i.debugName():
             names.append(i.debugName())
 
-    example_outputs = model(*example_inputs)
     dynamic_inputs = {}
     for i in range(len(names)):
         dynamic_inputs[names[i]] = {0: "batch_size"}
@@ -48,7 +47,6 @@ def torch_to_onnx(model_path, output_path):
         example_inputs,
         output_path,
         opset_version=11,
-        example_outputs=example_outputs,
         input_names=names,
         output_names=outputs,
         dynamic_axes=dynamic_inputs,

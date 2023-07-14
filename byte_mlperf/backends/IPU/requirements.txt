@@ -1,9 +1,10 @@
 numpy==1.23.0
 protobuf==3.20.2
-torch==1.9.1
+torch==1.12.0
 tensorflow==2.7.2
 tf2onnx
 wrapt==1.14.1
 onnx==1.13.1
 bert-tensorflow==1.0.1
-torchvision==0.10.1
+opencv-python-headless
+torchvision==0.13.0
