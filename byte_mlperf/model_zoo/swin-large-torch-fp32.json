@@ -2,7 +2,7 @@
     "model": "swin-large-torch-fp32",
     "model_path": "byte_mlperf/model_zoo/popular/swin-large/swin-transformer-large.pt",
     "framework": "Pytorch",
-    "framework_version": "1.8.1",
+    "framework_version": "1.12.0",
     "model_format": "pt",
     "model_precision": "FP32",
     "inputs":"pixel_values.1",
