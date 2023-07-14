@@ -1,0 +1,20 @@
+{
+  "clients": 4,
+  "batch_sizes": [
+    2
+  ],
+  "converter_options": {
+    "precision": "fp16"
+  },
+  "compiler_options": {
+    "batches_per_step":128,
+    "enable_prefetch_datastreams":true,
+    "use_128bit_conv_unit_load": true,
+    "group_host_sync": false,
+    "stream_buffering_depth": 2,
+    "enable_insert_remap": false,
+    "enable_fast_reduce": true,
+    "rearrange_anchors_on_host": false,
+    "available_memory_proportion": 0.2
+  }
+}
