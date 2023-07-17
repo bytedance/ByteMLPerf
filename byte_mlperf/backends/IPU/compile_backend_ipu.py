@@ -88,9 +88,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             if onnx_path.exists():
                 self._update_pack_model(onnx_path, model_info)
                 model_info["model_path"] = onnx_path
-                if "swin-large" in onnx_path.name:
-                    model_info["inputs"] = "pixel_values.1"
-                    model_info["input_shape"] = {"pixel_values.1": [1, 3, 384, 384]}
                 log.info("{} file exists, skip ONNX conversion".format(onnx_path.name))
             else:
                 # convert the model to onnx
