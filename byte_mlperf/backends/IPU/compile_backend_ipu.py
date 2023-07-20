@@ -74,7 +74,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                     int(x.strip()) for x in batch_sizes if x.strip().isdigit()
                 ]
             for key, value in self.interact_info.items():
-                if '_options' in key and isinstance(value, str):
+                if "_options" in key and isinstance(value, str):
                     self.interact_info[key] = json.loads(value)
 
         if model_type != "onnx":
@@ -198,8 +198,8 @@ class CompileBackendIPU(compile_backend.CompileBackend):
     def get_best_batch_size(self):
         """Get Best Batch Size for the model.
 
-        Usually take the max batch size can be loaded to IPU as the
-        best batch size to get highest throughput.
+        Usually take the max batch size can be loaded to IPU as the best batch size to
+        get highest throughput.
         """
         return self.interact_info.get("batch_sizes", None)
 
@@ -240,7 +240,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         for name, shape in self.model_info["input_shape"].items():
             if name in not_extended_with_batch:
                 batched_shape = [shape[0]] + shape[1:]
-            elif name == "text" and 'videobert' in self.model_info['model']:
+            elif name == "text" and "videobert" in self.model_info["model"]:
                 batched_shape = [shape[0]] + shape[1:]
             else:
                 batched_shape = [shape[0] * self.batch_size] + shape[1:]
@@ -298,16 +298,15 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         # for packed bert, we need to export position_ids to model's input
         # step 1: remove unneed node
+        model_name = "albert" if "albert" in input_model_path.name else "bert"
+        # model_name = "albert" if "albert" in input_model_path.name else "bert"
         rm_node_names = [
-            "Shape_7",
-            "Gather_9",
-            "Add_11",
-            "Unsqueeze_12",
-            "Slice_14",
-            "Constant_8",
-            "Constant_10",
-            "Constant_13",
+            "/model/{0}/embeddings/Shape".format(model_name),
+            "/model/{0}/embeddings/Gather".format(model_name),
+            "/model/{0}/embeddings/Unsqueeze".format(model_name),
+            "/model/{0}/embeddings/Slice".format(model_name),
         ]
+
         rm_nodes = []
         for node in model.graph.node:
             if node.name in rm_node_names:
@@ -324,7 +323,11 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model.graph.input.append(position_ids)
 
         for node in model.graph.node:
-            if node.op_type == "Gather" and node.name == "Gather_17":
+            if (
+                node.op_type == "Gather"
+                and node.name
+                == "/model/{0}/embeddings/position_embeddings/Gather".format(model_name)
+            ):
                 node.input[1] = position_ids.name
 
         save_path = (
