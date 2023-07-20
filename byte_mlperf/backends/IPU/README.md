@@ -1,83 +1,91 @@
-# INTELLIGENCE PROCESSING UNIT (IPU)
+<div align="center">
+  <img src="Graphcore-Chinese-Wordmark-Horizontal.svg">
+</div>
 
-Byte MLPerf supports the Graphcore [Intelligence Processing Unit (IPU)](https://www.graphcore.ai/products/ipu), built for Artificial Intelligence and Machine Learning.
+[ [中文](README.zh_CN.md) ]
 
-The Graphcore® C600 IPU-Processor card is a dual-slot, full-height PCI Express Gen4 card containing Graphcore’s Mk2 IPU with <b>FP8 support</b>, designed to accelerate machine intelligence applications for <b>both training and inference</b>. All other components are supplied by industry-standard vendors.
+# Graphcore® C600
 
-The C600 has a thermal design power (TDP) of 185 W running typical workloads and is passively cooled when installed in a suitable chassis enclosure. The maximum power of the card is capped and can be configured to be higher or lower, should that be required.
+The Graphcore® C600 IPU-Processor PCIe Card is a high-performance acceleration server card targeted for machine learning inference and training. Powered by the Graphcore Mk2 IPU Processor with FP8 support, the C600 is a dual-slot, full height PCI Express Gen4 card designed for mounting in industry standard server chassis to accelerate machine intelligence workloads.
 
-All the memory on the card is contained within the IPU, providing extremely high bandwidth to the processing cores. There is a total of 900 MB of In-Processor-Memory in the IPU.
+Up to eight C600 IPU-Processor PCIe Cards can be networked together using IPU-Link™ high-bandwidth interconnect cables, delivering enhanced IPU compute capability.
 
-The IPU has 1,472 individual machine intelligence cores, generating up to 560 teraFLOPS of FP8 and 280 teraFLOPS of FP16 compute.
+## Product Specs
 
-The C600 card supports four IPU-Links with a total of 1 Tbps bi-directional bandwidth. C600 cards can be joined together into a cluster of up to eight C600 cards, with each pair of cards linked together with an IPU-Link cable carrying 2 IPU-Links. This gives a much higher IPU-IPU interconnect speed than is available through the PCIe bus alone.
+| Name | Description |
+| :-----| :-----|
+| IPU Processor | Graphcore Mk2 IPU Processor with FP8 support |
+| IPU-Cores™ | 1,472 IPU-Cores, each one a high-performance processor capable of multi-thread, independent code execution |
+| In-Processor Memory™ | Each IPU-Core is paired with fast, local, tightly-coupled In-Processor Memory. The C600 accelerator includes 900MB of In-Processor Memory |
+| Compute | Up to 560 teraFLOPS of FP8 compute <br> Up to 280 teraFLOPS of FP16 compute <br> Up to 70 teraFLOPS of FP32 compute |
+| System Interface | Dual PCIe Gen4 8-lane interfaces |
+| Thermal Solution | Passive |
+| Form Factor | PCIe full-height/length; double-slot |
+| System Dimensions |	Length: 267mm (10.50”); Height: 111mm (4.37”); Width: 27.6mm (1.09”); Mass: 1.27kg (2.8lbs) |
+| IPU-Link™ | Support	32 lanes, 128 GB/s bandwidth (64 GB/s in each direction) IPU-Links |
+| TDP |	185W |
+| Auxiliary Power Supply | 8-pin |
+| Quality Level | Server grade |
 
 For more information of the Graphcore® C600, please refer to [C600 cards](https://docs.graphcore.ai/en/latest/hardware.html#c600-cards).
-
-# How to access IPUs
-
-To use IPUs you must have access to a system with IPU devices. To get access see [getting started](https://www.graphcore.ai/getstarted).
 
 # PopRT
 
 PopRT is a high-performance inference framework specifically for Graphcore IPUs. It is responsible for deeply optimizing the trained models, generating executable programs that can run on the Graphcore IPUs, and performing low-latency, high-throughput inference.
 
-You can get PopRT and related documents from [graphcore/PopRT](https://github.com/graphcore/PopRT). Docker images are provided at [graphcorecn/poprt](https://hub.docker.com/r/graphcorecn/poprt).
+You can get PopRT and related documents from [graphcore/PopRT](https://graphcore.github.io/PopRT/1.3.0/).
+
+Docker images are provided at [graphcorecn/poprt](https://hub.docker.com/r/graphcorecn/poprt).
 
 # Models supported
 
-| Model name |  Precision | QPS | Dataset | Metric name | Metric value |
-| ---- | ---- | ---- | ---- | ---- | ---- |
-| albert-torch-fp32 | FP16 | 2,938 | Open Squad 1.1 | F1 Score | 86.4353 |
-| bert-torch-fp32 | FP16 | 2,958 | Open Squad 1.1 | F1 Score | 85.07473 |
-| conformer-encoder-onnx-fp32 | FP16 | 8,372 | Fake Dataset | Mean Diff | 0.00161 |
-| resnet50-torch-fp32 | FP16 | 13,499 | Open Imagenet | Top-1 | 0.76963 |
-| roformer-tf-fp32 | FP16 | 2,520 | OPEN_CAIL2019 | Top-1 | 0.64323 |
-| videobert-onnx-fp32 | FP16 | 3125 | OPEN_CIFAR | Top-1 | 0.6169 |
-| widedeep-tf-fp32 | FP16 | 31,446,195 | Open Criteo Kaggle | Top-1 | 0.77392 |
+| Model name |  Precision | QPS | Dataset | Metric name | Metric value | report |
+| ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| albert-torch-fp32 | FP16 | 2,938 | Open Squad 1.1 | F1 Score | 86.4353 | [report](../../reports/IPU/albert-torch-fp32/) |
+| bert-torch-fp32 | FP16 | 2,958 | Open Squad 1.1 | F1 Score | 85.07473 | [report](../../reports/IPU/bert-torch-fp32/) |
+| conformer-encoder-onnx-fp32 | FP16 | 8,372 | Fake Dataset | Mean Diff | 0.00161 | [report](../../reports/IPU/conformer-encoder-onnx-fp32/) |
+| resnet50-torch-fp32 | FP16 | 13,499 | Open Imagenet | Top-1 | 0.76963 | [report](../../reports/IPU/resnet50-torch-fp32/) |
+| roformer-tf-fp32 | FP16 | 2,520 | OPEN_CAIL2019 | Top-1 | 0.64323 | [report](../../reports/IPU/roformer-tf-fp32/) |
+| videobert-onnx-fp32 | FP16 | 3,125 | OPEN_CIFAR | Top-1 | 0.6169 | [report](../../reports/IPU/videobert-onnx-fp32/) |
+| widedeep-tf-fp32 | FP16 | 31,446,195 | Open Criteo Kaggle | Top-1 | 0.77392 | [report](../../reports/IPU/widedeep-tf-fp32/) |
 
 # How to run
 
-- Pull the PopRT docker image
+## Download and enable Poplar SDK
 
-  ```
-  docker pull graphcorecn/poprt:latest
-  ```
+```
+wget -O 'poplar_sdk-ubuntu_20_04-3.3.0-208993bbb7.tar.gz' 'https://downloads.graphcore.ai/direct?package=poplar-poplar_sdk_ubuntu_20_04_3.3.0_208993bbb7-3.3.0&file=poplar_sdk-ubuntu_20_04-3.3.0-208993bbb7.tar.gz'
 
-- Enable Poplar SDK
+tar xzf poplar_sdk-ubuntu_20_04-3.3.0-208993bbb7.tar.gz
 
-  ```
-  source [path-to-sdk]/enable
-  popc --version
-  ```
+source poplar_sdk-ubuntu_20_04-3.3.0+1403-208993bbb7/enable
+```
 
-- Start docker container
+## Start PopRT docker container
 
-  ```
-  gc-docker -- -it \
-               -v `pwd -P`:/workspace \
-               -w /workspace \
-               --entrypoint /bin/bash \
-               graphcorecn/poprt:latest
-  ```
+```
+docker pull graphcorecn/poprt:1.3.0
 
-- Install dependencies in docker container
+gc-docker -- -it \
+              -v `pwd -P`:/workspace \
+              -w /workspace \
+              --entrypoint /bin/bash \
+              graphcorecn/poprt:1.3.0
+```
 
-  ```
-  apt-get update && \
-  apt-get install wget libglib2.0-0 -y
-  ```
+## Install dependencies in docker container
 
-- Set environment variable
+```
+apt-get update && \
+apt-get install wget libglib2.0-0 -y
+```
 
-  ```
-  export POPLAR_TARGET_OPTIONS='{"ipuLinkTopology":"line"}'
-  ```
+## Run byte-mlperf task
 
-- Run byte-mlperf task
+For example,
 
-  For example,
+```
+python3 launch.py --task widedeep-tf-fp32 --hardware IPU
+```
 
-  ```
-  python3 launch.py --task widedeep-tf-fp32 --hardware IPU
-  ```
+For more information of the command to run the task, please refer to [ByteMLPerf](../../../README.md#usage).

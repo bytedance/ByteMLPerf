@@ -66,7 +66,7 @@ In addition to the complete model structure, Byte MlPerf will also add some typi
 | resnet50-v1.5 | cv | regular | tensorflow, pytorch | imagenet2012 | fp32 |
 | bert-base | nlp | regular | tensorflow, pytorch | squad-1.1 | fp32 |
 | wide&deep | rec | regular | tensorflow | criteo | fp32 |
-| videobert | mm  |popular | onnx | cifra100 | fp32 |
+| videobert | mm  |popular | onnx | cifar100 | fp32 |
 | albert | nlp | popular | pytorch | squad-1.1 | fp32 |
 | conformer | nlp | popular | onnx | none | fp32 |
 | roformer | nlp | popular | tensorflow | cail2019 | fp32 |
