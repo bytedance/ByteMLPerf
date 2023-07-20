@@ -53,6 +53,8 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
             runtime_options = interact_info.get("runtime_options", {})
 
             if self.runner_name == "POPRT":
+                if self.engine:
+                    del self.engine
                 self.engine = engine_poprt.PopRT(self.popef_path, runtime_options)
             else:
                 raise ValueError("engine_name must be POPRT")
