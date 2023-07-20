@@ -84,6 +84,18 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model_path = os.path.abspath(configs["model_info"]["model_path"])
         onnx_path = pre_optimized_root / (model_name + ".onnx")
 
+        if not self.interact_info:
+            self.interact_info = configs.get("interact_info", {})
+            self.interact_info["clients"] = int(self.interact_info.get("clients", "1"))
+            batch_sizes = self.interact_info.get("batch_sizes", "").split(",")
+            if batch_sizes:
+                self.interact_info["batch_sizes"] = [
+                    int(x.strip()) for x in batch_sizes if x.strip().isdigit()
+                ]
+            for key, value in self.interact_info.items():
+                if "_options" in key and isinstance(value, str):
+                    self.interact_info[key] = json.loads(value)
+
         if model_type != "onnx":
             if onnx_path.exists():
                 self._update_pack_model(onnx_path, model_info)
@@ -260,7 +272,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         for name, shape in self.model_info["input_shape"].items():
             if name in not_extended_with_batch:
                 batched_shape = [shape[0]] + shape[1:]
-            elif name == "text" and 'videobert' in self.model_info['model']:
+            elif name == "text" and "videobert" in self.model_info["model"]:
                 batched_shape = [shape[0]] + shape[1:]
             else:
                 batched_shape = [shape[0] * self.batch_size] + shape[1:]
