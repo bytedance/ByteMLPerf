@@ -48,7 +48,6 @@ def torch_to_onnx(model_path, output_path):
         example_inputs,
         output_path,
         opset_version=11,
-        example_outputs=example_outputs,
         input_names=names,
         output_names=outputs,
         dynamic_axes=dynamic_inputs,
