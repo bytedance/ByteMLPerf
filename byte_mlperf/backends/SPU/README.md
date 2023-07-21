@@ -40,24 +40,65 @@ Moffett provides three SKUs of sparse computing devices, namely S4, S10, and S30
 S10 and S30 are designed to be 2 times and 3 times the computing power of S4 respectively.
 
 ## How to run
+### 1. Environmental preparation
+#### Download offline image
+```bash
+wget moffett-oss-bucket01.oss-cn-shenzhen.aliyuncs.com/byte-perf/byte-perf-2.3.2-20230721.tar
+```
+#### Load offline image
+```bash
+docker load -i byte-perf-2.3.2-20230721.tar
+```
+#### Decompress the model data package
+```bash
+wget moffett-oss-bucket01.oss-cn-shenzhen.aliyuncs.com/byte-perf/byte-perf-data.tar.gz
+tar -zxvf byte-perf-data.tar.gz
+```
+### 2. Create docker container
+notes: --shm-size="950g" is recommended to be 95% of the total memory of the host.
+```bash
+cd byte-perf-data
+sudo docker run itd \
+    --privileged \
+    --cap-add=ALL \
+    --net=host \
+    -v /dev:/dev \
+    -v /usr/src:/usr/src \
+    -v /lib/modules:/lib/modules \
+    -v $PWD/package:/home/moffett/workspace/package \
+    -e ROOT_PASS=moffett \
+    --shm-size="300g" \
+    --name byte-perf-2023 \
+    byte-perf:2.3.2-20230721
+``` 
+### 3. Environment initialization 
+Environment initialization please operate in the container.
+```bash=
+docker exec -it byte-perf-2023 /bin/bash
+```
+#### Install drivers and load firmware
+```bash
+cd /usr/local/sola/driver/bin/
+sudo ./setup.sh
+```
+#### Device basic information verification 
+mf-smi is a command line utility that can view various information of S30, such as card number, usage, temperature, power consumption, etc.
+After the driver is successfully installed, execute mf-smi to view the basic information of the device.
+```bash
+mf-smi 
+```
 
-### Prepare Enviroment
+### 4. Run byte-mlperf task in container
 
-Please refer to https://docs.moffettai.com/
+```bash=
+cd /home/moffett/workspace/package/bytemlperf
 
-### Prepare Model & Datasets
+# config spu-backend env  
+export PYTHONPATH=$PYTHONPATH:/home/moffett/workspace/spu-backend-release/ubuntu18.04-gcc7.5.0-x86_64/lib/
 
-Run `byte_mlperf/prepare_model_and_dataset.sh` to get model and dataset.
-
-### Run Byte MLPerf
-
-For example:
-
-`python3 launch.py --tasks bert-torch-fp32 --hardware_type SPU`
-
-### Reference
-
-[1] http://wiki.moffett.local:8090/pages/viewpage.action?pageId=37183466
+# conformer
+python3 launch.py --task conformer-encoder-onnx-fp32 --hardware_type SPU
+```
 
 ## Contact us
 

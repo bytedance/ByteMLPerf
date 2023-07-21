@@ -44,11 +44,18 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         self.hardware_type = hardware_type
         self.need_reload = False
         self.batch_size = None
+        self.input_rank = []
         self.model_name = ""
+        self.current_batch_size = 4
+        self.dry_run = False
+        self.output_dtype = None
+        self.output_shape = None
         self.configs = None
         self.workload = None
         self.model_info = None
         self.model = None
+        self.order = None
+        self.yaml_config = None
         self.need_reload = True
 
     def predict(self, feeds):
@@ -64,9 +71,9 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             response = self.model.inference(request)
             return response
         elif self.model_name in ["bert-torch-fp32", "albert-torch-fp32", "roberta-torch-fp32"]:
-            request, info = self.model.preprocess(feeds, self.model_info)
+            request, model_info = self.model.preprocess(feeds, self.yaml_config)
             response = self.model.inference(request)
-            response = self.model.postprocess(response, info)
+            response = self.model.postprocess(response, model_info)
             return response
         else:
             raise NotImplementedError(f"task: {self.model_name} not supported")
@@ -75,12 +82,16 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         batch_sizes = self.workload['batch_sizes']
         reports = []
         iterations = self.workload['iterations']
+        if self.model:
+            self.model.loaded = True
+            self.model.initialize()
         for idx, batch_size in enumerate(batch_sizes):
             if batch_size != self.batch_size:
                 continue
-            self.model_info.update(
-                {"min_batch_size": self.model_info['chunk_size']})
+            self.yaml_config.update(
+                {"min_batch_size": self.yaml_config['chunk_size']})
             report = {}
+            qps = None
             dataloader.rebatch(batch_size)
             if self.model_name == "resnet50-torch-fp32":
                 test_data, _ = dataloader.get_samples(0)
@@ -104,7 +115,9 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                 all_conformer_start_time_list = []
                 all_conformer_end_time_list = []
                 self.model = ModelFactory(self.model_info)
-                self.model.load_model()
+                model = self.model
+                model.load_model()
+                model.device_num = 3
                 request = [test_data["src"], test_data["src_pad_mask"]]
                 start = time.time()
                 for _ in range(iterations):
@@ -141,15 +154,17 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
 
                 def inference_worker(_preprocess_queue, _inference_queue, config):
                     self.model = ModelFactory(config)
-                    self.model.load_model()
+                    model = self.model
+                    model.load_model()
+                    model.device_num = 3
                     while True:
                         data = _preprocess_queue.get()
                         if data is None:
                             _inference_queue.put(None)
-                            self.model.destroy()
+                            model.destroy()
                             return
-                        _output_data = self.model.inference(data)
-                        _inference_queue.put(_output_data)
+                        output_data = self.model.inference(data)
+                        _inference_queue.put(output_data)
 
                 def postprocessing_worker(_inference_queue, _postprocess_queue, _info_queue):
                     while True:
@@ -161,12 +176,12 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                             return
                         _postprocess_queue.put(self.model.postprocess(data, info))
 
-                def consumer(_postprocess_queue, _shared_end_list):
+                def consumer(_postprocess_queue, shared_end_list):
                     ans = []
                     while True:
                         i = _postprocess_queue.get()
                         batch_end_time = time.time()
-                        _shared_end_list.append(batch_end_time)
+                        shared_end_list.append(batch_end_time)
                         if i is None:
                             return ans
                         ans.append(i)
@@ -186,10 +201,10 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                     target=input_worker, args=(input_queue, test_data, iterations, shared_start_list))
                 # [1] 模型前处理进程
                 preprocessing_process = multiprocessing.Process(
-                    target=preprocessing_worker, args=(input_queue, preprocess_queue, info_queue, self.model_info))
+                    target=preprocessing_worker, args=(input_queue, preprocess_queue, info_queue, self.yaml_config))
                 # [2] 模型推理进程
                 inference_process = multiprocessing.Process(
-                    target=inference_worker, args=(preprocess_queue, inference_queue, self.model_info))
+                    target=inference_worker, args=(preprocess_queue, inference_queue, self.yaml_config))
 
                 # [3] 模型后处理进程
                 postprocessing_process = multiprocessing.Process(
@@ -219,10 +234,13 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             index = int(len(all_latency) * 0.99)
             tail_latency = all_latency[index] / 1000
             avg_latency = duration / iterations
-            qps = round(1000.0 * batch_size / avg_latency, 2)
+            if not qps:
+                qps = round(1000.0 * batch_size / avg_latency, 2)
             tail_latency = round(tail_latency, 2)
             avg_latency = round(avg_latency, 2)
             qps = round(qps, 2)
+            log.info(
+                "\033[32m" + f"Report: Batch Size is {batch_size}, QPS is {qps}, AVG Latency is {avg_latency} ms, P99 Latency is {tail_latency} ms" + "\033[0m")
             report['BS'] = batch_size
             report['QPS'] = qps
             report['AVG Latency'] = avg_latency
@@ -234,7 +252,8 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
     def get_loaded_batch_size(self):
         # only used in accuracy mode, not in benchmark.
         name = self.configs['model']
-        self.model_info.update({"min_batch_size": self.model_info['chunk_size']})
+        self.yaml_config.update(
+            {"min_batch_size": self.yaml_config['chunk_size']})
         if "bert-torch-fp32" in name or "albert-torch-fp32" in name:
             return 12
         elif "roberta-torch-fp32" in name:
@@ -250,22 +269,21 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         self.batch_size = batch_size
         self.model_name = self.configs['model']
         self.model_info.update({"input_name": self.model_info['inputs'].split(",")})
+        task_name = self.model_info["model"]
+        self.yaml_config = yaml.safe_load(open(f"./byte_mlperf/download/moffett/converted_models/{task_name}.yaml", "r"))
+        self.yaml_config.update({
+            "model": self.configs["model"],
+            "input_name": self.model_info["input_name"],
+            "dataset_name": self.model_info['dataset_name']
+        })
+        if 'input_order' in self.yaml_config["model_input"][0]:
+            self.yaml_config.update(
+                {"input_order": [inp['input_order'] for inp in self.yaml_config["model_input"]]})
 
         if self.need_reload:
             self.model = ModelFactory(self.model_info)
             self.model.load_model()
+            self.model.device_num = 1
             self.need_reload = False
         else:
             log.info("model has been loaded, skip load process")
-
-        task_name = self.model_info["model"]
-        self.model_info = yaml.safe_load(open(f"./byte_mlperf/download/moffett/converted_models/{task_name}.yaml", "r"))
-        self.model_info.update({
-            "model": self.configs["model"],
-            "input_name": self.model_info["input_name"]
-        })
-        if 'input_order' in self.model_info["model_input"][0]:
-            self.model_info.update(
-                {"input_order": [inp['input_order'] for inp in self.model_info["model_input"]]})
-
-
