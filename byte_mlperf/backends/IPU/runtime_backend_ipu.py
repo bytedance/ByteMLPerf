@@ -96,6 +96,8 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
                 )
 
             if self.runner_name == "POPRT":
+                if self.engine:
+                    del self.engine
                 self.engine = engine_poprt.PopRT(self.popef_path, config)
             else:
                 raise ValueError("engine_name must be POPRT")

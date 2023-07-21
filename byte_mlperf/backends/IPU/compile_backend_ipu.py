@@ -84,12 +84,21 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model_path = os.path.abspath(configs["model_info"]["model_path"])
         onnx_path = pre_optimized_root / (model_name + ".onnx")
 
+        if not self.interact_info:
+            self.interact_info = configs.get("interact_info", {})
+            self.interact_info["clients"] = int(self.interact_info.get("clients", "1"))
+            batch_sizes = self.interact_info.get("batch_sizes", "").split(",")
+            if batch_sizes:
+                self.interact_info["batch_sizes"] = [
+                    int(x.strip()) for x in batch_sizes if x.strip().isdigit()
+                ]
+            for key, value in self.interact_info.items():
+                if "_options" in key and isinstance(value, str):
+                    self.interact_info[key] = json.loads(value)
+
         if model_type != "onnx":
             if onnx_path.exists():
-                if self.packrunner:
-                    self._update_pack_model(onnx_path, model_info)
-                else:
-                    model_info["model_path"] = onnx_path
+                self._update_pack_model(onnx_path, model_info)
                 log.info("{} file exists, skip ONNX conversion".format(onnx_path.name))
             else:
                 # convert the model to onnx
@@ -100,8 +109,13 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                 )
                 if model_type == "saved_model":
                     saved_to_onnx.savedmodel_to_onnx(model_path, onnx_path)
+                    self._update_pack_model(onnx_path, model_info)
                 elif model_type == "pt":
                     torch_to_onnx.torch_to_onnx(model_path, str(onnx_path))
+                    self._update_pack_model(onnx_path, model_info)
+                    if "swin-large" in onnx_path.name:
+                        model_info["inputs"] = "pixel_values.1"
+                        model_info["input_shape"] = {"pixel_values.1": [1, 3, 384, 384]}
                 else:
                     log.error(
                         "Wrong model type: {}, which must be saved_model, pt, or onnx".format(
@@ -257,7 +271,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         for name, shape in self.model_info["input_shape"].items():
             if name in not_extended_with_batch:
                 batched_shape = [shape[0]] + shape[1:]
-            elif name == "text" and 'videobert' in self.model_info['model']:
+            elif name == "text" and "videobert" in self.model_info["model"]:
                 batched_shape = [shape[0]] + shape[1:]
             else:
                 batched_shape = [shape[0] * self.batch_size] + shape[1:]
@@ -312,6 +326,8 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
     def _update_pack_model(self, input_model_path, model_info):
         """bert like model conversion for pack mode, update corresponded configs as well."""
+        if not self.packrunner:
+            return
         model = onnx.load(input_model_path)
 
         save_path = (
@@ -333,13 +349,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         if self.model_info["model"] == "roberta-torch-fp32":
             rm_node_names = [
-                "Equal_8",
-                "Not_9",
-                "Cast_10",
-                "CumSum_12",
-                "Add_14",
-                "Mul_15",
-                "Cast_16",
+                "/model/roberta/embeddings/Equal",
+                "/model/roberta/embeddings/Not",
+                "/model/roberta/embeddings/Cast",
+                "/model/roberta/embeddings/CumSum",
+                "/model/roberta/embeddings/Mul",
+                "/model/roberta/embeddings/Cast_1",
             ]
             rm_nodes = []
             for node in model.graph.node:
@@ -356,21 +371,19 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             model.graph.input.append(position_ids)
 
             for node in model.graph.node:
-                if node.op_type == "Add" and node.name == "Add_18":
+                if node.op_type == "Add" and node.name == "/model/roberta/embeddings/Add":
                     node.input[0] = position_ids.name
         elif self.model_info["model"] in ("bert-torch-fp32", "albert-torch-fp32"):
             # for packed bert, we need to export position_ids to model's input
             # step 1: remove unneed node
+            model_name = "albert" if "albert" in input_model_path.name else "bert"
             rm_node_names = [
-                "Shape_7",
-                "Gather_9",
-                "Add_11",
-                "Unsqueeze_12",
-                "Slice_14",
-                "Constant_8",
-                "Constant_10",
-                "Constant_13",
+                "/model/{0}/embeddings/Shape".format(model_name),
+                "/model/{0}/embeddings/Gather".format(model_name),
+                "/model/{0}/embeddings/Unsqueeze".format(model_name),
+                "/model/{0}/embeddings/Slice".format(model_name),
             ]
+
             rm_nodes = []
             for node in model.graph.node:
                 if node.name in rm_node_names:
@@ -385,19 +398,14 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             position_ids = copy.deepcopy(model.graph.input[0])
             position_ids.name = "position_ids"
             model.graph.input.append(position_ids)
-            # step 3: rename input.1 to token_type_ids.1
-            for i, input in enumerate(model.graph.input):
-                if input.name == "input.1":
-                    model.graph.input[i].name = "token_type_ids.1"
-                    break
 
             for node in model.graph.node:
-                if node.op_type == "Gather" and node.name == "Gather_18":
+                if (
+                    node.op_type == "Gather"
+                    and node.name
+                    == "/model/{0}/embeddings/position_embeddings/Gather".format(model_name)
+                ):
                     node.input[1] = position_ids.name
-                if node.op_type == "Gather" and node.name == "Gather_16":
-                    node.input[1] = "token_type_ids.1"
 
         print("Save preprocessed model to {}".format(save_path))
         onnx.save(model, save_path)
-
-        # return model_info

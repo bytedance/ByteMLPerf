@@ -12,8 +12,8 @@ if [ $1 == "bert-tf-fp32" -o $1 == "bert-torch-fp32" ]; then
     wget -O byte_mlperf/download/open_bert.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_bert.tar
     tar xf byte_mlperf/download/open_bert.tar -C byte_mlperf/model_zoo/regular/
 elif [ $1 == "resnet50-tf-fp32" -o $1 == "resnet50-torch-fp32" ]; then
-    wget -O byte_mlperf/download/open_resnet50.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_resnet50.tar
-    tar xf byte_mlperf/download/open_resnet50.tar -C byte_mlperf/model_zoo/regular/
+    wget -O byte_mlperf/download/resnet50.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50.tar
+    tar xf byte_mlperf/download/resnet50.tar -C byte_mlperf/model_zoo/regular/
 elif [ $1 == "widedeep-tf-fp32" ]; then
     wget -O byte_mlperf/download/open_wide_deep.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_wide_deep_saved_model.tar
     tar xf byte_mlperf/download/open_wide_deep.tar -C byte_mlperf/model_zoo/regular/
@@ -40,8 +40,8 @@ elif [ $1 == "deberta-torch-fp32" ]; then
     wget -O byte_mlperf/download/open_deberta.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_deberta.tar
     tar xf byte_mlperf/download/open_deberta.tar -C byte_mlperf/model_zoo/popular/
 elif [ $1 == "swin-large-torch-fp32" ]; then
-    wget -O byte_mlperf/download/swin-large.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/swin-large.tar
-    tar xf byte_mlperf/download/swin-large.tar -C byte_mlperf/model_zoo/popular/
+    wget -O byte_mlperf/download/open-swin-large.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open-swin-large.tar
+    tar xf byte_mlperf/download/open-swin-large.tar -C byte_mlperf/model_zoo/popular/
 #--Sota Model--
 elif [ $1 == "vae-encoder-onnx-fp32" -o $1 == "vae-decoder-onnx-fp32" -o $1 == "clip-onnx-fp32" -o $1 == "unet-onnx-fp32"]; then
     wget -O byte_mlperf/download/stable_diffusion.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/stable_diffusion.tar

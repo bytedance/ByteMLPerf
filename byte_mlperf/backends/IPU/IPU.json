@@ -30,21 +30,5 @@
       "type": "str",
       "default": "1",
       "depends": null
-    },
-    {
-      "name": "pack",
-      "note": "Use pack solution to run the model or not",
-      "dialog_type": "Yes/No Dialog",
-      "type": "bool",
-      "default": "false",
-      "depends": null
-    },
-    {
-      "name": "runtime_options",
-      "note": "PopRT runtime options will be applied to RuntimeConfig, please referes to the PopRT documentation",
-      "dialog_type": "Input Dialog",
-      "type": "str",
-      "default": "{}",
-      "depends": null
     }
 ]
