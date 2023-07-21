@@ -55,10 +55,10 @@ wget moffett-oss-bucket01.oss-cn-shenzhen.aliyuncs.com/byte-perf/byte-perf-data.
 tar -zxvf byte-perf-data.tar.gz
 ```
 ### 2. Create docker container
-notes: --shm-size="950g" is recommended to be 95% of the total memory of the host.
+notes: --shm-size="300g" is recommended to be 95% of the total memory of the host.
 ```bash
 cd byte-perf-data
-sudo docker run itd \
+sudo docker run -itd \
     --privileged \
     --cap-add=ALL \
     --net=host \
