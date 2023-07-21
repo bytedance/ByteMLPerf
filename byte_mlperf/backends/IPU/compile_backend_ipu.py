@@ -99,7 +99,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         if model_type != "onnx":
             if onnx_path.exists():
                 self._update_pack_model(onnx_path, model_info)
-                model_info["model_path"] = onnx_path
                 log.info("{} file exists, skip ONNX conversion".format(onnx_path.name))
             else:
                 # convert the model to onnx
