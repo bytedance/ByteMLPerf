@@ -43,10 +43,10 @@ elif [ $1 == "swin-large-torch-fp32" ]; then
     wget -O byte_mlperf/download/open-swin-large.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open-swin-large.tar
     tar xf byte_mlperf/download/open-swin-large.tar -C byte_mlperf/model_zoo/popular/
 #--Sota Model--
-elif [ $1 == "vae-encoder-onnx-fp32" -o $1 == "vae-decoder-onnx-fp32" -o $1 == "clip-onnx-fp32" -o $1 == "unet-onnx-fp32"]; then
+elif [ $1 == "vae-encoder-onnx-fp32" -o $1 == "vae-decoder-onnx-fp32" -o $1 == "clip-onnx-fp32" -o $1 == "unet-onnx-fp32" ]; then
     wget -O byte_mlperf/download/stable_diffusion.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/stable_diffusion.tar
     tar xf byte_mlperf/download/stable_diffusion.tar -C byte_mlperf/model_zoo/sota/
-elif [ $1 == "gpt2-torch-fp32"]; then
+elif [ $1 == "gpt2-torch-fp32" ]; then
     wget -O byte_mlperf/download/gpt2.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/gpt2.tar
     tar xf byte_mlperf/download/gpt2.tar -C byte_mlperf/model_zoo/sota/
 fi
