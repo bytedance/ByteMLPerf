@@ -1,0 +1,22 @@
+{
+    "batch_sizes": [4,40],
+    "clients":3,
+    "converter_options":{
+        "precision": "fp16",
+        "infer_shape_ahead": true
+    },
+    "compiler_options": {
+        "num_iotiles": 32,
+        "batches_per_step": 128,
+        "enable_prefetch_datastreams": true,
+        "use_128bit_conv_unit_load": true,
+        "stream_buffering_depth": 2,
+        "enable_fast_reduce": true,
+        "rearrange_anchors_on_host": true,
+        "group_host_sync": true,
+        "enable_outlining": true,
+        "outline_threshold": 5000,
+        "available_memory_proportion": 0.8
+    }
+}
+
