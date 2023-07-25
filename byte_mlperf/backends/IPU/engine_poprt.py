@@ -60,7 +60,7 @@ class PopRT(engine.Engine):
             )
 
         if self.packrunner:
-            feeds.pop("position_ids")
+            # feeds.pop("position_ids")
             fut = self.runner.executeAsync(dict(feeds), dict(results))
             fut.wait()
         else:
@@ -176,7 +176,7 @@ class PopRT(engine.Engine):
             durations = []
             for i in range(sample_num):
                 start_time = time.time()
-                sample_idx = random.randint(0, sample_num-1)
+                sample_idx = random.randint(0, sample_num - 1)
                 self.runner.execute(datasets[sample_idx], outputs)
                 end_time = time.time()
                 durations.append((start_time, end_time))

@@ -98,8 +98,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         if model_type != "onnx":
             if onnx_path.exists():
-                self._update_pack_model(onnx_path, model_info)
-                model_info["model_path"] = onnx_path
+                onnx_path = self._update_pack_model(onnx_path, model_info)
                 log.info("{} file exists, skip ONNX conversion".format(onnx_path.name))
             else:
                 # convert the model to onnx
@@ -110,10 +109,10 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                 )
                 if model_type == "saved_model":
                     saved_to_onnx.savedmodel_to_onnx(model_path, onnx_path)
-                    self._update_pack_model(onnx_path, model_info)
+                    onnx_path = self._update_pack_model(onnx_path, model_info)
                 elif model_type == "pt":
                     torch_to_onnx.torch_to_onnx(model_path, str(onnx_path))
-                    self._update_pack_model(onnx_path, model_info)
+                    onnx_path = self._update_pack_model(onnx_path, model_info)
                     if "swin-large" in onnx_path.name:
                         model_info["inputs"] = "pixel_values.1"
                         model_info["input_shape"] = {"pixel_values.1": [1, 3, 384, 384]}
@@ -325,16 +324,17 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         return popef_path
 
-    def _update_pack_model(self, input_model_path, model_info):
+    def _update_pack_model(self, model_path, model_info):
         """bert like model conversion for pack mode, update corresponded configs as well."""
         if not self.packrunner:
             return
-        model = onnx.load(input_model_path)
+        model = onnx.load(model_path)
 
-        save_path = (
+        # actual model_path updated to pack
+        model_path = (
             Path(self.current_dir)
             / "pre_optimized_models"
-            / (Path(input_model_path).stem + "_pack.onnx")
+            / (Path(model_path).stem + "_pack.onnx")
         )
         assert "input_shape" in model_info
         assert "inputs" in model_info
@@ -344,7 +344,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model_info["inputs"] += ",position_ids"
         model_info["input_type"] += ",LONG"
         model_info["input_shape"]["position_ids"] = [1, 384]
-        model_info["model_path"] = str(save_path)
+        model_info["model_path"] = str(model_path)
 
         self.model_info = model_info
 
@@ -372,12 +372,15 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             model.graph.input.append(position_ids)
 
             for node in model.graph.node:
-                if node.op_type == "Add" and node.name == "/model/roberta/embeddings/Add":
+                if (
+                    node.op_type == "Add"
+                    and node.name == "/model/roberta/embeddings/Add"
+                ):
                     node.input[0] = position_ids.name
         elif self.model_info["model"] in ("bert-torch-fp32", "albert-torch-fp32"):
             # for packed bert, we need to export position_ids to model's input
             # step 1: remove unneed node
-            model_name = "albert" if "albert" in input_model_path.name else "bert"
+            model_name = "albert" if "albert" in model_path.name else "bert"
             rm_node_names = [
                 "/model/{0}/embeddings/Shape".format(model_name),
                 "/model/{0}/embeddings/Gather".format(model_name),
@@ -404,9 +407,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                 if (
                     node.op_type == "Gather"
                     and node.name
-                    == "/model/{0}/embeddings/position_embeddings/Gather".format(model_name)
+                    == "/model/{0}/embeddings/position_embeddings/Gather".format(
+                        model_name
+                    )
                 ):
                     node.input[1] = position_ids.name
 
-        print("Save preprocessed model to {}".format(save_path))
-        onnx.save(model, save_path)
+        print("Save preprocessed model to {}".format(model_path))
+        onnx.save(model, model_path)
+        return model_path
