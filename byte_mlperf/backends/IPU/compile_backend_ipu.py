@@ -99,6 +99,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         if model_type != "onnx":
             if onnx_path.exists():
                 onnx_path = self._update_pack_model(onnx_path, model_info)
+                model_info["model_path"] = onnx_path
                 log.info("{} file exists, skip ONNX conversion".format(onnx_path.name))
             else:
                 # convert the model to onnx
@@ -113,9 +114,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                 elif model_type == "pt":
                     torch_to_onnx.torch_to_onnx(model_path, str(onnx_path))
                     onnx_path = self._update_pack_model(onnx_path, model_info)
-                    if "swin-large" in onnx_path.name:
-                        model_info["inputs"] = "pixel_values.1"
-                        model_info["input_shape"] = {"pixel_values.1": [1, 3, 384, 384]}
                 else:
                     log.error(
                         "Wrong model type: {}, which must be saved_model, pt, or onnx".format(
@@ -327,7 +325,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
     def _update_pack_model(self, model_path, model_info):
         """bert like model conversion for pack mode, update corresponded configs as well."""
         if not self.packrunner:
-            return
+            return model_path
         model = onnx.load(model_path)
 
         # actual model_path updated to pack
