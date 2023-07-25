@@ -60,7 +60,6 @@ class PopRT(engine.Engine):
             )
 
         if self.packrunner:
-            # feeds.pop("position_ids")
             fut = self.runner.executeAsync(dict(feeds), dict(results))
             fut.wait()
         else:
