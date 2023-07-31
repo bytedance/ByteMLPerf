@@ -52,6 +52,9 @@ elif [ $1 == "gpt2-torch-fp32" ]; then
 elif [ $1 == "chatglm2-6b-torch-fp16" ]; then
     wget -O byte_mlperf/download/chatglm2-6b.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/chatglm2-6b.tar
     tar xf byte_mlperf/download/chatglm2-6b.tar -C byte_mlperf/model_zoo/sota/
+elif [ $1 == "llama2-7b-torch-fp16" ]; then
+    wget -O byte_mlperf/download/llama-7b.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/llama-7b.tar
+    tar xf byte_mlperf/download/llama-7b.tar -C byte_mlperf/model_zoo/sota/
 fi
 
 # Download Datasets
