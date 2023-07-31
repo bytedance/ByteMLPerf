@@ -43,6 +43,9 @@ class CompileBackendCPU(compile_backend.CompileBackend):
             config['model_info']['framework'],
             "compile_precision":
             config['model_info']['model_precision'],
+            "optimizations":{},
+            "instance_count": 1,
+            "device_count": 128,
             "input_type":
             config['model_info']['input_type'].split(","),
             "max_batch_size":

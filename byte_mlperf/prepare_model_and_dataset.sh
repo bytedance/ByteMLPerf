@@ -49,6 +49,9 @@ elif [ $1 == "vae-encoder-onnx-fp32" -o $1 == "vae-decoder-onnx-fp32" -o $1 == "
 elif [ $1 == "gpt2-torch-fp32" ]; then
     wget -O byte_mlperf/download/gpt2.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/gpt2.tar
     tar xf byte_mlperf/download/gpt2.tar -C byte_mlperf/model_zoo/sota/
+elif [ $1 == "chatglm2-6b-torch-fp16" ]; then
+    wget -O byte_mlperf/download/chatglm2-6b.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/chatglm2-6b.tar
+    tar xf byte_mlperf/download/chatglm2-6b.tar -C byte_mlperf/model_zoo/sota/
 fi
 
 # Download Datasets
