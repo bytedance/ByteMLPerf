@@ -1,0 +1,30 @@
+{
+    "clients": 1,
+    "batch_sizes": [
+        1
+    ],
+    "pack_config": {
+        "batch_size": 10,
+        "input_names": [
+            "input_ids.1",
+            "attention_mask.1"
+        ],
+        "dynamic_input_name": "input_ids.1",
+        "mask_name": "attention_mask.1",
+        "max_pack_num": 20,
+        "timeout_microseconds": 15000
+    },
+    "converter_options": {
+        "disable_fast_norm": true,
+        "enable_insert_remap": true,
+        "remap_mode": "both",
+        "max_tensor_size": 6291456,
+        "precision": "fp16"
+    },
+    "compiler_options": {
+        "use_128bit_conv_unit_load": true,
+        "enable_fast_reduce": true,
+        "group_host_sync": true,
+        "available_memory_proportion": 0.4
+    }
+}

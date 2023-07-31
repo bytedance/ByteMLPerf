@@ -81,8 +81,12 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
                 ), "you must specify all input names for pack runner for auto padding removal."
 
                 mask_name = self.pack_config["mask_name"]
+
+                if self.configs["model"] == "deberta-torch-fp32":
+                    config.enable_input_single_row_mode(mask_name, "unpack_info", 1)
+                else:
+                    config.enable_input_single_row_mode(mask_name)
                 config.dynamic_input_name = self.pack_config["dynamic_input_name"]
-                config.enable_input_single_row_mode(mask_name)
                 config.timeout_microseconds = self.pack_config.get(
                     "timeout_microseconds", 15000
                 )
@@ -162,3 +166,6 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
                 inputs["position_ids"] = np.arange(seq_len, dtype=np.int32) + 1
             elif self.configs["model"] in ("albert-torch-fp32", "bert-torch-fp32"):
                 inputs["position_ids"] = np.arange(seq_len, dtype=np.int32)
+            elif self.configs["model"] == "deberta-torch-fp32":
+                inputs["unpack_info"] = np.zeros(1, dtype=np.int32)
+                inputs.pop("token_type_ids")

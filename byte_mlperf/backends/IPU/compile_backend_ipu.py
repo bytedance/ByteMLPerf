@@ -28,6 +28,8 @@ from tools import saved_to_onnx, torch_to_onnx
 
 from byte_mlperf.backends import compile_backend
 
+from .modify_deberta_to_pack import PackedDeberta
+
 log = logging.getLogger("CompileBackendIPU")
 
 
@@ -284,6 +286,10 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         converter = Converter(**converter_options)
         converted_model = converter.convert(model_proto)
 
+        if "deberta" in self.model_info["model"]:
+            pack_deberta_modifer = PackedDeberta()
+            converted_model = pack_deberta_modifer(converted_model)
+
         return converted_model
 
     def _poprt_compile(
@@ -341,9 +347,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         model_info["inputs"] += ",position_ids"
         model_info["input_type"] += ",LONG"
-        model_info["input_shape"]["position_ids"] = [1, 384]
         model_info["model_path"] = str(model_path)
 
+        if "deberta" in model_info["model"]:
+            model_info["input_shape"]["unpack_info"] = [1, 1]
+        else:
+            model_info["input_shape"]["position_ids"] = [1, 384]
         self.model_info = model_info
 
         if self.model_info["model"] == "roberta-torch-fp32":
