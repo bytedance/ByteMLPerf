@@ -77,6 +77,8 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | swin-transformer | cv | popular | pytorch | imagenet2012 | fp32 |
 | gpt2 | nlp | sota | pytorch | none | fp32 |
 | stable diffusion | cv | sota | onnx | none | fp32 |
+| LlaMa2 7B | nlp | sota | torch | none | fp16 |
+| chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
 ## Vendor List
 目前支持的厂商Backend如下:
