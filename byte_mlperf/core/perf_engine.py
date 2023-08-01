@@ -123,7 +123,8 @@ class PerfEngine:
 
         base_report = {
             "Model": workload['model'].upper(),
-            "Backend": self.backend_type
+            "Backend": self.backend_type,
+            "Host Info": self.get_cpu_name()
         }
 
         # Initalize Model Config Info
@@ -170,11 +171,11 @@ class PerfEngine:
         graph_compile_report["Subgraph Coverage"] = compile_info['sg_percent']
         if 'optimizations' in compile_info:
             graph_compile_report['Optimizations'] = compile_info['optimizations']
-        base_report['Graph Compile'] = graph_compile_report
         if 'instance_count' in compile_info:
             base_report['Instance Count'] = compile_info['instance_count']
         if 'device_count' in compile_info:
             base_report['Device Count'] = compile_info['device_count']
+        base_report['Graph Compile'] = graph_compile_report
         # Compile only mode will stop here
         if self.compile_only_mode:
             base_report.pop("Backend")
@@ -275,6 +276,11 @@ class PerfEngine:
                   'r') as file:
             model_info = json.load(file)
         return model_info
+
+    def get_cpu_name(self):
+        command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
+        cpu_name = subprocess.check_output(command, shell=True)
+        return cpu_name.decode().strip()
 
     def check_interact_info(
             self, pre_compile_config: Dict[str, Dict]) -> Dict[str, Any]:
