@@ -67,7 +67,7 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | resnet50-v1.5 | cv | regular | tensorflow, pytorch | imagenet2012 | fp32 |
 | bert-base | nlp | regular | tensorflow, pytorch | squad-1.1 | fp32 |
 | wide&deep | rec | regular | tensorflow | criteo | fp32 |
-| videobert | mm  |popular | onnx | cifra100 | fp32 |
+| videobert | mm  |popular | onnx | cifar100 | fp32 |
 | albert | nlp | popular | pytorch | squad-1.1 | fp32 |
 | conformer | nlp | popular | onnx | none | fp32 |
 | roformer | nlp | popular | tensorflow | cail2019 | fp32 |
@@ -81,10 +81,11 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 ## Vendor List
 目前支持的厂商Backend如下:
 
-| Vendor |  SKU | Key Parameters                                                                                                                                                                                       | Supplement |
-| :---- | :----|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| :---- |
-| Intel | Xeon | -                                                                                                                                                                                                    | - |
+| Vendor |  SKU | Key Parameters | Supplement |
+| :---- | :----| :---- | :---- |
+| Intel | Xeon | - | - |
 | Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
+| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.zh_CN.md) |
 | Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf/backends/SPU/README.md) |
 
 ## Benchmark Summary
