@@ -1,0 +1,28 @@
+{
+    "Model": "VIDEOBERT-ONNX-FP32",
+    "Backend": "IPU",
+    "Dataset": "OPEN_CIFAR",
+    "Graph Compile": {
+        "Compile Duration": 200.88018,
+        "Compile Precision": "FP16",
+        "Subgraph Coverage": 100
+    },
+    "Accuracy": {
+        "Data Percent": 100,
+        "Top-1": 0.6169,
+        "Mean Diff": 0.0213,
+        "Std Diff": 0.04199,
+        "Max Diff": 1.56217,
+        "Max Rel-Diff": 0.10423,
+        "Mean Rel-Diff": 0.00107,
+        "Diff Dist": "videobert-onnx-fp32.png"
+    },
+    "Performance": [
+        {
+            "BS": 32,
+            "QPS": 3125,
+            "AVG Latency": 30.38,
+            "P99 Latency": 31.0
+        }
+    ]
+}

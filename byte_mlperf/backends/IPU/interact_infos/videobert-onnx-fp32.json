@@ -1,16 +1,18 @@
 {
-    "batch_sizes": [1024, 20000],
-    "clients":5,
+    "batch_sizes": [4, 32],
+    "clients":3,
     "converter_options":{
         "precision": "fp16"
     },
     "compiler_options": {
-        "num_iotiles": 32,
-        "batches_per_step": 1024,
+        "batches_per_step": 128,
         "enable_prefetch_datastreams": true,
         "use_128bit_conv_unit_load": true,
         "stream_buffering_depth": 2,
         "enable_fast_reduce": true,
-        "rearrange_anchors_on_host": false
+        "rearrange_anchors_on_host": false,
+        "enable_outlining": true,
+        "outline_threshold": 5000,
+        "available_memory_proportion": 0.2
     }
 }

@@ -24,6 +24,7 @@ from byte_mlperf.datasets.open_squad.bert.accuracy_squad import write_prediction
 from byte_mlperf.datasets.open_squad.bert.evaluate import check_accuracy
 from byte_mlperf.datasets import test_accuracy
 
+
 RawResult = collections.namedtuple("RawResult",
                                    ["unique_id", "start_logits", "end_logits"])
 
@@ -36,12 +37,27 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
         results, diffs = [], []
         num = int((data_percent / 100) * self.dataloader.get_batch_count()
                   ) if data_percent else self.dataloader.get_batch_count()
+
         for i in tqdm(range(num)):
             test_data, _ = self.dataloader.get_samples(i)
             unique_ids = self.dataloader.get_id(i)
             result = self.runtime_backend.predict(test_data)
+
             start_logits, end_logits = self._post_processing(
                 result, self.configs['framework'])
+
+            # set results at unmasked positions to zero since the vendor's result may have different value at those meaningless positions
+            def set_unmask_to_zero(res, mask):
+                arr = np.array(res)
+                arr[mask == 0] = 0.0
+                return list(arr)
+
+            for i, mask in enumerate(np.array(test_data[self.dataloader.mask_name])):
+                for i, sl in enumerate(start_logits):
+                    start_logits[i] = set_unmask_to_zero(sl, mask)
+
+                for i, el in enumerate(end_logits):
+                    end_logits[i] = set_unmask_to_zero(el, mask)
 
             for i, u_id in enumerate(unique_ids):
                 results.append(
@@ -109,7 +125,7 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
                 )
             else:
                 (start_logits, end_logits) = (inputs[0], inputs[1])
-
+            
             for i in range(self.dataloader.cur_bs):
                 start_logit = [float(x) for x in start_logits[i].flat]
                 end_logit = [float(x) for x in end_logits[i].flat]

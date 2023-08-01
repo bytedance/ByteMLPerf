@@ -9,3 +9,4 @@ transformers
 tokenization
 fpdf
 typing-extensions==3.7.4.3
+numpy==1.23.0

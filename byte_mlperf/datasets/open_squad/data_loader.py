@@ -100,6 +100,12 @@ class DataLoader(data_loader.Dataset):
         self.cur_bs = 1
         self.batch_num = int(self.items / self.cur_bs)
 
+        # save mask name to help setting the the results at unmasked positions to zero
+        if "roberta" in self.model or "torch" in self.model:
+            self.mask_name = "attention_mask.1"
+        else:
+            self.mask_name = "input_mask:0"
+
     def name(self):
         return self.config['dataset_name']
 

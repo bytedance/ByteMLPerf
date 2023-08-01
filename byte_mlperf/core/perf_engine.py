@@ -168,8 +168,13 @@ class PerfEngine:
         graph_compile_report["Compile Precision"] = compile_info[
             'compile_precision']
         graph_compile_report["Subgraph Coverage"] = compile_info['sg_percent']
+        if 'optimizations' in compile_info:
+            graph_compile_report['Optimizations'] = compile_info['optimizations']
         base_report['Graph Compile'] = graph_compile_report
-
+        if 'instance_count' in compile_info:
+            base_report['Instance Count'] = compile_info['instance_count']
+        if 'device_count' in compile_info:
+            base_report['Device Count'] = compile_info['device_count']
         # Compile only mode will stop here
         if self.compile_only_mode:
             base_report.pop("Backend")
@@ -231,9 +236,14 @@ class PerfEngine:
             else:
                 for bs in batch_sizes:
                     self.runtime_backend.load(bs)
-                    performance_reports.append(
-                        self.runtime_backend.benchmark(dataset))
+                    batch_reports = self.runtime_backend.benchmark(dataset)
+                    performance_reports.append(batch_reports)
             base_report['Performance'] = performance_reports
+
+        if "Instance Count" not in base_report:
+            log.warning("Vendors need to Add # of instances")
+        if "Device Count" not in base_report:
+            log.warning("Vendors need to Add # of devices")
 
         # write output to json file
         with open(output_dir + "/result.json", 'w') as file:
