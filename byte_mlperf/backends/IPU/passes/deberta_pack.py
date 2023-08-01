@@ -1,11 +1,13 @@
 # Copyright (c) 2023 Graphcore Ltd. All rights reserved.
 import onnx
 from poprt import Pass
+from poprt.passes import register
 from poprt.passes.onnx_helper import clean_info, get_dtype, topological_sort
 from poprt.passes.pattern_helper import PatternMatcher
 from poprt.passes.shape_inference import infer_shapes
 
 
+@register("deberta_pack")
 class PackedDeberta(Pass):
     @staticmethod
     def _find(items, search_func, return_all=False):
@@ -157,7 +159,7 @@ class PackedDeberta(Pass):
             model.graph.node.insert(ops["2"].index, Unpack)
         return model
 
-    def packed_deberta(self, model):
+    def _add_pack(self, model):
         model = self._modify_mask_before_mul_to_input(model)
         model = self._modify_attentionmask(model)
         sorted_nodes = topological_sort(model.graph)
@@ -167,9 +169,13 @@ class PackedDeberta(Pass):
         return model
 
     def __call__(self, model: onnx.ModelProto) -> onnx.ModelProto:
-        model = self.packed_deberta(model)
+        model = self._add_pack(model)
         model = infer_shapes(clean_info(model))
 
         model = self._add_unpack(model)
         model = infer_shapes(clean_info(model))
         return model
+
+    def run(self, onnx_model: onnx.ModelProto) -> onnx.ModelProto:
+        onnx_model.CopyFrom(self.traverse_graph(onnx_model.graph, self.__call__))
+        return onnx_model

@@ -19,7 +19,8 @@
         "enable_insert_remap": true,
         "remap_mode": "both",
         "max_tensor_size": 6291456,
-        "precision": "fp16"
+        "precision": "fp16",
+        "used_passes": ["deberta_pack"]
     },
     "compiler_options": {
         "use_128bit_conv_unit_load": true,

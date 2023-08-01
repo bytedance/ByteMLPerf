@@ -27,8 +27,7 @@ from poprt.converter import Converter
 from tools import saved_to_onnx, torch_to_onnx
 
 from byte_mlperf.backends import compile_backend
-
-from .modify_deberta_to_pack import PackedDeberta
+import byte_mlperf.backends.IPU.passes.deberta_pack
 
 log = logging.getLogger("CompileBackendIPU")
 
@@ -285,10 +284,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         converter = Converter(**converter_options)
         converted_model = converter.convert(model_proto)
-
-        if "deberta" in self.model_info["model"]:
-            pack_deberta_modifer = PackedDeberta()
-            converted_model = pack_deberta_modifer(converted_model)
 
         return converted_model
 
