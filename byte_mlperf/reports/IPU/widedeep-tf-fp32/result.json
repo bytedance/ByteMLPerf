@@ -3,7 +3,6 @@
     "Backend": "IPU",
     "Dataset": "OPEN_CRITEO_KAGGLE",
     "Host Info": "Intel(R) Xeon(R) Gold 6342 CPU @ 2.80GHz",
-    "Dataset": "OPEN_SQUAD",
     "Instance Count": 1,
     "Device Count": 1,
     "Graph Compile": {
