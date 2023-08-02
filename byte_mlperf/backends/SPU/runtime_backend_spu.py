@@ -59,15 +59,16 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         self.need_reload = True
 
     def predict(self, feeds):
+        input_name_list = self.configs['input_name']
         if not self.model:
             log.info("no model_runtime...")
             self.load(self.get_loaded_batch_size())
         if self.model_name == "resnet50-torch-fp32":
-            request = [feeds['actual_input']]
+            request = [feeds[name] for name in input_name_list]
             response = self.model.inference(request)
             return response
         elif self.model_name == "conformer-encoder-onnx-fp32":
-            request = [feeds["src"], feeds["src_pad_mask"]]
+            request = [feeds[name] for name in input_name_list]
             response = self.model.inference(request)
             return response
         elif self.model_name in ["bert-torch-fp32", "albert-torch-fp32", "roberta-torch-fp32"]:
@@ -82,9 +83,6 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         batch_sizes = self.workload['batch_sizes']
         reports = []
         iterations = self.workload['iterations']
-        if self.model:
-            self.model.loaded = True
-            self.model.initialize()
         for idx, batch_size in enumerate(batch_sizes):
             if batch_size != self.batch_size:
                 continue
@@ -93,13 +91,14 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             report = {}
             qps = None
             dataloader.rebatch(batch_size)
+            input_name_list = self.configs['input_name']
             if self.model_name == "resnet50-torch-fp32":
                 test_data, _ = dataloader.get_samples(0)
                 all_resnet50_start_time_list = []
                 all_resnet50_end_time_list = []
                 self.model = ModelFactory(self.model_info)
                 self.model.load_model()
-                request = [test_data['actual_input']]
+                request = [test_data[name] for name in input_name_list]
                 start = time.time()
                 for _ in range(iterations):
                     resnet50_start_time = time.time()
@@ -118,7 +117,7 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                 model = self.model
                 model.load_model()
                 model.device_num = 3
-                request = [test_data["src"], test_data["src_pad_mask"]]
+                request = [test_data[name] for name in input_name_list]
                 start = time.time()
                 for _ in range(iterations):
                     conformer_start_time = time.time()

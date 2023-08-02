@@ -2,6 +2,31 @@ from torch.utils.data import DataLoader as DataLoaderX
 from dataset.dataset import ImageNetDataset,MZJBertDataset,DummyDataset
 from nn_compiler.common.constants import OpType
 from common_compile import SparsertBaseBuilder
+import onnx
+
+def get_onnx_input_info(onnx_model_path):
+    # Load ONNX model
+    model = onnx.load(onnx_model_path)
+
+    # Initialize an empty dictionary to store input names and shapes
+    input_info = {}
+
+    # Iterate through the inputs of the model
+    for input in model.graph.input:
+        input_name = input.name
+        input_shape = [dim.dim_value for dim in input.type.tensor_type.shape.dim]
+        input_info[input_name] = input_shape
+
+    return input_info
+
+def get_model_input_info(onnx_input_info,batch_size):
+    config_input_dict = {}
+    input_shape_dict = {}
+    for input_name,input_shape in onnx_input_info.items():
+        config_input_dict[input_name] = input_name
+        input_shape[0] = batch_size
+        input_shape_dict[input_name] = input_shape
+    return config_input_dict,input_shape_dict
 
 class Resnet50Builder(SparsertBaseBuilder):
     def __init__(self, onnx_path, dump_dir, dataset_dir, dataset_cfg, dtype, batch_size, verify, **kwargs):
@@ -15,9 +40,10 @@ class Resnet50Builder(SparsertBaseBuilder):
         self.config.calib_batch = 1
 
         # model inputs info
-        self.config.input_dict = {"actual_input": "img"}
-        self.input_shape_dict = {"actual_input": (self.batch_size, 3, 224, 224)}
+        onnx_input_info = get_onnx_input_info(self.onnx_path)
+        self.config.input_dict,self.input_shape_dict = get_model_input_info(onnx_input_info,self.batch_size)
 
+        
         # you can also set other configs here
         self.config.do_kl = True
         self.config.opt_level = 8
@@ -31,16 +57,8 @@ class BertBaseBuilder(SparsertBaseBuilder):
 
     def set_dataset_config(self):
         # model inputs info
-        self.config.input_dict = {
-            "input_ids": "input_ids",
-            "attention_mask": "attention_mask",
-            "token_type_ids": "token_type_ids"
-        }
-        self.input_shape_dict = {
-            "input_ids": (self.batch_size, 384),
-            "attention_mask": (self.batch_size, 384),
-            "token_type_ids": (self.batch_size, 384)
-        }
+        onnx_input_info = get_onnx_input_info(self.onnx_path)
+        self.config.input_dict,self.input_shape_dict = get_model_input_info(onnx_input_info,self.batch_size)
 
         # calibration dataset config
         dataset = MZJBertDataset(data_path=self.dataset_dir, input_info=self.config.input_dict)
@@ -61,16 +79,8 @@ class AlbertBuilder(SparsertBaseBuilder):
 
     def set_dataset_config(self):
         # model inputs info
-        self.config.input_dict = {
-            "input_ids": "input_ids",
-            "attention_mask": "attention_mask",
-            "token_type_ids": "token_type_ids"
-        }
-        self.input_shape_dict = {
-            "input_ids": (self.batch_size, 384),
-            "attention_mask": (self.batch_size, 384),
-            "token_type_ids": (self.batch_size, 384)
-        }
+        onnx_input_info = get_onnx_input_info(self.onnx_path)
+        self.config.input_dict,self.input_shape_dict = get_model_input_info(onnx_input_info,self.batch_size)
 
         # calibration dataset config
         dataset = MZJBertDataset(data_path=self.dataset_dir, input_info=self.config.input_dict)
@@ -91,16 +101,8 @@ class RobertaBuilder(SparsertBaseBuilder):
 
     def set_dataset_config(self):
         # model inputs info
-        self.config.input_dict = {
-            "input_ids": "input_ids",
-            "attention_mask": "attention_mask",
-            "position_ids": "position_ids"
-        }
-        self.input_shape_dict = {
-            "input_ids": (self.batch_size, 384),
-            "attention_mask": (self.batch_size, 384),
-            "position_ids": (self.batch_size, 384)
-        }
+        onnx_input_info = get_onnx_input_info(self.onnx_path)
+        self.config.input_dict,self.input_shape_dict = get_model_input_info(onnx_input_info,self.batch_size)
 
         # calibration dataset config
         dataset = MZJBertDataset(data_path=self.dataset_dir, input_info=self.config.input_dict)
@@ -120,14 +122,8 @@ class ConformerBuilder(SparsertBaseBuilder):
 
     def set_dataset_config(self):
         # model inputs info
-        self.config.input_dict = {
-            "src": "src",
-            "src_pad_mask": "src_pad_mask"
-        }
-        self.input_shape_dict = {
-            "src": (self.batch_size,3,64,512),
-            "src_pad_mask": (self.batch_size, 128)
-        }
+        onnx_input_info = get_onnx_input_info(self.onnx_path)
+        self.config.input_dict,self.input_shape_dict = get_model_input_info(onnx_input_info,self.batch_size)
 
         # calibration dataset config
         dataset = DummyDataset(input_info=self.config.input_dict)
