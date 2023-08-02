@@ -45,6 +45,7 @@ Docker images are provided at [graphcorecn/poprt](https://hub.docker.com/r/graph
 | bert-torch-fp32 | FP16 | 2,867 | Open Squad 1.1 | F1 Score | 85.85797 | [report](../../reports/IPU/bert-torch-fp32/) |
 | clip-onnx-fp32 | FP16 | 7,305 | Fake Dataset | Mean Diff | 0.00426 | [report](../../reports/IPU/clip-onnx-fp32/) |
 | conformer-encoder-onnx-fp32 | FP16 | 8,372 | Fake Dataset | Mean Diff | 0.00161 | [report](../../reports/IPU/conformer-encoder-onnx-fp32/) |
+| deberta-torch-fp32 | FP16 | 1,702 | Open Squad 1.1 | F1 Score | 81.24629 | [report](../../reports/IPU/deberta-torch-fp32/) |
 | resnet50-torch-fp32 | FP16 | 13,499 | Open Imagenet | Top-1 | 0.76963 | [report](../../reports/IPU/resnet50-torch-fp32/) |
 | roberta-torch-fp32 | FP16 | 2,883 | Open Squad 1.1 | F1 Score | 83.1606 | [report](../../reports/IPU/roberta-torch-fp32/) |
 | roformer-tf-fp32 | FP16 | 2,520 | OPEN_CAIL2019 | Top-1 | 0.64323 | [report](../../reports/IPU/roformer-tf-fp32/) |

@@ -27,6 +27,7 @@ from poprt.converter import Converter
 from tools import saved_to_onnx, torch_to_onnx
 
 from byte_mlperf.backends import compile_backend
+import byte_mlperf.backends.IPU.passes.deberta_pack
 
 log = logging.getLogger("CompileBackendIPU")
 
@@ -163,6 +164,9 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             "input_type": config["model_info"]["input_type"].split(","),
             "max_batch_size": config["model_info"]["max_batch_size"],
             "compile_status": "success",
+            "optimizations": {},
+            "instance_count": 1,
+            "device_count": 1,
             "sg_percent": 100,
             "segments": [
                 {
@@ -341,9 +345,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         model_info["inputs"] += ",position_ids"
         model_info["input_type"] += ",LONG"
-        model_info["input_shape"]["position_ids"] = [1, 384]
         model_info["model_path"] = str(model_path)
 
+        if "deberta" in model_info["model"]:
+            model_info["input_shape"]["unpack_info"] = [1, 1]
+        else:
+            model_info["input_shape"]["position_ids"] = [1, 384]
         self.model_info = model_info
 
         if self.model_info["model"] == "roberta-torch-fp32":
