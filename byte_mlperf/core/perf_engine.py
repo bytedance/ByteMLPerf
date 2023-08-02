@@ -123,7 +123,8 @@ class PerfEngine:
 
         base_report = {
             "Model": workload['model'].upper(),
-            "Backend": self.backend_type
+            "Backend": self.backend_type,
+            "Host Info": self.get_cpu_name()
         }
 
         # Initalize Model Config Info
@@ -168,8 +169,13 @@ class PerfEngine:
         graph_compile_report["Compile Precision"] = compile_info[
             'compile_precision']
         graph_compile_report["Subgraph Coverage"] = compile_info['sg_percent']
+        if 'optimizations' in compile_info:
+            graph_compile_report['Optimizations'] = compile_info['optimizations']
+        if 'instance_count' in compile_info:
+            base_report['Instance Count'] = compile_info['instance_count']
+        if 'device_count' in compile_info:
+            base_report['Device Count'] = compile_info['device_count']
         base_report['Graph Compile'] = graph_compile_report
-
         # Compile only mode will stop here
         if self.compile_only_mode:
             base_report.pop("Backend")
@@ -231,9 +237,14 @@ class PerfEngine:
             else:
                 for bs in batch_sizes:
                     self.runtime_backend.load(bs)
-                    performance_reports.append(
-                        self.runtime_backend.benchmark(dataset))
+                    batch_reports = self.runtime_backend.benchmark(dataset)
+                    performance_reports.append(batch_reports)
             base_report['Performance'] = performance_reports
+
+        if "Instance Count" not in base_report:
+            log.warning("Vendors need to Add # of instances")
+        if "Device Count" not in base_report:
+            log.warning("Vendors need to Add # of devices")
 
         # write output to json file
         with open(output_dir + "/result.json", 'w') as file:
@@ -265,6 +276,11 @@ class PerfEngine:
                   'r') as file:
             model_info = json.load(file)
         return model_info
+
+    def get_cpu_name(self):
+        command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
+        cpu_name = subprocess.check_output(command, shell=True)
+        return cpu_name.decode().strip()
 
     def check_interact_info(
             self, pre_compile_config: Dict[str, Dict]) -> Dict[str, Any]:

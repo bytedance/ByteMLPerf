@@ -2,6 +2,10 @@
     "Model": "CONFORMER-ENCODER-ONNX-FP32",
     "Backend": "IPU",
     "Dataset": "FAKE_DATASET",
+    "Host Info": "Intel(R) Xeon(R) Gold 6342 CPU @ 2.80GHz",
+    "Dataset": "OPEN_SQUAD",
+    "Instance Count": 1,
+    "Device Count": 1,
     "Graph Compile": {
         "Compile Duration": 137.10559,
         "Compile Precision": "FP16",
