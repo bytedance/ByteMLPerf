@@ -88,6 +88,9 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
                         results = np.array( _results[0] )
                         results = results.reshape( self.batch_size , results.shape[0] * results.shape[1] // self.batch_size )
                     results = [ results ]
+                elif('resnet50-tf-fp16' in self.configs['model'] ):
+                    assert( len(_results) == 2 )
+                    results[ self.outputs[0] ] = np.array( _results[1].tolist() ).reshape( _results[1].get_shape().lens() )
                 else:
                     if( len( self.outputs ) == 1 ):
                         results[ self.outputs[0] ] = np.array( _results[0].tolist() ).reshape( _results[0].get_shape().lens() )

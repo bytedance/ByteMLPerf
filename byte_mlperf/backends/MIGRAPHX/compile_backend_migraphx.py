@@ -88,6 +88,10 @@ class CompileBackendMIGRAPHX(compile_backend.CompileBackend):
                     else:
                         new_input[key]=[value[0]*batch_size]+value[1:]
                 model = migraphx.parse_onnx(model_onnx_path,map_input_dims=new_input,default_dim_value=batch_size)
+
+                if('FP16' in config['model_info']['model_precision']):
+                    migraphx.quantize_fp16(model, ['dot', 'convolution'])
+
                 model.compile(migraphx.get_target("gpu"))
                 migraphx.save(model, model_path, format='msgpack')
 
