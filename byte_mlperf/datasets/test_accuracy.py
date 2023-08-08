@@ -112,7 +112,7 @@ class AccuracyChecker():
                            "/{}.npy".format(self.dataloader.name()))
         return draw_all_diff(
             cpu_data, vendor_data,
-            self.output_dir + "/" + self.configs["model"] + '.png')
+            self.output_dir + "/" + self.configs["model"] + '-to-' + self.configs['compile_precision'].lower() + '.png')
 
     def calculate_acc(self, data_percent) -> Dict[str, Any]:
         raise NotImplementedError("Dataset: caculate_acc")

@@ -115,12 +115,6 @@ class PerfEngine:
         if self.args.compile_only or workload['compile_only']:
             self.compile_only_mode = True
 
-        # Initalize Output Dir and Reports
-        output_dir = os.path.abspath('byte_mlperf/reports/' +
-                                     self.backend_type + '/' +
-                                     workload['model'])
-        os.makedirs(output_dir, exist_ok=True)
-
         base_report = {
             "Model": workload['model'].upper(),
             "Backend": self.backend_type,
@@ -176,6 +170,13 @@ class PerfEngine:
         if 'device_count' in compile_info:
             base_report['Device Count'] = compile_info['device_count']
         base_report['Graph Compile'] = graph_compile_report
+
+        # Initalize Output Dir and Reports
+        output_dir = os.path.abspath('byte_mlperf/reports/' +
+                                     self.backend_type + '/' +
+                                     workload['model'])
+        os.makedirs(output_dir, exist_ok=True)
+
         # Compile only mode will stop here
         if self.compile_only_mode:
             base_report.pop("Backend")
@@ -221,7 +222,7 @@ class PerfEngine:
                     workload['data_percent'])
             diff_results = AccuracyChecker.calculate_diff()
             accuracy_report.update(diff_results)
-            accuracy_report['Diff Dist'] = compile_info['model'] + ".png"
+            accuracy_report['Diff Dist'] = compile_info['model'] + '-to-' + compile_info['compile_precision'].lower() + ".png"
 
         if accuracy_report:
             base_report['Accuracy'] = accuracy_report
@@ -247,16 +248,19 @@ class PerfEngine:
             log.warning("Vendors need to Add # of devices")
 
         # write output to json file
-        with open(output_dir + "/result.json", 'w') as file:
+        output_report_path = output_dir + "/result-" + compile_info['compile_precision'].lower() + ".json"
+        with open(output_report_path, 'w') as file:
             json.dump(base_report, file, indent=4)
 
         base_report.pop("Backend")
-        log.info("Testing Finish. Report is saved in path: [ {}/result.json ]".
-                 format(output_dir[output_dir.rfind('byte_mlperf'):]))
-        build_pdf(output_dir + '/')
-        log.info("PDF Version is saved in path: [ {}/{}.pdf ]".format(
+        log.info("Testing Finish. Report is saved in path: [ {}/{} ]".
+                 format(output_dir[output_dir.rfind('byte_mlperf'):],
+                 output_report_path))
+        build_pdf(output_report_path)
+        log.info("PDF Version is saved in path: [ {}/{}-TO-{}.pdf ]".format(
             output_dir[output_dir.rfind('byte_mlperf'):],
-            base_report['Model']))
+            base_report['Model'],
+            output_report_path.split('/')[-1].split('-')[1].upper()))
 
         return compile_info["compile_status"], base_report
 
