@@ -2,6 +2,9 @@
     "Model": "ALBERT-TORCH-FP32",
     "Backend": "IPU",
     "Dataset": "OPEN_SQUAD",
+    "Host Info": "Intel(R) Xeon(R) Gold 6342 CPU @ 2.80GHz",
+    "Instance Count": 1,
+    "Device Count": 1,
     "Graph Compile": {
         "Compile Duration": 74.05317,
         "Compile Precision": "FP16",

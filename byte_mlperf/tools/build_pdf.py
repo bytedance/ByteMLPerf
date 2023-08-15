@@ -15,6 +15,7 @@
 from fpdf import FPDF
 import json
 import math
+import os
 
 
 class PDF(FPDF):
@@ -172,8 +173,9 @@ class PDF(FPDF):
         self.cell(0, 10, '%s' % self.page_no(), 0, 0, 'C')
 
     def generate_report(self, path):
-        with open(path + 'result.json', 'r') as f:
+        with open(path, 'r') as f:
             report = json.load(f)
+        output_dir = os.path.dirname(path) + '/'
         icon_path = 'byte_mlperf/images/icon.png'
         self.add_page()
         self.lines()
@@ -184,10 +186,11 @@ class PDF(FPDF):
         if 'Accuracy' in report:
             self.diff_tables(report['Accuracy'], report['Dataset'])
             if 'Diff Dist' in report['Accuracy']:
-                self.charts(path + report['Accuracy']['Diff Dist'])
+                self.charts(output_dir + report['Accuracy']['Diff Dist'])
         self.titles(report['Model'], report['Backend'])
         self.set_author('Bytedance')
-        self.output(path + report['Model'] + '.pdf', 'F')
+        precision = path.split('/')[-1].split('-')[1]
+        self.output(output_dir + report['Model'] + '-TO-' + precision.upper() + '.pdf', 'F')
         return True
 
 
