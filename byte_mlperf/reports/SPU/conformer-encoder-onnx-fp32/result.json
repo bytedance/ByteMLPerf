@@ -8,22 +8,14 @@
         "Subgraph Coverage": 100,
         "Sparsity Ratio": "0.9375"
     },
-    "Accuracy": {
-        "Data Percent": 100,
-        "Fake Dataset Accuracy": 0,
-        "Mean Diff": 0.01735,
-        "Std Diff": 0.01743,
-        "Max Diff": 0.3771,
-        "Max Rel-Diff": 6003532.92988,
-        "Mean Rel-Diff": 1.5049,
-        "Diff Dist": "conformer-encoder-onnx-fp32.png"
-    },
     "Performance": [
-        {
-            "BS": 64,
-            "QPS": 10110.58,
-            "AVG Latency": 6.33,
-            "P99 Latency": 7.46
-        }
+        [
+            {
+                "BS": 64,
+                "QPS": 8211.7,
+                "AVG Latency": 7.79,
+                "P99 Latency": 8.27
+            }
+        ]
     ]
 }

@@ -8,6 +8,7 @@ import multiprocessing
 from multiprocessing import Manager
 from byte_mlperf.backends import runtime_backend
 from inference import ModelFactory
+from threading import Thread
 
 hardware_type = "spu".upper()
 
@@ -42,7 +43,6 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
     def __init__(self):
         super(RuntimeBackendSPU, self).__init__()
         self.hardware_type = hardware_type
-        self.need_reload = False
         self.batch_size = None
         self.input_rank = []
         self.model_name = ""
@@ -57,6 +57,8 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         self.order = None
         self.yaml_config = None
         self.need_reload = True
+        self.all_resnet50_start_time_list = []
+        self.all_resnet50_end_time_list = []
 
     def predict(self, feeds):
         input_name_list = self.configs['input_name']
@@ -79,6 +81,10 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         else:
             raise NotImplementedError(f"task: {self.model_name} not supported")
 
+    def callback_func(self):
+        end_time = time.time() * 1000
+        self.all_resnet50_end_time_list.append(end_time)
+
     def benchmark(self, dataloader):
         batch_sizes = self.workload['batch_sizes']
         reports = []
@@ -94,18 +100,17 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
             input_name_list = self.configs['input_name']
             if self.model_name == "resnet50-torch-fp32":
                 test_data, _ = dataloader.get_samples(0)
-                all_resnet50_start_time_list = []
-                all_resnet50_end_time_list = []
+                all_resnet50_start_time_list = self.all_resnet50_start_time_list
+                all_resnet50_end_time_list = self.all_resnet50_end_time_list
                 self.model = ModelFactory(self.model_info)
-                self.model.load_model()
+                model = self.model
+                model.load_model()
+                model.device_num = 3
                 request = [test_data[name] for name in input_name_list]
-                start = time.time()
                 for _ in range(iterations):
                     resnet50_start_time = time.time()
                     all_resnet50_start_time_list.append(resnet50_start_time * 1000)
-                    output_data = self.model.inference(request)
-                    resnet50_end_time = time.time()
-                    all_resnet50_end_time_list.append(resnet50_end_time * 1000)
+                    output_data = self.model.inference(request, self.callback_func)
                 start_time_list = all_resnet50_start_time_list
                 end_time_list = all_resnet50_end_time_list
 
@@ -179,11 +184,11 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                     ans = []
                     while True:
                         i = _postprocess_queue.get()
-                        batch_end_time = time.time()
-                        shared_end_list.append(batch_end_time)
                         if i is None:
                             return ans
                         ans.append(i)
+                        batch_end_time = time.time()
+                        shared_end_list.append(batch_end_time)
 
                 manager = Manager()
                 shared_start_list = manager.list()
@@ -202,7 +207,7 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                 preprocessing_process = multiprocessing.Process(
                     target=preprocessing_worker, args=(input_queue, preprocess_queue, info_queue, self.yaml_config))
                 # [2] 模型推理进程
-                inference_process = multiprocessing.Process(
+                inference_process = Thread(
                     target=inference_worker, args=(preprocess_queue, inference_queue, self.yaml_config))
 
                 # [3] 模型后处理进程
@@ -210,7 +215,6 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                     target=postprocessing_worker, args=(inference_queue, postprocess_queue, info_queue))
 
                 # 开始计时
-                start = time.time()
                 input_process.start()
                 preprocessing_process.start()
                 inference_process.start()
@@ -227,14 +231,13 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
                 raise NotImplementedError(f"task: {self.model_name} not supported")
 
             # 结束计时
-            duration = (time.time() - start) * 1000
-            all_latency = [(x - y) * 1000 for x, y in zip(end_time_list, start_time_list)]
+            all_latency = [(x - y) * 1000 if self.model_name != "resnet50-torch-fp32" else x - y for x, y in zip(end_time_list, start_time_list)]
             all_latency.sort()
             index = int(len(all_latency) * 0.99)
             tail_latency = all_latency[index] / 1000
-            avg_latency = duration / iterations
+            avg_latency = sum(all_latency) / len(all_latency) / iterations
             if not qps:
-                qps = round(1000.0 * batch_size / avg_latency, 2)
+                qps = round(1000 * batch_size / avg_latency, 2)
             tail_latency = round(tail_latency, 2)
             avg_latency = round(avg_latency, 2)
             qps = round(qps, 2)

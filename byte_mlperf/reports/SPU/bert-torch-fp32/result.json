@@ -12,19 +12,21 @@
         "Data Percent": 100,
         "Exact Match": 78.72321,
         "F1 Score": 86.09125,
-        "Mean Diff": 0.13086,
-        "Std Diff": 0.13467,
-        "Max Diff": 5.58608,
-        "Max Rel-Diff": 7692.06641,
-        "Mean Rel-Diff": 0.03317,
+        "Mean Diff": 14.10534,
+        "Std Diff": 7.22505,
+        "Max Diff": 38.06685,
+        "Max Rel-Diff": 1004632.60693,
+        "Mean Rel-Diff": 3.81804,
         "Diff Dist": "bert-torch-fp32.png"
     },
     "Performance": [
-        {
-            "BS": 64,
-            "QPS": 4822.91,
-            "AVG Latency": 13.27,
-            "P99 Latency": 16.08
-        }
+        [
+            {
+                "BS": 64,
+                "QPS": 7738.91,
+                "AVG Latency": 8.27,
+                "P99 Latency": 13.71
+            }
+        ]
     ]
 }

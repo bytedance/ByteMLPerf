@@ -3,7 +3,7 @@
     "Backend": "SPU",
     "Dataset": "OPEN_SQUAD",
     "Graph Compile": {
-        "Compile Duration": 917.60001,
+        "Compile Duration": 917.60002,
         "Compile Precision": "INT8/BF16",
         "Subgraph Coverage": 100,
         "Sparsity Ratio": "0.9375"
@@ -12,19 +12,21 @@
         "Data Percent": 100,
         "Exact Match": 79.36464,
         "F1 Score": 87.66387,
-        "Mean Diff": 0.23394,
-        "Std Diff": 0.23406,
-        "Max Diff": 4.02833,
-        "Max Rel-Diff": 129412.30145,
-        "Mean Rel-Diff": 0.16002,
+        "Mean Diff": 11.73645,
+        "Std Diff": 3.03734,
+        "Max Diff": 30.64844,
+        "Max Rel-Diff": 2558872.40396,
+        "Mean Rel-Diff": 7.84418,
         "Diff Dist": "albert-torch-fp32.png"
     },
     "Performance": [
-        {
-            "BS": 64,
-            "QPS": 5023.55,
-            "AVG Latency": 12.74,
-            "P99 Latency": 13.95
-        }
+        [
+            {
+                "BS": 64,
+                "QPS": 10824.99,
+                "AVG Latency": 5.91,
+                "P99 Latency": 10.72
+            }
+        ]
     ]
 }

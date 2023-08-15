@@ -10,12 +10,12 @@ efficiency, which leads to a lower total cost of ownership (TCO).
 For Byte MLPerf, Moffett has submitted performance results of the following models.
 
 | Model                | Precision | Sparsity* |QPS   | Dataset        | Metric name | Metric value | 
-|----------------------|-----------|----------|-------|----------------|-------------|--------------|
-| resnet50-torch-fp32     | INT8      | 16x      | 59259 | Open Imagenet  | Top-1       | 76.61%       |
-| bert-torch-fp32         | INT8/BF16 | 16x      | 4822  | Open Squad 1.1 | F1 Score    | 86.09        |
-| albert-torch-fp32       | INT8/BF16 | 16x      | 5023  | Open Squad 1.1 | F1 Score    | 87.66        |
-| roberta-torch-fp32      | INT8/BF16 | 16x      | 4637  | Open Squad 1.1 | F1 Score    | 86.63        |
-| conformer-encoder-onnx-fp32 | INT8/BF16 | 8x       | 10110 | Fake Dataset   | Mean Diff   | 1.50       |
+|----------------------|-----------|----------|------|----------------|-------------|--------------|
+| resnet50-torch-fp32     | INT8      | 16x      | 52423 | Open Imagenet  | Top-1       | 76.61%       |
+| bert-torch-fp32         | INT8/BF16 | 16x      | 7738 | Open Squad 1.1 | F1 Score    | 86.09        |
+| albert-torch-fp32       | INT8/BF16 | 16x      | 10824 | Open Squad 1.1 | F1 Score    | 87.66        |
+| roberta-torch-fp32      | INT8/BF16 | 16x      | 8107 | Open Squad 1.1 | F1 Score    | 86.63        |
+| conformer-encoder-onnx-fp32 | INT8/BF16 | 8x       | 8211 | Fake Dataset   | Mean Diff   | 1.50       |
 
 \* The sparsity is determined by the ratio of time spent on Matmul operations compared to the overall time of model inference.
 
@@ -93,11 +93,23 @@ mf-smi
 ```bash=
 cd /home/moffett/workspace/package/bytemlperf
 
-# config spu-backend env  
+# config spu-backend env 
 export PYTHONPATH=$PYTHONPATH:/home/moffett/workspace/spu-backend-release/ubuntu18.04-gcc7.5.0-x86_64/lib/
 
 # conformer
 python3 launch.py --task conformer-encoder-onnx-fp32 --hardware_type SPU
+
+# albert
+python3 launch.py --task albert-torch-fp32 --hardware_type SPU
+
+# bert
+python3 launch.py --task bert-torch-fp32 --hardware_type SPU
+
+# roberta
+python3 launch.py --task roberta-torch-fp32 --hardware_type SPU
+
+# resnet50
+python3 launch.py --task resnet50-torch-fp32 --hardware_type SPU
 ```
 
 ## Contact us
