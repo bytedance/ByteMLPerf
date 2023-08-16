@@ -24,6 +24,8 @@ import poprt
 from poprt import runtime
 from poprt.compiler import Compiler, CompilerOptions
 from poprt.converter import Converter
+from prompt_toolkit.shortcuts import radiolist_dialog
+from prompt_toolkit.styles import Style
 from tools import saved_to_onnx, torch_to_onnx
 
 from byte_mlperf.backends import compile_backend
@@ -41,6 +43,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         self.current_dir = os.path.split(os.path.abspath(__file__))[0]
         self.interact_info = None
         self.packrunner = False
+        self.precision = "fp32"
 
     def version(self) -> str:
         """Return compile backend version details."""
@@ -151,16 +154,10 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
         log.info("The interaction info is:\n {}".format(self.interact_info))
 
-        precision = (
-            self.interact_info.get("converter_options", {})
-            .get("precision", "FP32")
-            .upper()
-        )
-
         result = {
             "model": config["model_info"]["model"],
             "framework": config["model_info"]["framework"],
-            "compile_precision": precision,
+            "compile_precision": self.precision,
             "input_type": config["model_info"]["input_type"].split(","),
             "max_batch_size": config["model_info"]["max_batch_size"],
             "compile_status": "success",
@@ -218,6 +215,46 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             with open(interact_info_file, "r") as f:
                 self.interact_info = json.load(f)
                 log.info("interact_info set by file: {}".format(interact_info_file))
+
+            if not self.interact_info.get("converter_options"):
+                self.interact_info["converter_options"] = {}
+
+            if not self.interact_info["converter_options"].get("precision"):
+                dialog_style = Style.from_dict(
+                    {
+                        "dialog": "bg:#88b8ff",
+                        "dialog frame.label": "bg:#ffffff #000000",
+                        "dialog.body": "bg:#000000 #a0acde",
+                        "dialog shadow": "bg:#004aaa",
+                    }
+                )
+
+                precision_choices = [("fp8", "fp8"), ("fp16", "fp16")]
+
+                selected_precision = radiolist_dialog(
+                    title="IPU精度配置",
+                    text="请指定模型的精度:",
+                    values=precision_choices,
+                    style=dialog_style,
+                ).run()
+
+                self.interact_info["converter_options"][
+                    "precision"
+                ] = selected_precision
+
+                # update fp8 configs specified in interact_info
+                if selected_precision == "fp8" and self.interact_info.get(
+                    "fp8_configs"
+                ):
+                    for config_name, config_section in self.interact_info[
+                        "fp8_configs"
+                    ].items():
+                        if isinstance(self.interact_info[config_name], dict):
+                            self.interact_info[config_name].update(config_section)
+                        else:
+                            self.interact_info[config_name] = config_section
+                    del self.interact_info["fp8_configs"]
+
         else:
             file_path = os.path.join(self.current_dir, self.hardware_type + ".json")
             if os.path.exists(file_path):
@@ -226,6 +263,11 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             else:
                 log.info("File path: {} does not exist, please check".format(file_path))
 
+        self.precision = (
+            self.interact_info.get("converter_options", {})
+            .get("precision", "FP32")
+            .upper()
+        )
         return model_profile
 
     def get_best_batch_size(self):
@@ -238,12 +280,13 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
     def _compile(self, batch_size):
         self.batch_size = batch_size
+        # differentiate popef based on precision
         self.popef_path = os.path.join(
             self.current_dir,
             "compiled_models",
             self.model_info["model"],
             str(batch_size),
-            "executable.popef",
+            "executable_{}.popef".format(self.precision),
         )
         self.popef_path = os.path.abspath(self.popef_path)
         if os.path.exists(self.popef_path):

@@ -1,14 +1,17 @@
 {
-  "clients": 1,
   "batch_sizes": [
     1
   ],
   "pack_config": {
-    "batch_size": 20,
-    "input_names": ["input_ids.1", "attention_mask.1", "token_type_ids.1"],
-    "dynamic_input_name" : "input_ids.1",
+    "batch_size": 40,
+    "input_names": [
+      "input_ids.1",
+      "attention_mask.1",
+      "token_type_ids.1"
+    ],
+    "dynamic_input_name": "input_ids.1",
     "mask_name": "attention_mask.1",
-    "max_pack_num": 40,
+    "max_pack_num": 100,
     "timeout_microseconds": 15000
   },
   "converter_options": {
@@ -17,9 +20,22 @@
     ],
     "disable_fast_norm": true,
     "enable_insert_remap": false,
-    "precision": "fp16"
+    "precision": ""
   },
   "compiler_options": {
     "available_memory_proportion": 0.4
+  },
+  "fp8_configs": {
+    "pack_config": {
+      "batch_size": 45,
+      "max_pack_num": 120
+    },
+    "compiler_options": {
+      "available_memory_proportion": 0.6
+    },
+    "converter_options": {
+      "fp8_params": "F143,F143,0,0",
+      "fp8_skip_op_names": "/model/bert/embeddings/word_embeddings/Gather"
+    }
   }
 }

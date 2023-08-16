@@ -41,6 +41,7 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         self.compiled_dir = (
             os.path.split(os.path.abspath(__file__))[0] + "/compiled_models"
         )
+        self.precision = "fp32"
 
     def predict(self, feeds, test_benchmark=False):
         # apply samll adjustments to ipu results to align with cpu's
@@ -137,14 +138,20 @@ class RuntimeBackendIPU(runtime_backend.RuntimeBackend):
         return self.batch_size
 
     def load(self, batch_size) -> None:
+        # synchronize configuration updates from compile backend
         self.update_packrunner_info()
+        self.precision = (
+            self.configs.get("interact_info", {}).get("converter_options", {})
+            .get("precision", "FP32")
+            .upper()
+        )
         if self.packrunner:
             batch_size = self.pack_bs
         self.popef_path = os.path.join(
             self.compiled_dir,
             self.configs["model"],
             str(batch_size),
-            "executable.popef",
+            "executable_{}.popef".format(self.precision),
         )
         self._get_engine(batch_size)
 

@@ -1,13 +1,22 @@
 {
   "clients": 4,
-  "batch_sizes":[4, 32],
+  "batch_sizes": [
+    4,
+    32
+  ],
   "converter_options": {
-    "precision": "fp16"
+    "precision": ""
   },
   "compiler_options": {
-    "num_iotiles":64,
-    "batches_per_step":128,
-    "enable_prefetch_datastreams":true,
-    "stream_buffering_depth":2
+    "num_iotiles": 64,
+    "batches_per_step": 128,
+    "enable_prefetch_datastreams": true,
+    "stream_buffering_depth": 2
+  },
+  "fp8_configs": {
+    "converter_options": {
+      "fp8_params": "F143,F143,-3,-3",
+      "fp8_skip_op_names": "/layer1/0/downsample/0/Conv"
+    }
   }
 }
