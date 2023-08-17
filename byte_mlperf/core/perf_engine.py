@@ -86,28 +86,24 @@ class PerfEngine:
         self.compile_backend = init_compile_backend(self.backend_type)
         self.runtime_backend = init_runtime_backend(self.backend_type)
 
-        workload_reports = []
-        status, workload_report = self.single_workload_perf(self.workload)
-        if status == "success":
-            success += 1
-        workload_reports.append(workload_report)
-
-        model_converge = (success / total) * 100 if total > 0 else 0
-        results = {
-            "Backend": self.backend_type,
-            "Model Coverage": model_converge,
-            "Workloads": workload_reports
-        }
-
         output_dir = os.path.abspath('byte_mlperf/reports/' +
                                      self.backend_type)
         os.makedirs(output_dir, exist_ok=True)
-        with open('byte_mlperf/reports/' + self.backend_type + "/Overall.json",
-                  'w') as file:
-            json.dump(results, file, indent=4)
+        
+        status = self.single_workload_perf(self.workload)
+
+        # results = {
+        #     "Backend": self.backend_type,
+        #     "Model Coverage": model_converge,
+        #     "Workloads": workload_reports
+        # }
+
+        # with open('byte_mlperf/reports/' + self.backend_type + "/Overall.json",
+        #           'w') as file:
+        #     json.dump(results, file, indent=4)
 
     def single_workload_perf(
-            self, workload: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+            self, workload: Dict[str, Any]) -> bool:
         log.info("******************************************* Start to test model: {}. *******************************************".format(workload['model']))
 
         # Check Compile Only Mode
@@ -262,7 +258,7 @@ class PerfEngine:
             base_report['Model'],
             output_report_path.split('/')[-1].split('-')[1].upper()))
 
-        return compile_info["compile_status"], base_report
+        return compile_info["compile_status"]
 
     #WIP
     def qs_benchmark(self, qs_config: Dict[str, Any]) -> list:
