@@ -24,12 +24,10 @@ import poprt
 from poprt import runtime
 from poprt.compiler import Compiler, CompilerOptions
 from poprt.converter import Converter
-from prompt_toolkit.shortcuts import radiolist_dialog
-from prompt_toolkit.styles import Style
 from tools import saved_to_onnx, torch_to_onnx
 
 from byte_mlperf.backends import compile_backend
-import byte_mlperf.backends.IPU.passes.deberta_pack
+from byte_mlperf.backends.IPU.passes import *
 
 log = logging.getLogger("CompileBackendIPU")
 
@@ -41,7 +39,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         self.need_reload = False
         self.model_runtimes = []
         self.current_dir = os.path.split(os.path.abspath(__file__))[0]
-        self.interact_info = None
+        self.model_config = None
         self.packrunner = False
         self.precision = "fp32"
 
@@ -55,26 +53,14 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         Requirements: Model pre-optimization
         cannot change the model format. Torch model export to ONNX is allowed.
         """
-        # convert model to onnx if it's not
-        # configs['workload'] is the content of workloads/<task_name>.json and
-        # configs['model_info'] is content of model_zoo/<task_name>.json
-        if not self.interact_info:
-            interact_info = configs.get("interact_info", {})
-            self.interact_info = {}
-            self.interact_info["converter_options"] = interact_info.get(
-                "converter_options", {}
-            )
-            self.interact_info["clients"] = int(interact_info.get("clients", "1"))
-            batch_sizes = interact_info.get("batch_sizes", "").split(",").remove("")
-            if batch_sizes:
-                self.interact_info["batch_sizes"] = [
-                    int(x.strip()) for x in batch_sizes
-                ]
-            self.interact_info["compiler_options"] = json.loads(
-                interact_info.get("compiler_options", "{}")
-            )
+        self._update_model_config(configs.get("interact_info", {}))
 
-        if self.interact_info.get("pack_config"):
+        self.precision = (
+            self.model_config.get("converter_options", {})
+            .get("precision", "FP32")
+            .upper()
+        )
+        if self.model_config.get("pack_config"):
             self.packrunner = True
 
         model_info = configs["model_info"]
@@ -88,18 +74,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model_path = os.path.abspath(configs["model_info"]["model_path"])
         onnx_path = pre_optimized_root / (model_name + ".onnx")
 
-        if not self.interact_info:
-            self.interact_info = configs.get("interact_info", {})
-            self.interact_info["clients"] = int(self.interact_info.get("clients", "1"))
-            batch_sizes = self.interact_info.get("batch_sizes", "").split(",")
-            if batch_sizes:
-                self.interact_info["batch_sizes"] = [
-                    int(x.strip()) for x in batch_sizes if x.strip().isdigit()
-                ]
-            for key, value in self.interact_info.items():
-                if "_options" in key and isinstance(value, str):
-                    self.interact_info[key] = json.loads(value)
+        if not self.model_config:
+            self.model_config = configs.get("interact_info", {})
 
+        # convert model to onnx if it's not
+        # configs['workload'] is the content of workloads/<task_name>.json and
+        # configs['model_info'] is content of model_zoo/<task_name>.json
         if model_type != "onnx":
             if onnx_path.exists():
                 onnx_path = self._update_pack_model(onnx_path, model_info)
@@ -147,12 +127,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
 
     def compile(self, config, dataloader=None):
         self.model_info = config["model_info"]
-        if not self.interact_info:
-            self.interact_info = config["interact_info"]
-        if self.interact_info.get("pack_config"):
+        if not self.model_config:
+            self.model_config = config["interact_info"]
+        if self.model_config.get("pack_config"):
             self.packrunner = True
 
-        log.info("The interaction info is:\n {}".format(self.interact_info))
+        log.info("The interaction info is:\n {}".format(self.model_config))
 
         result = {
             "model": config["model_info"]["model"],
@@ -179,7 +159,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
                     ],
                 },
             ],
-            "interact_info": self.interact_info,
+            "interact_info": self.model_config,
         }
 
         # packrunner takes single data as input and perform batching asynchoroly
@@ -188,7 +168,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         # "batch_size" is used to specify bs for the dataloader/inferencing and
         # it should always be 1 since pack runner only take single sample a time
         if self.packrunner:
-            pack_config = self.interact_info["pack_config"]
+            pack_config = self.model_config["pack_config"]
             assert (
                 "batch_size" in pack_config
             ), "for pack mode, we acquire pack_bs as the actual compile batch sizes for the pack model"
@@ -206,54 +186,27 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         return result
 
     def get_interact_profile(self, config):
+        """Collect information for core engine to let user interactively fill in configurations."""
         model_profile = []
         # load the interact_info by model name
         interact_info_file = os.path.join(
             self.current_dir, "interact_infos", config["model_info"]["model"] + ".json"
         )
+        file_path = os.path.join(self.current_dir, self.hardware_type + ".json")
+
+        with open(file_path, "r") as f:
+            interact_info = json.load(f)
+
         if os.path.exists(interact_info_file):
+            # has model config file but does not provide must have config options
             with open(interact_info_file, "r") as f:
-                self.interact_info = json.load(f)
+                self.model_config = json.load(f)
                 log.info("interact_info set by file: {}".format(interact_info_file))
 
-            if not self.interact_info.get("converter_options"):
-                self.interact_info["converter_options"] = {}
-
-            if not self.interact_info["converter_options"].get("precision"):
-                dialog_style = Style.from_dict(
-                    {
-                        "dialog": "bg:#88b8ff",
-                        "dialog frame.label": "bg:#ffffff #000000",
-                        "dialog.body": "bg:#000000 #a0acde",
-                        "dialog shadow": "bg:#004aaa",
-                    }
-                )
-
-                precision_choices = [("fp8", "fp8"), ("fp16", "fp16")]
-
-                selected_precision = radiolist_dialog(
-                    title="IPU精度配置",
-                    text="请指定模型的精度:",
-                    values=precision_choices,
-                    style=dialog_style,
-                ).run()
-
-                self.interact_info["converter_options"][
-                    "precision"
-                ] = selected_precision
-
-                # update fp8 configs specified in interact_info
-                if selected_precision == "fp8" and self.interact_info.get(
-                    "fp8_configs"
-                ):
-                    for config_name, config_section in self.interact_info[
-                        "fp8_configs"
-                    ].items():
-                        if isinstance(self.interact_info[config_name], dict):
-                            self.interact_info[config_name].update(config_section)
-                        else:
-                            self.interact_info[config_name] = config_section
-                    del self.interact_info["fp8_configs"]
+            if not self.model_config.get("converter_options", {}).get("precision"):
+                for _, v in enumerate(interact_info):
+                    if v["name"] == "precision":
+                        model_profile.append(v)
 
         else:
             file_path = os.path.join(self.current_dir, self.hardware_type + ".json")
@@ -263,11 +216,6 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             else:
                 log.info("File path: {} does not exist, please check".format(file_path))
 
-        self.precision = (
-            self.interact_info.get("converter_options", {})
-            .get("precision", "FP32")
-            .upper()
-        )
         return model_profile
 
     def get_best_batch_size(self):
@@ -276,7 +224,43 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         Usually take the max batch size can be loaded to IPU as the best batch size to
         get highest throughput.
         """
-        return self.interact_info.get("batch_sizes", None)
+        return self.model_config.get("batch_sizes", None)
+
+    def _update_model_config(self, interact_info):
+        # update poprt configuration based on interact_info
+        if not self.model_config:
+            self.model_config = {}
+            self.model_config["converter_options"] = interact_info.get(
+                "converter_options", {}
+            )
+            self.model_config["clients"] = int(interact_info.get("clients", "1"))
+            batch_sizes = interact_info.get("batch_sizes", "").split(",").remove("")
+            if batch_sizes:
+                self.model_config["batch_sizes"] = [int(x.strip()) for x in batch_sizes]
+            self.model_config["compiler_options"] = json.loads(
+                interact_info.get("compiler_options", "{}")
+            )
+
+            self.model_config["clients"] = int(self.model_config.get("clients", "1"))
+            batch_sizes = self.model_config.get("batch_sizes", "").split(",")
+            if batch_sizes:
+                self.model_config["batch_sizes"] = [
+                    int(x.strip()) for x in batch_sizes if x.strip().isdigit()
+                ]
+            for key, value in self.model_config.items():
+                if "_options" in key and isinstance(value, str):
+                    self.model_config[key] = json.loads(value)
+
+        if interact_info.get("precision"):
+            self.model_config["converter_options"]["precision"] = interact_info[
+                "precision"
+            ]
+            for config_name, config_section in self.model_config["fp8_configs"].items():
+                if isinstance(self.model_config[config_name], dict):
+                    self.model_config[config_name].update(config_section)
+                else:
+                    self.model_config[config_name] = config_section
+            del self.model_config["fp8_configs"]
 
     def _compile(self, batch_size):
         self.batch_size = batch_size
@@ -300,8 +284,8 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         log.info("Create the directory {}".format(os.path.dirname(self.popef_path)))
         os.makedirs(os.path.dirname(self.popef_path), exist_ok=True)
 
-        converter_options = self.interact_info.get("converter_options", {})
-        compiler_options = self.interact_info.get("compiler_options", {})
+        converter_options = self.model_config.get("converter_options", {})
+        compiler_options = self.model_config.get("compiler_options", {})
 
         converted_model = self._convert(converter_options)
         self._poprt_compile(converted_model, compiler_options, self.popef_path)
@@ -312,7 +296,7 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         model_proto = onnx.load(self.model_info["model_path"])
 
         input_shape = {}
-        not_extended_with_batch = self.interact_info.get("not_extended_with_batch", [])
+        not_extended_with_batch = self.model_config.get("not_extended_with_batch", [])
         for name, shape in self.model_info["input_shape"].items():
             if name in not_extended_with_batch:
                 batched_shape = [shape[0]] + shape[1:]
