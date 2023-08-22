@@ -344,7 +344,7 @@ class PerfEngine:
                         question['note'],
                         values=choice,
                         style=dialog_style).run()
-                    option = question['options'][num] if num else question[
+                    option = question['options'][num] if num is not None else question[
                         'default']
                 answer[question['name']] = option
 

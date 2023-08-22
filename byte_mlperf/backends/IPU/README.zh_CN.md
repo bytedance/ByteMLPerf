@@ -35,7 +35,7 @@ PopRT 是一个针对 IPU 处理器的高性能推理引擎，负责把训练完
 
 PopRT 提供了易于集成的 Python 和 C++ API，ByteMLPerf 模型在 IPU 上的运行即通过 PopRT Python API 进行模型的优化，编译和运行。
 
-更多关于 PopRT 的资料，请访问 [PopRT 用户指南](https://graphcore.github.io/PopRT/1.3.0/)。
+更多关于 PopRT 的资料，请访问 [PopRT 用户指南](https://graphcore.github.io/PopRT/1.4.0/)。
 
 获取 PopRT 的 Docker 镜像，请访问 [graphcorecn/poprt](https://hub.docker.com/r/graphcorecn/poprt)。
 
@@ -70,13 +70,13 @@ source poplar_sdk-ubuntu_20_04-3.3.0+1403-208993bbb7/enable
 ## 启动 PopRT Docker 容器
 
 ```
-docker pull graphcorecn/poprt:1.3.0
+docker pull graphcorecn/poprt:1.4.0
 
 gc-docker -- -it \
               -v `pwd -P`:/workspace \
               -w /workspace \
               --entrypoint /bin/bash \
-              graphcorecn/poprt:1.3.0
+              graphcorecn/poprt:1.4.0
 ```
 
 ## 安装 ByteMLPerf 的依赖
