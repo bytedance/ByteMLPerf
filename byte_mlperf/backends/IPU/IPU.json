@@ -1,50 +1,62 @@
 [
-    {
-      "name": "batch_sizes",
-      "note": "The batch sizes run with benchmark",
-      "dialog_type": "Input Dialog",
-      "type": "str",
-      "default": "",
-      "depends": null
-    },
-    {
-      "name": "converter_options",
-      "note": "PopRT converter options will be used, please referes to the PopRT documentation",
-      "dialog_type": "Input Dialog",
-      "type": "str",
-      "default": "{}",
-      "depends": null
-    },
-    {
-      "name": "compiler_options",
-      "note": "PopRT compiler options will be used, please referes to the PopRT documentation",
-      "dialog_type": "Input Dialog",
-      "type": "str",
-      "default": "{}",
-      "depends": null
-    },
-    {
-      "name": "clients",
-      "note": "The number of clients used to run the benchmark",
-      "dialog_type": "Input Dialog",
-      "type": "str",
-      "default": "1",
-      "depends": null
-    },
-    {
-      "name": "pack",
-      "note": "Use pack solution to run the model or not",
-      "dialog_type": "Yes/No Dialog",
-      "type": "bool",
-      "default": "false",
-      "depends": null
-    },
-    {
-      "name": "runtime_options",
-      "note": "PopRT runtime options will be applied to RuntimeConfig, please referes to the PopRT documentation",
-      "dialog_type": "Input Dialog",
-      "type": "str",
-      "default": "{}",
-      "depends": null
-    }
+  {
+    "name": "batch_sizes",
+    "note": "The batch sizes run with benchmark",
+    "dialog_type": "Input Dialog",
+    "type": "str",
+    "default": "",
+    "depends": null
+  },
+  {
+    "name": "converter_options",
+    "note": "PopRT converter options will be used, please referes to the PopRT documentation",
+    "dialog_type": "Input Dialog",
+    "type": "str",
+    "default": "{}",
+    "depends": null
+  },
+  {
+    "name": "compiler_options",
+    "note": "PopRT compiler options will be used, please referes to the PopRT documentation",
+    "dialog_type": "Input Dialog",
+    "type": "str",
+    "default": "{}",
+    "depends": null
+  },
+  {
+    "name": "clients",
+    "note": "The number of clients used to run the benchmark",
+    "dialog_type": "Input Dialog",
+    "type": "str",
+    "default": "1",
+    "depends": null
+  },
+  {
+    "name": "pack",
+    "note": "Use pack solution to run the model or not",
+    "dialog_type": "Yes/No Dialog",
+    "type": "bool",
+    "default": "false",
+    "depends": null
+  },
+  {
+    "name": "runtime_options",
+    "note": "PopRT runtime options will be applied to RuntimeConfig, please referes to the PopRT documentation",
+    "dialog_type": "Input Dialog",
+    "type": "str",
+    "default": "{}",
+    "depends": null
+  },
+  {
+    "name": "precision",
+    "note": "请指定模型的精度",
+    "dialog_type": "Radiolist Dialog",
+    "options": [
+      "fp8",
+      "fp16"
+    ],
+    "type": "str",
+    "default": "FP16",
+    "depends": null
+  }
 ]

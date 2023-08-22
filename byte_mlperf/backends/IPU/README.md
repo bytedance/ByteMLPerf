@@ -33,7 +33,7 @@ For more information of the Graphcore® C600, please refer to [C600 cards](https
 
 PopRT is a high-performance inference framework specifically for Graphcore IPUs. It is responsible for deeply optimizing the trained models, generating executable programs that can run on the Graphcore IPUs, and performing low-latency, high-throughput inference.
 
-You can get PopRT and related documents from [graphcore/PopRT](https://graphcore.github.io/PopRT/1.3.0/).
+You can get PopRT and related documents from [graphcore/PopRT](https://graphcore.github.io/PopRT/1.4.0/).
 
 Docker images are provided at [graphcorecn/poprt](https://hub.docker.com/r/graphcorecn/poprt).
 
@@ -68,13 +68,13 @@ source poplar_sdk-ubuntu_20_04-3.3.0+1403-208993bbb7/enable
 ## Start PopRT docker container
 
 ```
-docker pull graphcorecn/poprt:1.3.0
+docker pull graphcorecn/poprt:1.4.0
 
 gc-docker -- -it \
               -v `pwd -P`:/workspace \
               -w /workspace \
               --entrypoint /bin/bash \
-              graphcorecn/poprt:1.3.0
+              graphcorecn/poprt:1.4.0
 ```
 
 ## Install dependencies in docker container

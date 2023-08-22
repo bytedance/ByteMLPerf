@@ -4,17 +4,22 @@
     2
   ],
   "converter_options": {
-    "precision": "fp16"
+    "precision": "",
+    "enable_insert_remap": true
   },
   "compiler_options": {
-    "batches_per_step":128,
-    "enable_prefetch_datastreams":true,
+    "batches_per_step": 128,
+    "enable_prefetch_datastreams": true,
     "use_128bit_conv_unit_load": true,
     "group_host_sync": false,
     "stream_buffering_depth": 2,
-    "enable_insert_remap": false,
     "enable_fast_reduce": true,
     "rearrange_anchors_on_host": false,
     "available_memory_proportion": 0.2
+  },
+  "fp8_configs": {
+    "batch_sizes": [
+      4
+    ]
   }
 }
