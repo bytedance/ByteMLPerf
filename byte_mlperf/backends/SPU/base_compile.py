@@ -135,3 +135,24 @@ class ConformerBuilder(SparsertBaseBuilder):
         self.config.opt_level = 5
         self.config.safe_exp = False
         self.config.quantized_patterns = [[OpType.BatchMatmul]]
+
+class GeneralBuilder(SparsertBaseBuilder):
+    def __init__(self, onnx_path, dump_dir, dataset_dir, dataset_cfg, dtype, batch_size, verify, **kwargs):
+        super(GeneralBuilder, self).__init__(
+            onnx_path, dump_dir, dataset_dir, dataset_cfg, dtype, batch_size, verify, **kwargs)
+
+    def set_dataset_config(self):
+        # model inputs info
+        onnx_input_info = get_onnx_input_info(self.onnx_path)
+        self.config.input_dict,self.input_shape_dict = get_model_input_info(onnx_input_info,self.batch_size)
+
+        # calibration dataset config
+        dataset = DummyDataset(input_info=self.config.input_dict)
+        self.config.dataloader = DataLoaderX(dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        self.config.calib_batch = 1
+
+        # you can also set other configs here
+        self.config.do_kl = False
+        self.config.opt_level = 5
+        self.config.safe_exp = False
+        self.config.quantized_patterns = [[OpType.BatchMatmul]]

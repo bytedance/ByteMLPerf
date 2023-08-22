@@ -18,7 +18,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 from byte_mlperf.backends import compile_backend
-from base_compile import Resnet50Builder, BertBaseBuilder, AlbertBuilder, RobertaBuilder, ConformerBuilder
+from base_compile import Resnet50Builder, BertBaseBuilder, AlbertBuilder, RobertaBuilder, ConformerBuilder, GeneralBuilder
 
 log = logging.getLogger("CompileBackendSPU")
 
@@ -55,7 +55,7 @@ class CompileBackendSPU(compile_backend.CompileBackend):
         if name in builder_dict:
             SparserBuilder = builder_dict[name]
         else:
-            raise NotImplementedError(f"task: {name} not supported")
+            SparserBuilder = GeneralBuilder
         interact_info = self.get_interact_profile(configs)
         onnx_path = interact_info["onnx_path"]
         dump_dir=os.path.dirname(os.path.abspath(interact_info["model_path"]))
