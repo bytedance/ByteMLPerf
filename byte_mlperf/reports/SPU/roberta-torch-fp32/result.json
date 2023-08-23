@@ -20,13 +20,11 @@
         "Diff Dist": "roberta-torch-fp32.png"
     },
     "Performance": [
-        [
-            {
-                "BS": 64,
-                "QPS": 8107.39,
-                "AVG Latency": 7.89,
-                "P99 Latency": 11.82
-            }
-        ]
+        {
+            "BS": 64,
+            "QPS": 8107.39,
+            "AVG Latency": 7.89,
+            "P99 Latency": 11.82
+        }
     ]
 }

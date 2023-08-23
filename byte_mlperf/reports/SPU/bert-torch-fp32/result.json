@@ -20,13 +20,11 @@
         "Diff Dist": "bert-torch-fp32.png"
     },
     "Performance": [
-        [
-            {
-                "BS": 64,
-                "QPS": 7738.91,
-                "AVG Latency": 8.27,
-                "P99 Latency": 13.71
-            }
-        ]
+        {
+            "BS": 64,
+            "QPS": 7738.91,
+            "AVG Latency": 8.27,
+            "P99 Latency": 13.71
+        }
     ]
 }

@@ -9,13 +9,11 @@
         "Sparsity Ratio": "0.9375"
     },
     "Performance": [
-        [
-            {
-                "BS": 64,
-                "QPS": 8211.7,
-                "AVG Latency": 7.79,
-                "P99 Latency": 8.27
-            }
-        ]
+        {
+            "BS": 64,
+            "QPS": 8211.7,
+            "AVG Latency": 7.79,
+            "P99 Latency": 8.27
+        }
     ]
 }

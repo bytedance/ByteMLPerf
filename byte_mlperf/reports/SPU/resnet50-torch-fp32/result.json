@@ -19,13 +19,11 @@
         "Diff Dist": "resnet50-torch-fp32.png"
     },
     "Performance": [
-        [
-            {
-                "BS": 48,
-                "QPS": 52423.97,
-                "AVG Latency": 0.92,
-                "P99 Latency": 0.92
-            }
-        ]
+        {
+            "BS": 48,
+            "QPS": 52423.97,
+            "AVG Latency": 0.92,
+            "P99 Latency": 0.92
+        }
     ]
 }
