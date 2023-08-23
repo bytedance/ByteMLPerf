@@ -4,12 +4,10 @@ import logging
 import copy
 
 import torch
-# import lego
 
 import tensorflow as tf
 
 import onnx
-# import onnx_tensorrt.backend as onnx_convert
 
 tf.get_logger().setLevel('ERROR')
 
@@ -166,7 +164,10 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
             self.outputs = segment['output_tensor_map'].split(",")
 
             if( self.framework == "Tensorflow" or self.framework == "Onnx"):
-                onnx_file_path = segment['compiled_model'][0]['compiled_obj']
+                for i, ( batch_size , temp_onnx_file_path ) in enumerate( zip( segment['compiled_model'][0]['compiled_bs'] , segment['compiled_model'][0]['compiled_obj'] ) ):
+                    if( batch_size == self.batch_size ):
+                        onnx_file_path = temp_onnx_file_path
+                        break
                 import migraphx
                 onnx_file_path_for_batch_size = onnx_file_path.rsplit("/",2)
                 onnx_file_path=os.path.join(onnx_file_path_for_batch_size[0],str(self.batch_size),onnx_file_path_for_batch_size[-1])
@@ -174,8 +175,6 @@ class RuntimeBackendMIGRAPHX(runtime_backend.RuntimeBackend):
             elif self.framework == "Pytorch":
                 raise NotImplementedError("MIGraphX backend for models of PyTorch framework has not been implemented yet.")
             else:
-                # original_model = onnx.load(segment['compiled_model'][0]['compiled_obj'])
-                # model =  onnx_convert.prepare(original_model, device='CUDA:1')
                 pass
 
             self.model_runtimes.append(model)
