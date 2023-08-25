@@ -65,7 +65,7 @@ RUN apt-get -y update \
 RUN pip install https://github.com/RadeonOpenCompute/rbuild/archive/master.tar.gz && \
     git clone -b develop https://github.com/ROCmSoftwarePlatform/AMDMIGraphX.git && \
     cd AMDMIGraphX && \
-    git checkout ea32ca702b1d81ea3bf7bebb8fcd3c897f61df5d && \
+    git checkout 10c42663aa5735383bdf91ab1e33015c97904c1b && \
     rbuild build -d depend -B build --cxx=/opt/rocm/llvm/bin/clang++ && \
     cd build && make package && dpkg -i *.deb
 RUN pip install numpy==1.23.0
