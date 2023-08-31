@@ -89,8 +89,8 @@ ByteIR项目是字节跳动的模型编译解决方案。ByteIR包括编译器�
 ByteIR 编译支持的模型列表:
 | Model | Domain | Purpose | Framework | Dataset | Precision |
 | ---- | ---- | ---- | ---- | ---- | ---- |
-| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar)<sup>*</sup> | imagenet2012 | fp32 |
-| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar)<sup>*</sup> | squad-1.1 | fp32 |
+| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar) | imagenet2012 | fp32 |
+| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar) | squad-1.1 | fp32 |
 
 
 ## Vendor List

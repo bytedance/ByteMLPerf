@@ -90,8 +90,8 @@ For More Information, please refer to [ByteIR](https://github.com/bytedance/byte
 Models Supported By ByteIR:
 | Model | Domain | Purpose | Framework | Dataset | Precision |
 | ---- | ---- | ---- | ---- | ---- | ---- |
-| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar)<sup>*</sup> | imagenet2012 | fp32 |
-| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar)<sup>*</sup> | squad-1.1 | fp32 |
+| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar) | imagenet2012 | fp32 |
+| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar) | squad-1.1 | fp32 |
 
 ## Vendor List
 ByteMLPerf Vendor Backend List will be shown below
