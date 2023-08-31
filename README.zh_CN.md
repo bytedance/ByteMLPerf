@@ -64,8 +64,8 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 
 | Model | Domain | Purpose | Framework | Dataset | Precision |
 | ---- | ---- | ---- | ---- | ---- | ---- |
-| resnet50-v1.5 | cv | regular | tensorflow, pytorch | imagenet2012 | fp32 |
-| bert-base | nlp | regular | tensorflow, pytorch | squad-1.1 | fp32 |
+| resnet50-v1.5 | cv | regular | tensorflow, pytorch, [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar)<sup>*</sup> | imagenet2012 | fp32 |
+| bert-base | nlp | regular | tensorflow, pytorch, [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar)<sup>*</sup> | squad-1.1 | fp32 |
 | wide&deep | rec | regular | tensorflow | criteo | fp32 |
 | videobert | mm  |popular | onnx | cifar100 | fp32 |
 | albert | nlp | popular | pytorch | squad-1.1 | fp32 |
@@ -79,6 +79,8 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | stable diffusion | cv | sota | onnx | none | fp32 |
 | LlaMa2 7B | nlp | sota | torch | none | fp16 |
 | chatGLM2 6B | nlp | sota | torch | none | fp16 |
+
+注意：我们通过ByteIR进行编译来获得对应的mhlo格式的模型文件。更多相关内容请查看 [ByteIR](https://github.com/bytedance/byteir)
 
 ## Vendor List
 目前支持的厂商Backend如下:

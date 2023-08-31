@@ -63,8 +63,8 @@ In addition to the complete model structure, Byte MlPerf will also add some typi
 
 | Model | Domain | Purpose | Framework | Dataset | Precision |
 | ---- | ---- | ---- | ---- | ---- | ---- |
-| resnet50-v1.5 | cv | regular | tensorflow, pytorch | imagenet2012 | fp32 |
-| bert-base | nlp | regular | tensorflow, pytorch | squad-1.1 | fp32 |
+| resnet50-v1.5 | cv | regular | tensorflow, pytorch, [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar)<sup>*</sup> | imagenet2012 | fp32 |
+| bert-base | nlp | regular | tensorflow, pytorch, [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar)<sup>*</sup> | squad-1.1 | fp32 |
 | wide&deep | rec | regular | tensorflow | criteo | fp32 |
 | videobert | mm  |popular | onnx | cifar100 | fp32 |
 | albert | nlp | popular | pytorch | squad-1.1 | fp32 |
@@ -79,6 +79,7 @@ In addition to the complete model structure, Byte MlPerf will also add some typi
 | LlaMa2 7B | nlp | sota | torch | none | fp16 |
 | chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
+Note: We obtain the MHLO-formatted model file through ByteIR compilation. For More Information, please refer to [ByteIR](https://github.com/bytedance/byteir)
 
 ## Vendor List
 ByteMLPerf Vendor Backend List will be shown below
