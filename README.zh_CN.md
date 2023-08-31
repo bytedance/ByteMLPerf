@@ -64,8 +64,8 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 
 | Model | Domain | Purpose | Framework | Dataset | Precision |
 | ---- | ---- | ---- | ---- | ---- | ---- |
-| resnet50-v1.5 | cv | regular | tensorflow, pytorch, [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar)<sup>*</sup> | imagenet2012 | fp32 |
-| bert-base | nlp | regular | tensorflow, pytorch, [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar)<sup>*</sup> | squad-1.1 | fp32 |
+| resnet50-v1.5 | cv | regular | tensorflow, pytorch | imagenet2012 | fp32 |
+| bert-base | nlp | regular | tensorflow, pytorch | squad-1.1 | fp32 |
 | wide&deep | rec | regular | tensorflow | criteo | fp32 |
 | videobert | mm  |popular | onnx | cifar100 | fp32 |
 | albert | nlp | popular | pytorch | squad-1.1 | fp32 |
@@ -80,7 +80,18 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | LlaMa2 7B | nlp | sota | torch | none | fp16 |
 | chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
-注意：我们通过ByteIR进行编译来获得对应的mhlo格式的模型文件。更多相关内容请查看 [ByteIR](https://github.com/bytedance/byteir)
+### ByteIR
+
+ByteIR项目是字节跳动的模型编译解决方案。ByteIR包括编译器、运行时和前端，并提供端到端的模型编译解决方案。 尽管所有的ByteIR组件（编译器/runtime/前端）一起提供端到端的解决方案，并且都在同一个代码库下，但每个组件在技术上都可以独立运行。
+
+更多信息请查看[ByteIR](https://github.com/bytedance/byteir)
+
+ByteIR 编译支持的模型列表:
+| Model | Domain | Purpose | Framework | Dataset | Precision |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar)<sup>*</sup> | imagenet2012 | fp32 |
+| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar)<sup>*</sup> | squad-1.1 | fp32 |
+
 
 ## Vendor List
 目前支持的厂商Backend如下:
