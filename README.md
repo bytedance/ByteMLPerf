@@ -79,7 +79,7 @@ In addition to the complete model structure, Byte MlPerf will also add some typi
 | LlaMa2 7B | nlp | sota | torch | none | fp16 |
 | chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
-Note: We obtain the MHLO-formatted model file through ByteIR compilation. For More Information, please refer to [ByteIR](https://github.com/bytedance/byteir)
+Note: We obtain the MHLO-formatted model file through ByteIR compilation. For more information, please refer to [ByteIR](https://github.com/bytedance/byteir)
 
 ## Vendor List
 ByteMLPerf Vendor Backend List will be shown below
