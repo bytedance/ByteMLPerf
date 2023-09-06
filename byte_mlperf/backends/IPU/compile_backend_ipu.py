@@ -129,6 +129,12 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         self.model_info = config["model_info"]
         if not self.model_config:
             self.model_config = config["interact_info"]
+
+        # precision not in model_config (multiple precisions available) and user
+        # skipped precision selection prompt
+        if not self.precision and not config["interact_info"].get("precision"):
+            self.precision = "fp16"
+
         if self.model_config.get("pack_config"):
             self.packrunner = True
 
@@ -255,12 +261,20 @@ class CompileBackendIPU(compile_backend.CompileBackend):
             self.model_config["converter_options"]["precision"] = interact_info[
                 "precision"
             ]
-            for config_name, config_section in self.model_config["fp8_configs"].items():
-                if isinstance(self.model_config[config_name], dict):
-                    self.model_config[config_name].update(config_section)
-                else:
-                    self.model_config[config_name] = config_section
-            del self.model_config["fp8_configs"]
+            # update converter config when user selected fp8 in interact sections
+            # and there is fp8_configs in interact_info config file
+            if interact_info["precision"] == "fp8" and self.model_config.get(
+                "fp8_configs"
+            ):
+                for config_name, config_section in self.model_config[
+                    "fp8_configs"
+                ].items():
+                    if isinstance(self.model_config[config_name], dict):
+                        self.model_config[config_name].update(config_section)
+                    else:
+                        self.model_config[config_name] = config_section
+
+                del self.model_config["fp8_configs"]
 
     def _compile(self, batch_size):
         self.batch_size = batch_size
