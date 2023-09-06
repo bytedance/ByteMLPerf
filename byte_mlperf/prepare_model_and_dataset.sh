@@ -8,6 +8,9 @@ mkdir -p byte_mlperf/model_zoo/sota
 mkdir -p byte_mlperf/download
 
 #--Basic Model--
+# https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar
+# https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar
+
 if [ $1 == "bert-tf-fp32" -o $1 == "bert-torch-fp32" ]; then
     wget -O byte_mlperf/download/open_bert.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/open_bert.tar
     tar xf byte_mlperf/download/open_bert.tar -C byte_mlperf/model_zoo/regular/

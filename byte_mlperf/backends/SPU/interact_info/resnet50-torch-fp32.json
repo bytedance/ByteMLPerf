@@ -1,0 +1,12 @@
+{
+  "model": "resnet50-torch-fp32",
+  "onnx_path": "byte_mlperf/download/moffett/models/resnet50.onnx",
+  "model_path": "byte_mlperf/download/moffett/converted_models/resnet50-mf-int8/resnet50-mf-int8.zip",
+  "calibration_dir": "byte_mlperf/download/moffett/datasets/imgnet_calibrate_data",
+  "transform_file": "byte_mlperf/download/moffett/compiler_wrapper/resnet50-mf-int8/mxnet_imagenet_trans_224.json",
+  "batch_size": 4,
+  "verify": false,
+  "model_precision": "INT8",
+  "dataset_name": "open_imagenet",
+  "framework": "sparsert"
+}

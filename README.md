@@ -12,7 +12,7 @@ Byte MLPerf(Inference) is an AI Accelerator Benchmark that focuses on evaluating
 Vendors can refer to this document for guidance on building backend: [ByteMLPerf Guide](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof) [[中文版](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf#TDK8of)]
 
 ## Usage
-The user uses launch.py as the entry point. When using byte mlperf to evaluate the model, you only need to pass in two parameters --task and --hardware_type, as shown below:
+The user uses launch.py as the entry point. When using Byte MLPerf to evaluate the model, you only need to pass in two parameters --task and --hardware_type, as shown below:
 ```bash
 python3 launch.py --task xxx --hardware_type xxx
 ```
@@ -52,14 +52,14 @@ A workload definition needs to contain the following fields:
 
 ## Model Zoo List
 Model Zoo&Dataset
-The models supported by Byte MlPerf are collected under the Model Zoo. From the perspective of access rights, they are currently divided into internal models and open models. Released with Byte MlPerf is the open model included in the corresponding version.
+The models supported by Byte MLPerf are collected under the Model Zoo. From the perspective of access rights, they are currently divided into internal models and open models. Released with Byte MLPerf is the open model included in the corresponding version.
 
 Open model collection principles:
 - Basic Model: including Resnet50, Bert and WnD;
 - Popular Model：Includes models currently widely used in the industry;
 - SOTA: including SOTA models corresponding to business domains;
 
-In addition to the complete model structure, Byte MlPerf will also add some typical model substructure subgraphs or OPs (provided that the open model cannot find a suitable model containing such classic substructures), such as transformer encoder/decoder with different sequence lengths , all kinds of common conv ops, such as group conv, depwise-conv, point-wise conv, and rnn common structures, such as gru/lstm, etc.
+In addition to the complete model structure, Byte MLPerf will also add some typical model substructure subgraphs or OPs (provided that the open model cannot find a suitable model containing such classic substructures), such as transformer encoder/decoder with different sequence lengths , all kinds of common conv ops, such as group conv, depwise-conv, point-wise conv, and rnn common structures, such as gru/lstm, etc.
 
 | Model | Domain | Purpose | Framework | Dataset | Precision |
 | ---- | ---- | ---- | ---- | ---- | ---- |
@@ -79,6 +79,19 @@ In addition to the complete model structure, Byte MlPerf will also add some typi
 | LlaMa2 7B | nlp | sota | torch | none | fp16 |
 | chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
+### ByteIR
+
+The ByteIR Project is a ByteDance model compilation solution. ByteIR includes compiler, runtime, and frontends, and provides an end-to-end model compilation solution.
+
+Although all ByteIR components (compiler/runtime/frontends) are together to provide an end-to-end solution, and all under the same umbrella of this repository, each component technically can perform independently.
+
+For More Information, please refer to [ByteIR](https://github.com/bytedance/byteir)
+
+Models Supported By ByteIR:
+| Model | Domain | Purpose | Framework | Dataset | Precision |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar) | imagenet2012 | fp32 |
+| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar) | squad-1.1 | fp32 |
 
 ## Vendor List
 ByteMLPerf Vendor Backend List will be shown below
@@ -88,6 +101,7 @@ ByteMLPerf Vendor Backend List will be shown below
 | Intel | Xeon | - | - |
 | Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
 | Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.md) |
+| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf/backends/SPU/README.md) |
 
 ## Benchmark Summary
 Benchmark Result Summary : QPS Perspective

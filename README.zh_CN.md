@@ -80,6 +80,19 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | LlaMa2 7B | nlp | sota | torch | none | fp16 |
 | chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
+### ByteIR
+
+ByteIR项目是字节跳动的模型编译解决方案。ByteIR包括编译器、运行时和前端，并提供端到端的模型编译解决方案。 尽管所有的ByteIR组件（编译器/runtime/前端）一起提供端到端的解决方案，并且都在同一个代码库下，但每个组件在技术上都可以独立运行。
+
+更多信息请查看[ByteIR](https://github.com/bytedance/byteir)
+
+ByteIR 编译支持的模型列表:
+| Model | Domain | Purpose | Framework | Dataset | Precision |
+| ---- | ---- | ---- | ---- | ---- | ---- |
+| resnet50-v1.5 | cv | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/resnet50_mhlo.tar) | imagenet2012 | fp32 |
+| bert-base | nlp | regular | [mhlo](https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/bert_mhlo.tar) | squad-1.1 | fp32 |
+
+
 ## Vendor List
 目前支持的厂商Backend如下:
 
@@ -88,6 +101,7 @@ Dataset为模型需要用到数据集，对应的dataloader、accuracy_checker�
 | Intel | Xeon | - | - |
 | Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
 | Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.zh_CN.md) |
+| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf/backends/SPU/README.md) |
 
 ## Benchmark Summary
 评估结果汇总 : QPS 视图
