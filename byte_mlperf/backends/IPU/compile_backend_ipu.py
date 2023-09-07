@@ -134,6 +134,9 @@ class CompileBackendIPU(compile_backend.CompileBackend):
         # skipped precision selection prompt
         if not self.precision and not config["interact_info"].get("precision"):
             self.precision = "fp16"
+            if "converter_options" not in self.model_config:
+                self.model_config["converter_options"] = {}
+            self.model_config["converter_options"]["precision"] = self.precision
 
         if self.model_config.get("pack_config"):
             self.packrunner = True
