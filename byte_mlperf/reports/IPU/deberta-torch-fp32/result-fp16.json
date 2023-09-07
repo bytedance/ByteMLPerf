@@ -19,7 +19,7 @@
         "Max Diff": 1.53116,
         "Max Rel-Diff": 981.50651,
         "Mean Rel-Diff": 0.00084,
-        "Diff Dist": "deberta-torch-fp32.png"
+        "Diff Dist": "deberta-torch-fp32-to-fp16.png"
     },
     "Performance": [
         {
