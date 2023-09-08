@@ -1,1 +1,4 @@
-torch==2.0.1
+transformers
+tokenization
+torchvision
+numpy
