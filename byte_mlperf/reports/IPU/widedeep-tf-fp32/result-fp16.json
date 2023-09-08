@@ -18,7 +18,7 @@
         "Max Diff": 0.00119,
         "Max Rel-Diff": 1.0,
         "Mean Rel-Diff": 0.00054,
-        "Diff Dist": "widedeep-tf-fp32.png"
+        "Diff Dist": "widedeep-tf-fp32-to-fp16.png"
     },
     "Performance": [
         {
