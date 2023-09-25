@@ -14,7 +14,6 @@ log = logging.getLogger("BackendHPU")
 
 pt_dtype_map = {
     "FLOAT32": torch.float32,
-    "BFLOAT16": torch.bfloat16,
     "INT8": torch.int8,
     "LONG": torch.long
 }
@@ -27,7 +26,6 @@ INPUT_TYPE = {
     "INT64": np.int64,
     "BOOL": np.bool
 }
-
 
 class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
     def __init__(self):
@@ -44,25 +42,30 @@ class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
             input_tensors = []
             i = 0
             for key, _ in feeds.items():
+                if self.input_type[i] == "FLOAT32":
+                    datatype = torch.bfloat16
+                else:
+                    datatype = pt_dtype_map[self.input_type[i]]
                 input_tensors.append(
                     torch.tensor(feeds[key],
-                                 dtype=pt_dtype_map[self.input_type[i]]).to(
-                                     self.device))
+                                 dtype=datatype).to(
+                                     self.device,non_blocking=True))
                 i += 1
 
-            with torch.no_grad():
+            with torch.no_grad(), torch.autocast(device_type="hpu", dtype=torch.bfloat16, enabled=True):
                 for model_runtime in self.model_runtimes:
                     results = model_runtime(*input_tensors)
-
+                    htcore.mark_step()
+                    htcore.hpu.default_stream().synchronize()
             if isinstance(results, dict):
                 for key, val in results.items():
-                    results[key] = val.cpu().detach().numpy()
+                    results[key] = val.float().cpu().detach().numpy() if val.dtype==torch.bfloat16 else val.cpu().detach().numpy()
             elif isinstance(results, tuple):
                 dic = {}
                 for i, key in enumerate(self.outputs):
                     dic[key] = list(results)[i]
             else:
-                results = {self.outputs[0]: results.cpu().numpy()}
+                results = {self.outputs[0]: results.float().cpu().numpy() if results.dtype==torch.bfloat16 else results.cpu().numpy()}
         else:
             print("Just test pytorch for now.")
         return results
@@ -76,15 +79,31 @@ class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
         test_data = self._get_fake_samples(
             batch_size, self.configs['segments'][0]['input_tensor_map'],
             self.configs['input_type'])
+        enable_profile = False
+        if enable_profile:
+            warmup_steps = 2
+            active_steps = 5
+            prof = torch.profiler.profile(
+                   activities=(torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.HPU),
+                       schedule=torch.profiler.schedule(wait=0, warmup=warmup_steps, active=active_steps, repeat=1),
+                       on_trace_ready=torch.profiler.tensorboard_trace_handler('./profile/'),
+                       record_shapes=False,
+                       with_stack=True)
+
 
         for _ in range(30):
             self.predict(test_data)
-
+        if enable_profile:
+            prof.start()
         for _ in range(iterations):
             start_time = time.time()
             self.predict(test_data)
             end_time = time.time()
             times_range.append(end_time - start_time)
+            if enable_profile:
+                prof.step()
+        if enable_profile:
+            prof.stop()
 
         times_range.sort()
         tail_latency = round(
@@ -139,7 +158,10 @@ class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
                 self.device = torch.device('hpu')
                 model = torch.jit.load(
                     segment['compiled_model'][0]['compiled_obj']).to(self.device)
+                model.to(torch.bfloat16)
                 model.eval()
+                from habana_frameworks.torch.hpu import wrap_in_hpu_graph
+                model = wrap_in_hpu_graph(model)
 
             self.model_runtimes.append(model)
 
