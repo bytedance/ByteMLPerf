@@ -16,6 +16,7 @@ import logging
 import numpy as np
 from byte_mlperf.datasets import test_accuracy
 from tqdm import tqdm
+import torch
 
 log = logging.getLogger("TestAccuracy")
 
