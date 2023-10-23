@@ -53,7 +53,7 @@ elif [ $1 == "unet-onnx-fp32" ]; then
     wget -O byte_mlperf/download/unet.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/unet.tar
     tar xf byte_mlperf/download/unet.tar -C byte_mlperf/model_zoo/sota/
 elif [ $1 == "gpt2-torch-fp32" ]; then
-    wget -O byte_mlperf/download/gpt2.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/gpt2.tar
+    wget -O byte_mlperf/download/traced_gpt2.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/traced_gpt2.tar
     tar xf byte_mlperf/download/gpt2.tar -C byte_mlperf/model_zoo/sota/
 elif [ $1 == "chatglm2-6b-torch-fp16" ]; then
     wget -O byte_mlperf/download/chatglm2-6b.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/chatglm2-6b.tar
