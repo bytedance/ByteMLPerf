@@ -5,7 +5,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import time
 import numpy as np
-import habana_frameworks.torch.core as htcore
 
 from byte_mlperf.backends import compile_backend
 
@@ -33,6 +32,11 @@ class CompileBackendHPU(compile_backend.CompileBackend):
         self.hardware_type = 'HPU'
         self.need_reload = False
         self.model_runtimes = []
+
+    def _update_model_env(self):
+        if self.model_info["model"] in ("bert-torch-fp32", "albert-torch-fp32"):
+            os.environ['LOWER_LIST'] ='byte_mlperf/backends/HPU/bert/bf16.txt'
+            os.environ['FP32_LIST'] ='byte_mlperf/backends/HPU/bert/fp32.txt'
 
     def compile(self, config, dataloader=None):
         result = {
@@ -65,6 +69,7 @@ class CompileBackendHPU(compile_backend.CompileBackend):
         self.configs = result
         self.workload = config['workload']
         self.model_info = config['model_info']
+        self._update_model_env()
         return result
 
     def get_interact_profile(self, config):

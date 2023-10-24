@@ -4,7 +4,6 @@ import logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import torch
 import time
-import habana_frameworks.torch.core as htcore
 import numpy as np
 from threading import Thread
 
@@ -52,6 +51,7 @@ class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
                                      self.device,non_blocking=True))
                 i += 1
 
+            import habana_frameworks.torch.core as htcore
             with torch.no_grad(), torch.autocast(device_type="hpu", dtype=torch.bfloat16, enabled=True):
                 for model_runtime in self.model_runtimes:
                     results = model_runtime(*input_tensors)
@@ -83,6 +83,7 @@ class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
         if enable_profile:
             warmup_steps = 2
             active_steps = 5
+            import habana_frameworks.torch.core as htcore
             prof = torch.profiler.profile(
                    activities=(torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.HPU),
                        schedule=torch.profiler.schedule(wait=0, warmup=warmup_steps, active=active_steps, repeat=1),
@@ -144,6 +145,7 @@ class RuntimeBackendHPU(runtime_backend.RuntimeBackend):
 
         self.model_name = self.configs['model']
 
+        import habana_frameworks.torch.core as htcore
         for i, segment in enumerate(self.configs['segments']):
             # there is no input/output meta data i the graph so it need to come from config.
             if not segment['input_tensor_map']:
