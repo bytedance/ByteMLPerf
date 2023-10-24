@@ -361,8 +361,10 @@ class PerfEngine:
             if not os.path.exists(venv_dir):
                 log.info("venv not exist, Creating Virtual Env for " +
                          hardware_type)
-
-                virtualenv.create_environment(venv_dir)
+                if (hardware_type == "HPU"):
+                    virtualenv.create_environment(venv_dir,True)
+                else:
+                    virtualenv.create_environment(venv_dir)
                 exec(open(activate_file).read(), {'__file__': activate_file})
                 python_path = os.path.join(venv_dir, 'bin', 'python3')
                 subprocess.call([
