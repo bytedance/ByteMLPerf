@@ -16,7 +16,7 @@
         "Max Diff": 0.21069,
         "Max Rel-Diff": 270335.0,
         "Mean Rel-Diff": 0.07796,
-        "Diff Dist": "clip-onnx-fp32.png"
+        "Diff Dist": "clip-onnx-fp32-to-fp16.png"
     },
     "Performance": [
         {

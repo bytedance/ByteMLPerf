@@ -5,7 +5,7 @@
   ],
   "converter_options": {
     "precision": "",
-    "enable_insert_remap": true
+    "enable_insert_remap": false
   },
   "compiler_options": {
     "batches_per_step": 128,
@@ -18,6 +18,9 @@
     "available_memory_proportion": 0.2
   },
   "fp8_configs": {
+    "converter_options": {
+      "enable_insert_remap": true
+    },
     "batch_sizes": [
       4
     ]

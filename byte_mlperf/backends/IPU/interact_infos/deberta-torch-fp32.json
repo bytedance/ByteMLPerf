@@ -17,7 +17,7 @@
     "converter_options": {
         "disable_fast_norm": true,
         "enable_insert_remap": true,
-        "remap_mode": "both",
+        "remap_mode": ["after_matmul"," before_add"],
         "max_tensor_size": 6291456,
         "precision": "fp16",
         "used_passes": ["deberta_pack"]
