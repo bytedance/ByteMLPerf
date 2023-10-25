@@ -11,8 +11,10 @@
   - [Product Specs](#product-specs)
 - [Models supported](#models-supported)
 - [How to run](#how-to-run)
-  - [Install Habana release](#install-habana-release)
-  - [Run byte-mlperf task](#run-byte-mlperf-task)
+    - [1. Create docker container](#1-create-docker-container)
+    - [2. Environment initialization](#2-environment-initialization)
+    - [3. Device basic information verification](#3-device-basic-information-verification)
+    - [4.Run byte-mlperf task](#4run-byte-mlperf-task)
 
 <!-- /code_chunk_output -->
 
@@ -44,20 +46,37 @@ and operational efficiency for training and running state-of-the-art models, fro
 
 | Model name |  Precision | QPS | Dataset | Metric name | Metric value | report |
 | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| gpt2 | BF16 | N/A | N/A | N/A | N/A | N/A |
+| bert-torch-fp32 | BF16 | 1970 | Open Squad 1.1 | F1 Score | 85.8827 | [report](../../reports/HPU/bert-torch-fp32/) |
+| albert-torch-fp32 | BF16 | 2030 | Open Squad 1.1 | F1 Score | 87.66915 | [report](../../reports/HPU/albert-torch-fp32/) |
+| deberta-torch-fp32 | BF16 | 1970 | Open Squad 1.1 | F1 Score | 81.33603 | [report](../../reports/HPU/deberta-torch-fp32/) |
+| resnet50-torch-fp32 | BF16 | 8279 | Open ImageNet | Top-1 | 0.7674 | [report](../../reports/HPU/resnet50-torch-fp32/) |
+|  swin-large-torch-fp32 | BF16 |341 | Open ImageNet | Top-1 | 0.855 | [report](../../reports/HPU/swin-large-torch-fp32/) |
 
 # How to run
 
-## Install Habana release
+### 1. Create docker container
 
-Refer [link](https://docs.habana.ai/en/latest/Installation_Guide/) describe how to obtain and install SynapseAI and Gaudi drivers either on Amazon EC2 DL1 instances or on-premise environments, docker images as well as TensorFlow and PyTorch frameworks.
+```bash
+docker run -itd --name test --runtime=habana -e HABANA_VISIBLE_DEVICES=all -e OMPI_MCA_btl_vader_single_copy_mechanism=none --cap-add=sys_nice --net=host --ipc=host   vault.habana.ai/gaudi-docker/1.12.0/ubuntu20.04/habanalabs/pytorch-installer-2.0.1:latest
+```
+### 2. Environment initialization
+Environment initialization please operate in the container.
+```bash=
+docker exec -it test /bin/bash
+```
+### 3. Device basic information verification
+hl-smi is a command line utility that can view various information of Gaudi, such as card number, usage, temperature, power consumption, etc.
+After the driver is successfully installed, execute hl-smi to view the basic information of the device.
+```bash
+hl-smi
+```
 
-## Run byte-mlperf task
+### 4.Run byte-mlperf task
 
 For example,
 
 ```bash
-python3 launch.py --task widedeep-tf-fp32 --hardware HPU
+python launch.py --task bert-torch-fp32 --hardware_type HPU
 ```
 
 For more information of the command to run the task, please refer to [ByteMLPerf](../../../README.md#usage).
