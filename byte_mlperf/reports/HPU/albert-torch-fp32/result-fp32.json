@@ -7,7 +7,7 @@
     "Device Count": 128,
     "Graph Compile": {
         "Compile Duration": 5e-05,
-        "Compile Precision": "FP32",
+        "Compile Precision": "BF16",
         "Subgraph Coverage": 100,
         "Optimizations": {}
     },
