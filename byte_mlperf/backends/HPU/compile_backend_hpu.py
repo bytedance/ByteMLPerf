@@ -42,7 +42,7 @@ class CompileBackendHPU(compile_backend.CompileBackend):
         result = {
             "model": config['model_info']['model'],
             "framework": config['model_info']['framework'],
-            "compile_precision": config['model_info']['model_precision'],
+            "compile_precision": “BF16”,
             "optimizations":{},
             "instance_count": 1,
             "device_count": 128,
