@@ -4,7 +4,7 @@
     "Host Info": "Intel(R) Xeon(R) Platinum 8380 CPU @ 2.30GHz",
     "Dataset": "OPEN_SQUAD",
     "Instance Count": 1,
-    "Device Count": 128,
+    "Device Count": 1,
     "Graph Compile": {
         "Compile Duration": 3e-05,
         "Compile Precision": "BF16",
