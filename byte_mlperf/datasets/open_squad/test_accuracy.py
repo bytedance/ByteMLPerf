@@ -42,7 +42,6 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
             test_data, _ = self.dataloader.get_samples(i)
             unique_ids = self.dataloader.get_id(i)
             result = self.runtime_backend.predict(test_data)
-
             start_logits, end_logits = self._post_processing(
                 result, self.configs['framework'])
 
@@ -120,8 +119,8 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
                 )
             elif isinstance(inputs[0], torch.Tensor):
                 (start_logits, end_logits) = (
-                    inputs[0].cpu().detach().numpy(),
-                    inputs[1].cpu().detach().numpy(),
+                    inputs[0].float().cpu().detach().numpy() if inputs[0].dtype==torch.bfloat16 else inputs[0].cpu().detach().numpy(),
+                    inputs[1].float().cpu().detach().numpy() if inputs[1].dtype==torch.bfloat16 else inputs[1].cpu().detach().numpy(),
                 )
             else:
                 (start_logits, end_logits) = (inputs[0], inputs[1])

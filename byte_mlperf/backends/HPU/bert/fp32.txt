@@ -1,0 +1,8 @@
+embedding
+cross_entropy
+nll_loss
+log_softmax
+truediv
+div
+layer_norm
+rsub

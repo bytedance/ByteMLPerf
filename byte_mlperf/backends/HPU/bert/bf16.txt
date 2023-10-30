@@ -1,0 +1,10 @@
+add
+addmm
+bmm
+dropout
+gelu
+iadd
+linear
+matmul
+mm
+softmax

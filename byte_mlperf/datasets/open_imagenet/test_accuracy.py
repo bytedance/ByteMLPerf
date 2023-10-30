@@ -16,6 +16,7 @@ import logging
 import numpy as np
 from byte_mlperf.datasets import test_accuracy
 from tqdm import tqdm
+import torch
 
 log = logging.getLogger("TestAccuracy")
 
@@ -56,7 +57,7 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
                 inputs = list(inputs[key])
         else:
             if isinstance(inputs, tuple):
-                inputs = inputs[0].numpy().astype(float)
+                inputs = inputs[0].float().cpu().numpy().astype(float) if inputs[0].dtype==torch.bfloat16 else inputs[0].cpu().numpy().astype(float)
             else:
                 inputs = inputs[list(inputs)[0]]
         if framework == "Pytorch" or framework == "Onnx":
