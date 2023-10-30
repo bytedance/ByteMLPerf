@@ -45,7 +45,7 @@ class CompileBackendHPU(compile_backend.CompileBackend):
             "compile_precision": “BF16”,
             "optimizations":{},
             "instance_count": 1,
-            "device_count": 128,
+            "device_count": 1,
             "input_type": config['model_info']['input_type'].split(","),
             "max_batch_size": config['model_info']['max_batch_size'],
             "compile_status": "success",
