@@ -109,3 +109,6 @@ Benchmark Result Summary : QPS Perspective
 <div align="center">
   <img src="byte_mlperf/reports/reports_summary.png">
 </div>
+
+## Statement
+ASF Statement on Compliance with US Export Regulations and Entity List(https://news.apache.org/foundation/entry/statement-by-the-apache-software)
