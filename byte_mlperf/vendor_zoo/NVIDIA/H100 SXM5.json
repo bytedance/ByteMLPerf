@@ -3,7 +3,7 @@
         "厂商": "NVIDIA",
         "型号": "H100 SXM5",
         "用途": "Training/Inference",
-        "照片": "/img/main/image_6.png"
+        "照片": "byte_mlperf/vendors/NVIDIA/image_6.png"
     },
     "硬件参数": {
         "制程(NM)": 4,

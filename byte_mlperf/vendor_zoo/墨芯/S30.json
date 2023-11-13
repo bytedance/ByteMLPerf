@@ -1,25 +1,25 @@
 {
     "SKU参数": {
-        "厂商": "希姆计算",
-        "型号": "STC920",
+        "厂商": "墨芯",
+        "型号": "S30",
         "用途": "Inference",
-        "照片": "/img/main/image_13.png"
+        "照片": "byte_mlperf/vendors/墨芯/image_9.png"
     },
     "硬件参数": {
         "制程(NM)": 12,
         "尺寸": "FHFL, Dual Slot Card",
         "接口": "PCIe 4.0x16",
-        "功耗(W/TDP)": 150
+        "功耗(W/TDP)": 250
     },
     "内存参数": {
-        "内存层次架构图": null,
+        "内存层次架构图": "byte_mlperf/vendors/墨芯/mem_9.png",
         "内存": {
             "内存类型": "LPDDR4x",
-            "内存容量(GB)": 16,
-            "内存带宽(GB/s)": 119.4
+            "内存容量(GB)": 60,
+            "内存带宽(GB/s)": 246
         },
         "一级缓存": {
-            "缓存类型": null,
+            "缓存类型": "Distributed Buffer(x12)",
             "缓存容量(MB)": null,
             "缓存带宽(TB/s)": null
         },
@@ -30,10 +30,10 @@
         }
     },
     "算力参数": {
-        "PE层次架构图": null,
+        "PE层次架构图": "byte_mlperf/vendors/墨芯/pe_9.png",
         "PE参数": {
-            "算力架构": null,
-            "并行方式": null,
+            "算力架构": "异构多核",
+            "并行方式": "SIMD/MIMT",
             "通信带宽(GB/s)": null
         },
         "标量参数": {

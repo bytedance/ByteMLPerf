@@ -1,22 +1,22 @@
 {
     "SKU参数": {
-        "厂商": "AWS",
-        "型号": "Inferentia2",
+        "厂商": "希姆计算",
+        "型号": "STC920",
         "用途": "Inference",
-        "照片": null
+        "照片": "byte_mlperf/vendors/希姆计算/image_13.png"
     },
     "硬件参数": {
-        "制程(NM)": null,
+        "制程(NM)": 12,
         "尺寸": "FHFL, Dual Slot Card",
-        "接口": "PCIe 5.0x16",
-        "功耗(W/TDP)": null
+        "接口": "PCIe 4.0x16",
+        "功耗(W/TDP)": 150
     },
     "内存参数": {
-        "内存层次架构图": "/img/main/mem_16.png",
+        "内存层次架构图": null,
         "内存": {
-            "内存类型": null,
-            "内存容量(GB)": 32,
-            "内存带宽(GB/s)": 820
+            "内存类型": "LPDDR4x",
+            "内存容量(GB)": 16,
+            "内存带宽(GB/s)": 119.4
         },
         "一级缓存": {
             "缓存类型": null,
@@ -56,9 +56,9 @@
         }
     },
     "卡间通信参数": {
-        "通信方式": "NeuronLink-v2",
+        "通信方式": null,
         "端口数量": null,
-        "RDMA协议": "EFA 100Gbps",
+        "RDMA协议": null,
         "下行带宽(GB/s)": null,
         "上行带宽(GB/s)": null
     }

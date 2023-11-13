@@ -1,31 +1,31 @@
 {
     "SKU参数": {
         "厂商": "NVIDIA",
-        "型号": "A100 SXM4",
+        "型号": "T4",
         "用途": "Training/Inference",
-        "照片": "/img/main/image_4.png"
+        "照片": "byte_mlperf/vendors/NVIDIA/image_0.png"
     },
     "硬件参数": {
-        "制程(NM)": 7,
-        "尺寸": "N/A",
-        "接口": "SXM",
-        "功耗(W/TDP)": 400
+        "制程(NM)": 12,
+        "尺寸": "HHHL, Single Slot Card",
+        "接口": "PCIe 3.0x16",
+        "功耗(W/TDP)": 70
     },
     "内存参数": {
         "内存层次架构图": null,
         "内存": {
-            "内存类型": "HBM2e",
-            "内存容量(GB)": 80,
-            "内存带宽(GB/s)": 2039
+            "内存类型": "GDDR6",
+            "内存容量(GB)": 16,
+            "内存带宽(GB/s)": 320
         },
         "一级缓存": {
-            "缓存类型": "Cache(x108)",
-            "缓存容量(MB)": 20.736,
+            "缓存类型": "Cache(x40)",
+            "缓存容量(MB)": 2.56,
             "缓存带宽(TB/s)": null
         },
         "二级缓存": {
             "缓存类型": null,
-            "缓存容量(MB)": 40,
+            "缓存容量(MB)": 4,
             "缓存带宽(TB/s)": null
         }
     },
@@ -43,20 +43,20 @@
             "FP32标量算力(TFLOPS)": null
         },
         "向量参数": {
-            "向量精度": "FP64, FP32, TF32",
+            "向量精度": "FP32",
             "INT8量算力(TFLOPS)": null,
             "FP16向量算力(TFLOPS)": null,
-            "FP32向量算力(TFLOPS)": 19.5
+            "FP32向量算力(TFLOPS)": 8.1
         },
         "张量参数": {
-            "张量精度": "FP64, FP16, BF16, INT8",
-            "INT8张量算力(TFLOPS)": 624.0,
-            "FP16张量算力(TFLOPS)": 312.0,
-            "FP32张量算力(TFLOPS)": 156.0
+            "张量精度": "FP16, INT8, INT4",
+            "INT8张量算力(TFLOPS)": 130.0,
+            "FP16张量算力(TFLOPS)": 65.0,
+            "FP32张量算力(TFLOPS)": null
         }
     },
     "卡间通信参数": {
-        "通信方式": "NV-Link",
+        "通信方式": null,
         "端口数量": null,
         "RDMA协议": null,
         "下行带宽(GB/s)": null,

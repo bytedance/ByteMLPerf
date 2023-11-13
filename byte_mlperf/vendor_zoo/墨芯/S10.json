@@ -1,26 +1,26 @@
 {
     "SKU参数": {
-        "厂商": "AWS",
-        "型号": "Trainium",
-        "用途": "Training/Inference",
-        "照片": null
+        "厂商": "墨芯",
+        "型号": "S10",
+        "用途": "Inference",
+        "照片": "byte_mlperf/vendors/墨芯/image_8.png"
     },
     "硬件参数": {
-        "制程(NM)": null,
-        "尺寸": "FHFL, Dual Slot Card",
-        "接口": "PCIe 5.0x16",
-        "功耗(W/TDP)": null
+        "制程(NM)": 12,
+        "尺寸": "FHFL, Single Slot Card",
+        "接口": "PCIe 4.0x16",
+        "功耗(W/TDP)": 165
     },
     "内存参数": {
-        "内存层次架构图": "/img/main/mem_17.png",
+        "内存层次架构图": "byte_mlperf/vendors/墨芯/mem_8.png",
         "内存": {
-            "内存类型": null,
-            "内存容量(GB)": 32,
-            "内存带宽(GB/s)": 820
+            "内存类型": "LPDDR4x",
+            "内存容量(GB)": 40,
+            "内存带宽(GB/s)": 164
         },
         "一级缓存": {
-            "缓存类型": null,
-            "缓存容量(MB)": null,
+            "缓存类型": "Distributed Buffer(x8)",
+            "缓存容量(MB)": 3.7,
             "缓存带宽(TB/s)": null
         },
         "二级缓存": {
@@ -32,9 +32,9 @@
     "算力参数": {
         "PE层次架构图": null,
         "PE参数": {
-            "算力架构": null,
-            "并行方式": null,
-            "通信带宽(GB/s)": null
+            "算力架构": "异构多核",
+            "并行方式": "SIMD/MIMT",
+            "通信带宽(GB/s)": 409.6
         },
         "标量参数": {
             "标量精度": null,
@@ -50,15 +50,15 @@
         },
         "张量参数": {
             "张量精度": null,
-            "INT8张量算力(TFLOPS)": 3040.0,
-            "FP16张量算力(TFLOPS)": 3040.0,
-            "FP32张量算力(TFLOPS)": 760.0
+            "INT8张量算力(TFLOPS)": null,
+            "FP16张量算力(TFLOPS)": null,
+            "FP32张量算力(TFLOPS)": null
         }
     },
     "卡间通信参数": {
-        "通信方式": "NeuronLink-v2",
+        "通信方式": null,
         "端口数量": null,
-        "RDMA协议": "EFA 100Gbps",
+        "RDMA协议": null,
         "下行带宽(GB/s)": null,
         "上行带宽(GB/s)": null
     }
