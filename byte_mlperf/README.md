@@ -10,7 +10,6 @@ Byte MLPerf(Inference) is an AI Accelerator Benchmark that focuses on evaluating
 - Performance and accuracy results obtained from testing on the open Model Zoo serve as reference metrics for evaluating ASIC hardware integration.
 
 Vendors can refer to this document for guidance on building backend: [ByteMLPerf Guide](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof) [[中文版](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf#TDK8of)]
-Also, you can visit our offical website here:[bytemlperf.ai](https://bytemlperf.ai/)
 
 ## Usage
 The user uses launch.py as the entry point. When using Byte MLPerf to evaluate the model, you only need to pass in two parameters --task and --hardware_type, as shown below:

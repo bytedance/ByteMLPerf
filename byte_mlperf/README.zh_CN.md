@@ -9,7 +9,7 @@ Byte MLPerf（推理）是字节使用的一个基准套件，用于测量推理
 - 对于新硬件，除了评估性能和精度之外，同时也会评估图编译的易用性、覆盖率等指标；
 - 在开放Model Zoo上测试所得的性能和精度，会作为新硬件引入评估的参考；
 
-厂商可以参考该文档接入测试：[ByteMLPerf厂商接入指南](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf) [[English Version](https://bytedance.us.feishu.同时您可以访问我们的官方网站:[bytemlperf.ai](https://bytemlperf.ai/)
+厂商可以参考该文档接入测试：[ByteMLPerf厂商接入指南](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf) [[English Version](https://bytedance.us.feishu.cn/docx/L98Mdw3J6obMtJxeRBzuHeRbsof)]
 
 ## Usage
 用户使用入口为launch.py, 在使用byte mlperf评估时，只需传入--task 、--hardware_type 两个参数，如下所示：
