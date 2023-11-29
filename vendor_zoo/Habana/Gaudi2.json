@@ -3,7 +3,7 @@
         "厂商": "Habana",
         "型号": "Gaudi2",
         "用途": "Training/Inference",
-        "照片": "byte_mlperf/vendors/Habana/image_14.png"
+        "照片": "vendor_zoo/Habana/image_14.png"
     },
     "硬件参数": {
         "制程(NM)": null,
@@ -12,7 +12,7 @@
         "功耗(W/TDP)": 600
     },
     "内存参数": {
-        "内存层次架构图": "byte_mlperf/vendors/Habana/mem_14.png",
+        "内存层次架构图": "vendor_zoo/Habana/mem_14.png",
         "内存": {
             "内存类型": "HBM2e",
             "内存容量(GB)": 96,
@@ -30,7 +30,7 @@
         }
     },
     "算力参数": {
-        "PE层次架构图": "byte_mlperf/vendors/Habana/pe_14.png",
+        "PE层次架构图": "vendor_zoo/Habana/pe_14.png",
         "PE参数": {
             "算力架构": "异构多核",
             "并行方式": "-",

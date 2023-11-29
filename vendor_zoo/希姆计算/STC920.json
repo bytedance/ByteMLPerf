@@ -3,7 +3,7 @@
         "厂商": "希姆计算",
         "型号": "STC920",
         "用途": "Inference",
-        "照片": "byte_mlperf/vendors/希姆计算/image_13.png"
+        "照片": "vendor_zoo/希姆计算/image_13.png"
     },
     "硬件参数": {
         "制程(NM)": 12,

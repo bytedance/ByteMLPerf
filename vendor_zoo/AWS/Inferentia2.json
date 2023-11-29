@@ -12,7 +12,7 @@
         "功耗(W/TDP)": null
     },
     "内存参数": {
-        "内存层次架构图": "byte_mlperf/vendors/AWS/mem_16.png",
+        "内存层次架构图": "vendor_zoo/AWS/mem_16.png",
         "内存": {
             "内存类型": null,
             "内存容量(GB)": 32,
