@@ -3,7 +3,7 @@
         "厂商": "NVIDIA",
         "型号": "T4",
         "用途": "Training/Inference",
-        "照片": "byte_mlperf/vendors/NVIDIA/image_0.png"
+        "照片": "vendor_zoo/NVIDIA/image_0.png"
     },
     "硬件参数": {
         "制程(NM)": 12,
