@@ -176,7 +176,10 @@ class PDF(FPDF):
         with open(path, 'r') as f:
             report = json.load(f)
         output_dir = os.path.dirname(path) + '/'
-        icon_path = 'docs/images/icon.png'
+        index = output_dir.index('ByteMLPerf') + len('ByteMLPerf')
+        base_path = output_dir[:index]
+
+        icon_path = os.path.join(base_path, 'docs/images/icon.png')
         self.add_page()
         self.lines()
         self.icon(icon_path)

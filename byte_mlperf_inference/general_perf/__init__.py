@@ -1,5 +1,6 @@
 import sys
 from packaging.version import parse
+import warnings
 
 from .version import __version__
 
@@ -44,10 +45,10 @@ def digit_version(version_str: str, length: int = 4):
     return tuple(release)
 
 python3_minimum_version = '3.6.0'
-python_version = digit_version(sys.version[:5])
+python_version = digit_version(sys.version.split()[0])
 
 assert (python_version >= digit_version(python3_minimum_version)), \
-    f'PYTHON=={sys.version[:5]} is used but incompatible. ' \
+    f'PYTHON=={sys.version.split()[0]} is used but incompatible. ' \
     f'Please install python>={python3_minimum_version}.'
 
 __all__ = ['__version__']

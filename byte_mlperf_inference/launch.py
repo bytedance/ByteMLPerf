@@ -42,11 +42,11 @@ if __name__ == '__main__':
 
     if args.show_task_list:
         log.info("******************* Supported Task *******************")
-        for file in os.listdir('general_task/workloads'):
+        for file in os.listdir('general_perf/workloads'):
             print(file[:-5])
     if args.show_hardware_list:
         log.info("***************** Supported Hardware Backend *****************")
-        for file in os.listdir('general_task/backends'):
+        for file in os.listdir('general_perf/backends'):
             if not file.endswith('.py') and not file.startswith('_'):
                 print(file)
     if args.task:
@@ -55,26 +55,26 @@ if __name__ == '__main__':
             'python3', '-m', 'pip', 'install', 'pip', '--upgrade', '--quiet'])
 
         subprocess.call([
-            'python3', '-m', 'pip', 'install', '-r', 'general_task/requirements.txt', '--quiet'])
+            'python3', '-m', 'pip', 'install', '-r', 'general_perf/requirements.txt', '--quiet'])
 
         workload = load_workload(args.task)
-        with open("general_task/model_zoo/" + workload['model'] + '.json',
+        with open("general_perf/model_zoo/" + workload['model'] + '.json',
                     'r') as file:
             model_info = json.load(file)
         if not os.path.exists(model_info['model_path']):
             subprocess.call([
-                'bash', 'general_task/prepare_model_and_dataset.sh',
+                'bash', 'general_perf/prepare_model_and_dataset.sh',
                 model_info['model'], model_info['dataset_name'] or "None"])
         # test numeric
         if workload['test_numeric'] and not args.compile_only and not workload['compile_only']:
             log.info("******************************************* Running CPU Numeric Checker... *******************************************")
             subprocess.call([
-                'bash', 'general_task/backends/CPU/calculate_cpu_diff.sh',
+                'bash', 'general_perf/backends/CPU/calculate_cpu_diff.sh',
                 workload['model'],
                 str(workload['batch_sizes'][0])
             ])
 
-        cmd = f'python3 general_task/core/perf_engine.py --hardware_type {args.hardware_type} --task {args.task}'
+        cmd = f'python3 general_perf/core/perf_engine.py --hardware_type {args.hardware_type} --task {args.task}'
         if args.compile_only:
             cmd += '--compile_only'
         exit_code = subprocess.call(cmd, shell=True)

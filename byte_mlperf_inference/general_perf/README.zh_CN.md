@@ -19,11 +19,11 @@ python3 launch.py --task xxx --hardware_type xxx
 
 1. tasks
 --task 参数为传入的workload 名字，需要指定评估workload，例如：若要评估 open_bert-tf-fp16.json 定义的 workload，则需指定   --task open_bert-tf-fp16 。
-注：所有workload定义在general_task/workloads下，传参时名字需要和文件名对齐。目前格式为model-framework-precision。
+注：所有workload定义在general_perf/workloads下，传参时名字需要和文件名对齐。目前格式为model-framework-precision。
 
 2. hardware_type
 --hardware_type 参数为传入的hardware_type 名字，无默认值，必须用户指定。例如：若要评估 Habana Goya ，则需指定   --hardware_type GOYA 。
-注：所有hardware type定义在general_task/backends下，传参时名字需要和folder名对齐。
+注：所有hardware type定义在general_perf/backends下，传参时名字需要和folder名对齐。
 
 3. compile_only
 --compile_only 参数将在模型编译完成后停止任务
