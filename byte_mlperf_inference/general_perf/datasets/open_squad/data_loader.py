@@ -49,8 +49,8 @@ class DataLoader(data_loader.Dataset):
         perf_count_override = None
         eval_features = []
         # Load features if cached, convert from examples otherwise.
-        input_file = "byte_mlperf/datasets/open_squad/dev-v1.1.json"
-        cache_path = 'byte_mlperf/datasets/open_squad/eval_features_' + self.config[
+        input_file = "general_perf/datasets/open_squad/dev-v1.1.json"
+        cache_path = 'general_perf/datasets/open_squad/eval_features_' + self.config[
             'model'] + '.pickle'
         if os.path.exists(cache_path):
             with open(cache_path, 'rb') as cache_file:
@@ -71,7 +71,7 @@ class DataLoader(data_loader.Dataset):
                     "Palak/microsoft_deberta-base_squad")
             else:
                 tokenizer = BertTokenizer(
-                    "byte_mlperf/datasets/open_squad/vocab.txt")
+                    "general_perf/datasets/open_squad/vocab.txt")
             eval_examples = read_squad_examples(input_file=input_file,
                                                 is_training=False,
                                                 version_2_with_negative=False)

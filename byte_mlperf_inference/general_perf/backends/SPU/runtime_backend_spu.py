@@ -272,7 +272,7 @@ class RuntimeBackendSPU(runtime_backend.RuntimeBackend):
         self.model_name = self.configs['model']
         self.model_info.update({"input_name": self.model_info['inputs'].split(",")})
         task_name = self.model_info["model"]
-        self.yaml_config = yaml.safe_load(open(f"./byte_mlperf/download/moffett/converted_models/{task_name}.yaml", "r"))
+        self.yaml_config = yaml.safe_load(open(f"./general_perf/download/moffett/converted_models/{task_name}.yaml", "r"))
         self.yaml_config.update({
             "model": self.configs["model"],
             "input_name": self.model_info["input_name"],

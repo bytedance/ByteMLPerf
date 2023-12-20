@@ -29,19 +29,19 @@ class DataLoader(data_loader.Dataset):
         log.info("Initial...")
         self.config = config
         self.cur_bs = 1
-        if not os.path.exists("byte_mlperf/datasets/{}/numeric.npy".format(
+        if not os.path.exists("general_perf/datasets/{}/numeric.npy".format(
                 self.config['dataset_name'])):
             from general_perf.datasets.open_criteo_kaggle.preprocess_dataset import csv_to_numpy
             csv_to_numpy(
-                "byte_mlperf/datasets/{}/eval.csv".format(
+                "general_perf/datasets/{}/eval.csv".format(
                     self.config['dataset_name']),
-                "byte_mlperf/datasets/{}/".format(self.config['dataset_name']))
+                "general_perf/datasets/{}/".format(self.config['dataset_name']))
 
-        num = np.load("byte_mlperf/datasets/{}/numeric.npy".format(
+        num = np.load("general_perf/datasets/{}/numeric.npy".format(
             self.config['dataset_name']))
-        cat = np.load("byte_mlperf/datasets/{}/categorical.npy".format(
+        cat = np.load("general_perf/datasets/{}/categorical.npy".format(
             self.config['dataset_name']))
-        label = np.load("byte_mlperf/datasets/{}/label.npy".format(
+        label = np.load("general_perf/datasets/{}/label.npy".format(
             self.config['dataset_name']))
         self.items = len(num)
         self.batch_num = int(self.items / self.cur_bs)

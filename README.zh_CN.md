@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="byte_mlperf/images/icon.png">
+  <img src="docs/images/icon.png">
 </div>
 
 
@@ -19,11 +19,11 @@ python3 launch.py --task xxx --hardware_type xxx
 
 1. tasks
 --task 参数为传入的workload 名字，需要指定评估workload，例如：若要评估 open_bert-tf-fp16.json 定义的 workload，则需指定   --task open_bert-tf-fp16 。
-注：所有workload定义在byte_mlperf/workloads下，传参时名字需要和文件名对齐。目前格式为model-framework-precision。
+注：所有workload定义在general_task/workloads下，传参时名字需要和文件名对齐。目前格式为model-framework-precision。
 
 2. hardware_type
 --hardware_type 参数为传入的hardware_type 名字，无默认值，必须用户指定。例如：若要评估 Habana Goya ，则需指定   --hardware_type GOYA 。
-注：所有hardware type定义在byte_mlperf/backends下，传参时名字需要和folder名对齐。
+注：所有hardware type定义在general_task/backends下，传参时名字需要和folder名对齐。
 
 3. compile_only
 --compile_only 参数将在模型编译完成后停止任务
@@ -99,13 +99,11 @@ ByteIR 编译支持的模型列表:
 | Vendor |  SKU | Key Parameters | Supplement |
 | :---- | :----| :---- | :---- |
 | Intel | Xeon | - | - |
-| Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
-| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.zh_CN.md) |
-| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf/backends/SPU/README.md) |
-| Habana | Gaudi2 | <li>24 Tensor Processor Cores, Dual matrix multiplication engines <li> Memory: 96 GB HBM2E, 48MB SRAM                            | [HPU Introduction](byte_mlperf/backends/HPU/README.md) |
+| Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf_inference/general_perf/backends/STC/README.md) |
+| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf_inference/general_perf/backends/IPU/README.zh_CN.md) |
+| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf_inference/general_perf/backends/SPU/README.md) |
+| Habana | Gaudi2 | <li>24 Tensor Processor Cores, Dual matrix multiplication engines <li> Memory: 96 GB HBM2E, 48MB SRAM                            | [HPU Introduction](byte_mlperf_inference/general_perf/backends/HPU/README.md) |
 
-## Benchmark Summary
-评估结果汇总 : QPS 视图
-<div align="center">
-  <img src="byte_mlperf/reports/reports_summary.png">
-</div>
+
+## Statement
+[ASF Statement on Compliance with US Export Regulations and Entity List](https://news.apache.org/foundation/entry/statement-by-the-apache-software)

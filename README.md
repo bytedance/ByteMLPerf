@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="byte_mlperf/images/icon.png">
+  <img src="docs/images/icon.png">
 </div>
 
 
@@ -20,11 +20,11 @@ python3 launch.py --task xxx --hardware_type xxx
 
 1. task
 --task parameter is the name of the incoming workload. You need to specify the workload. For example, if you would like to evaluate the workload: bert-tf-fp16.json, you need to specify --task bert-tf-fp16.
-Note: All workloads are defined under byte_mlperf/workloads, and the name needs to be aligned with the file name when passing parameters. The current format is model-framework-precision.
+Note: All workloads are defined under general_perf/workloads, and the name needs to be aligned with the file name when passing parameters. The current format is model-framework-precision.
 
 2. hardware_type
 --hardware_type parameter is the incoming hardware_type name, there is no default value, it must be specified by the user. Example: To evaluate Habana Goya, specify --hardware_type GOYA .
-Note: All hardware types are defined under byte_mlperf/backends, and the name needs to be aligned with the folder name when passing parameters.
+Note: All hardware types are defined under general_perf/backends, and the name needs to be aligned with the folder name when passing parameters.
 
 3. compile_only
 --compile_only parameter will make task stoped once compilation is finished
@@ -100,16 +100,10 @@ ByteMLPerf Vendor Backend List will be shown below
 | Vendor |  SKU | Key Parameters | Supplement |
 | :---- | :----| :---- | :---- |
 | Intel | Xeon | - | - |
-| Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf/backends/STC/README.md) |
-| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf/backends/IPU/README.md) |
-| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf/backends/SPU/README.md) |
-| Habana | Gaudi2 | <li>24 Tensor Processor Cores, Dual matrix multiplication engines <li> Memory: 96 GB HBM2E, 48MB SRAM                            | [HPU Introduction](byte_mlperf/backends/HPU/README.md) |
-
-## Benchmark Summary
-Benchmark Result Summary : QPS Perspective
-<div align="center">
-  <img src="byte_mlperf/reports/reports_summary.png">
-</div>
+| Stream Computing | STC P920 | <li>Computation Power:128 TFLOPS@FP16 <li> Last Level Buffer: 8MB, 256GB/s <li>Level 1 Buffer: 1.25MB, 512GB/s   <li> Memory: 16GB, 119.4GB/S <li> Host Interface：PCIe 4, 16x, 32GB/s <li> TDP: 160W | [STC Introduction](byte_mlperf_inference/general_perf/backends/STC/README.md) |
+| Graphcore | Graphcore® C600 | <li>Compute: 280 TFLOPS@FP16, 560 TFLOPS@FP8 <li> In Processor Memory: 900 MB, 52 TB/s <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 185W | [IPU Introduction](byte_mlperf_inference/general_perf/backends/IPU/README.md) |
+| Moffett-AI | Moffett-AI S30 | <li>Compute: 1440 (32x-Sparse) TFLOPS@BF16, 2880 (32x-Sparse) TOPS@INT8, <li> Memory: 60 GB,  <li> Host Interface: Dual PCIe Gen4 8-lane interfaces, 32GB/s <li> TDP: 250W                           | [SPU Introduction](byte_mlperf_inference/general_perf/backends/SPU/README.md) |
+| Habana | Gaudi2 | <li>24 Tensor Processor Cores, Dual matrix multiplication engines <li> Memory: 96 GB HBM2E, 48MB SRAM                            | [HPU Introduction](byte_mlperf_inference/general_perf/backends/HPU/README.md) |
 
 ## Statement
 [ASF Statement on Compliance with US Export Regulations and Entity List](https://news.apache.org/foundation/entry/statement-by-the-apache-software)

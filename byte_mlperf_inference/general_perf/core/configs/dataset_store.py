@@ -36,7 +36,7 @@ def load_dataset(config: Dict[str, Any]) -> Dataset:
         dataset_name = 'fake_dataset'
         log.info("Loading Dataset: Dataset does not exist, using fake data")
 
-    data_loader = importlib.import_module('byte_mlperf.datasets.' +
+    data_loader = importlib.import_module('general_perf.datasets.' +
                                           dataset_name + ".data_loader")
     data_loader = getattr(data_loader, 'DataLoader')
     dataset = data_loader(config)

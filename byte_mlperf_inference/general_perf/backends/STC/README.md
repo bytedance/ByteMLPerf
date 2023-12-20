@@ -14,9 +14,9 @@
 | widedeep-tf-fp32 | 2395899.9 | Open Criteo Kaggle | Top-1 | 77.39% |
 
 
-For more detailed result information, see byte_mlperf/reports/STC/. Models above are depolyed on a NPU (Neural-network Processing Unit) card "STCP920" which is designed and manufactured by Beijing Stream Computing Technology Co., LTD. Softwares associated with STCP920 are as following: 
+For more detailed result information, see general_perf/reports/STC/. Models above are depolyed on a NPU (Neural-network Processing Unit) card "STCP920" which is designed and manufactured by Beijing Stream Computing Technology Co., LTD. Softwares associated with STCP920 are as following: 
 
-| Software | Version | Description |
+| Software | Version | Description |B
 | :-----:| :----: | :----: |
 | HPE | 1.5.1 | Heterogeneous Programming Environment |
 | TensorTurbo | 1.11.0 | An AI compiler for STCP920 developed based on TVM |
@@ -37,14 +37,14 @@ For more detailed software information, please refer to: https://docs.streamcomp
 
 # How to run
 1. Prepare environment  
-Prepare a machine with the STCP920 chip, install HPE, install -r byte_mlperf/requirements.txt. Then create a virtual environment, install -r byte_mlperf/backends/STC/requirements.txt, install Tensorturbo and STC_DDK. These installation packages can be obtained by visiting this link: https://docs.streamcomputing.com/_/sharing/vSxLMI20nalGphdpXdEVoDg6JkUcfEkT?next=/zh/latest/
+Prepare a machine with the STCP920 chip, install HPE, install -r general_perf/requirements.txt. Then create a virtual environment, install -r general_perf/backends/STC/requirements.txt, install Tensorturbo and STC_DDK. These installation packages can be obtained by visiting this link: https://docs.streamcomputing.com/_/sharing/vSxLMI20nalGphdpXdEVoDg6JkUcfEkT?next=/zh/latest/
 
 ```bash
-export PYTHONPATH=$PYTHONPATH:ByteMLPerf:ByteMLPerf/byte_mlperf/backends/STC
+export PYTHONPATH=$PYTHONPATH:ByteMLPerf:ByteMLPerf/general_perf/backends/STC
 ```
 
 2. Prepare model and dataset  
-Run byte_mlperf/prepare_model_and_dataset.sh to get model and dataset.
+Run general_perf/prepare_model_and_dataset.sh to get model and dataset.
 
 3. Run 
 ```bash

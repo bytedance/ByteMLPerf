@@ -1,6 +1,6 @@
 {
     "model": "bert-tf-fp32",
-    "model_path": "byte_mlperf/model_zoo/regular/open_bert/bert_fp32",
+    "model_path": "general_perf/model_zoo/regular/open_bert/bert_fp32",
     "framework": "Tensorflow",
     "framework_version": "2.4.0",
     "model_format": "saved_model",

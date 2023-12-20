@@ -35,14 +35,14 @@ class CompileBackendHPU(compile_backend.CompileBackend):
 
     def _update_model_env(self):
         if self.model_info["model"] in ("bert-torch-fp32", "albert-torch-fp32"):
-            os.environ['LOWER_LIST'] ='byte_mlperf/backends/HPU/bert/bf16.txt'
-            os.environ['FP32_LIST'] ='byte_mlperf/backends/HPU/bert/fp32.txt'
+            os.environ['LOWER_LIST'] ='general_perf/backends/HPU/bert/bf16.txt'
+            os.environ['FP32_LIST'] ='general_perf/backends/HPU/bert/fp32.txt'
 
     def compile(self, config, dataloader=None):
         result = {
             "model": config['model_info']['model'],
             "framework": config['model_info']['framework'],
-            "compile_precision": “BF16”,
+            "compile_precision": "BF16",
             "optimizations":{},
             "instance_count": 1,
             "device_count": 1,
@@ -74,7 +74,7 @@ class CompileBackendHPU(compile_backend.CompileBackend):
 
     def get_interact_profile(self, config):
         model_profile = []
-        file_path = "byte_mlperf/backends/HPU/" + self.hardware_type + '.json'
+        file_path = "general_perf/backends/HPU/" + self.hardware_type + '.json'
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
                 model_profile = json.load(f)

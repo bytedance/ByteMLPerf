@@ -176,7 +176,7 @@ class PDF(FPDF):
         with open(path, 'r') as f:
             report = json.load(f)
         output_dir = os.path.dirname(path) + '/'
-        icon_path = 'byte_mlperf/images/icon.png'
+        icon_path = 'docs/images/icon.png'
         self.add_page()
         self.lines()
         self.icon(icon_path)

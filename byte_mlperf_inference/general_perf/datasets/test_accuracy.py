@@ -101,7 +101,7 @@ class AccuracyChecker():
 
         Returns: Dict[str, float]
         """
-        cpu_data_path = os.path.abspath('byte_mlperf/reports/CPU/' +
+        cpu_data_path = os.path.abspath('general_perf/reports/CPU/' +
                                         self.configs["model"])
         if not os.path.exists(cpu_data_path):
             log.info("Fetch CPU Data Failed")

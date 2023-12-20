@@ -34,7 +34,7 @@ def init_compile_backend(hardware_type: str) -> CompileBackend:
     """
     log.info("Loading Compile Backend: {}".format(hardware_type))
 
-    compile_backend = importlib.import_module('byte_mlperf.backends.' +
+    compile_backend = importlib.import_module('general_perf.backends.' +
                                               hardware_type +
                                               ".compile_backend_" +
                                               hardware_type.lower())
@@ -53,7 +53,7 @@ def init_runtime_backend(hardware_type: str) -> RuntimeBackend:
     """
     log.info("Loading Runtime Backend: {}".format(hardware_type))
 
-    runtime_backend = importlib.import_module('byte_mlperf.backends.' +
+    runtime_backend = importlib.import_module('general_perf.backends.' +
                                               hardware_type +
                                               ".runtime_backend_" +
                                               hardware_type.lower())

@@ -33,14 +33,14 @@ class DataLoader(data_loader.Dataset):
         self.cur_bs = 2
 
         batch_token_ids = np.load(
-            "byte_mlperf/datasets/{}/batch_token_ids.npy".format(
+            "general_perf/datasets/{}/batch_token_ids.npy".format(
                 self.config['dataset_name']),
             allow_pickle=True)
         batch_segment_ids = np.load(
-            "byte_mlperf/datasets/{}/batch_segment_ids.npy".format(
+            "general_perf/datasets/{}/batch_segment_ids.npy".format(
                 self.config['dataset_name']),
             allow_pickle=True)
-        labels = np.load("byte_mlperf/datasets/{}/label.npy".format(
+        labels = np.load("general_perf/datasets/{}/label.npy".format(
             self.config['dataset_name']),
                          allow_pickle=True)
         self.feed_dict = collections.defaultdict(list)

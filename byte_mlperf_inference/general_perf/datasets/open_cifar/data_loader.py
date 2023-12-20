@@ -46,7 +46,7 @@ class DataLoader(data_loader.Dataset):
         super(DataLoader, self).__init__(config)
         log.info("Initial...")
 
-        base_folder = "byte_mlperf/datasets/{}/cifar-100-python".format(
+        base_folder = "general_perf/datasets/{}/cifar-100-python".format(
             self.config['dataset_name'])
         test_list = [
             ['test', 'f0ef6b0ae62326f3e7ffdfab6717acfc'],

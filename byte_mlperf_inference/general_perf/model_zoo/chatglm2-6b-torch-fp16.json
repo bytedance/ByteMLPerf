@@ -1,6 +1,6 @@
 {
     "model": "chatglm2-6b-torch-fp16",
-    "model_path": "byte_mlperf/model_zoo/sota/chatglm2-6b",
+    "model_path": "general_perf/model_zoo/sota/chatglm2-6b",
     "framework": "Pytorch",
     "framework_version": "1.13.1",
     "model_format": "bin",

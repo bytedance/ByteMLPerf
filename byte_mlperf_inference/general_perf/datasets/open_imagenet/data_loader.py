@@ -53,7 +53,7 @@ class DataLoader(data_loader.Dataset):
                 pre_process = pre_process_imagenet_vit
 
         cache_dir = os.getcwd() + \
-            "/byte_mlperf/datasets/{}".format(self.config['dataset_name'])
+            "/general_perf/datasets/{}".format(self.config['dataset_name'])
         self.input_name = self.config['inputs']
         self.image_list = []
         self.label_list = []
@@ -61,7 +61,7 @@ class DataLoader(data_loader.Dataset):
         self.use_cache = 0
         self.cache_dir = os.path.join(cache_dir, "preprocessed",
                                       self.config['model'])
-        self.data_path = "byte_mlperf/datasets/{}/ILSVRC2012_img_val".format(
+        self.data_path = "general_perf/datasets/{}/ILSVRC2012_img_val".format(
             self.config['dataset_name'])
         self.pre_process = pre_process
         self.items = 0
@@ -70,7 +70,7 @@ class DataLoader(data_loader.Dataset):
         not_found = 0
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        image_list = 'byte_mlperf/datasets/{}/val_map.txt'.format(
+        image_list = 'general_perf/datasets/{}/val_map.txt'.format(
             self.config['dataset_name'])
 
         start = time.time()

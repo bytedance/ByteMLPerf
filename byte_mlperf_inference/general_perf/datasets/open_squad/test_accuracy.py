@@ -68,7 +68,7 @@ class AccuracyChecker(test_accuracy.AccuracyChecker):
 
         np.save(self.output_dir + "/{}.npy".format(self.dataloader.name()),
                 diffs)
-        data_file = os.path.abspath('.') + "/byte_mlperf/datasets/open_squad/dev-v1.1.json"
+        data_file = os.path.abspath('.') + "/general_perf/datasets/open_squad/dev-v1.1.json"
         predict_file = self.output_dir[:self.output_dir.
                                        rindex('/')] + "/predictions.json"
         write_predictions(self.dataloader.eval_examples,

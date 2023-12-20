@@ -1,6 +1,6 @@
 {
     "model": "vae-decoder-onnx-fp32",
-    "model_path": "byte_mlperf/model_zoo/sota/stable_diffusion/vae-decoder.onnx",
+    "model_path": "general_perf/model_zoo/sota/stable_diffusion/vae-decoder.onnx",
     "framework": "Onnx",
     "framework_version": "1.12.0",
     "model_format": "onnx",

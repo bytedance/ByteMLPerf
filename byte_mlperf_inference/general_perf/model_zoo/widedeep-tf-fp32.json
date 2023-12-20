@@ -1,6 +1,6 @@
 {
     "model": "widedeep-tf-fp32",
-    "model_path": "byte_mlperf/model_zoo/regular/open_wide_deep_saved_model",
+    "model_path": "general_perf/model_zoo/regular/open_wide_deep_saved_model",
     "framework": "Tensorflow",
     "framework_version": "2.4.0",
     "model_format": "saved_model",

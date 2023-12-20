@@ -1,7 +1,7 @@
 {
   "model": "conformer-encoder-onnx-fp32",
-  "onnx_path": "byte_mlperf/download/moffett/models/conformer.onnx",
-  "model_path": "byte_mlperf/download/moffett/converted_models/conformer-mf-int8/conformer-mf-int8.zip",
+  "onnx_path": "general_perf/download/moffett/models/conformer.onnx",
+  "model_path": "general_perf/download/moffett/converted_models/conformer-mf-int8/conformer-mf-int8.zip",
   "calibration_dir": " ",
   "transform_file": "",
   "batch_size": 4,

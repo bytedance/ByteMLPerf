@@ -54,7 +54,7 @@ class PerfEngine(object):
 
     def workload_perf(self, workload):
         # set reports dir
-        output_dir = os.path.abspath('byte_mlperf/reports/' + self.args.hardware_type +
+        output_dir = os.path.abspath('general_perf/reports/' + self.args.hardware_type +
                                      '/' + workload['model'])
         os.makedirs(output_dir, exist_ok=True)
 
@@ -89,14 +89,14 @@ class PerfEngine(object):
         return
 
     def get_accuracy_checker(self, dataset_name: str):
-        AccuracyChecker = importlib.import_module('byte_mlperf.datasets.' +
+        AccuracyChecker = importlib.import_module('general_perf.datasets.' +
                                                   dataset_name +
                                                   ".test_accuracy")
         AccuracyChecker = getattr(AccuracyChecker, 'AccuracyChecker')
         return AccuracyChecker()
 
     def get_model_info(self, model_name: str):
-        with open("byte_mlperf/model_zoo/" + model_name + '.json', 'r') as f:
+        with open("general_perf/model_zoo/" + model_name + '.json', 'r') as f:
             model_info = json.load(f)
         return model_info
 

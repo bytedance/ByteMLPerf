@@ -53,8 +53,8 @@ def do_mxnet2onnx(sym, params, onnx_file, in_shapes, in_types,
     '''
     example:
 
-    sym = '/home/minghui/CodeBase/byte_mlperf/byte_mlperf/download/manysplit/image_level_space-symbol.json'
-    params = '/home/minghui/CodeBase/byte_mlperf/byte_mlperf/download/manysplit/image_level_space-0000.params'
+    sym = 'byte_mlperf/byte_mlperf/download/manysplit/image_level_space-symbol.json'
+    params = 'byte_mlperf/byte_mlperf/download/manysplit/image_level_space-0000.params'
     onnx_file = 'manysplit.onnx'
 
     in_shapes = [(1,3,736,416)]

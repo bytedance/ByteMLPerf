@@ -82,13 +82,13 @@ def create_multi_bars(summary):
     plt.yscale('log')
     plt.title('Reports Summary(QPS)')
     
-    plt.savefig("byte_mlperf/reports/reports_summary.png", dpi=100)
+    plt.savefig("general_perf/reports/reports_summary.png", dpi=100)
 
 def get_best_qps(backend, report_name):
-    if not os.path.exists('byte_mlperf/reports/' + backend + '/' + report_name + "/result.json"):
+    if not os.path.exists('general_perf/reports/' + backend + '/' + report_name + "/result.json"):
         return 0
         
-    with open('byte_mlperf/reports/' + backend + '/' + report_name + "/result.json",  'r') as f:
+    with open('general_perf/reports/' + backend + '/' + report_name + "/result.json",  'r') as f:
         report_info = json.load(f)
         all_qps= report_info['Performance']
         best_qps = 0
@@ -99,13 +99,13 @@ def get_best_qps(backend, report_name):
 
 def reports_summary():
     all_backends = []
-    for file in os.listdir('byte_mlperf/reports'):
-        if os.path.isdir(os.path.join('byte_mlperf/reports', file)):
+    for file in os.listdir('general_perf/reports'):
+        if os.path.isdir(os.path.join('general_perf/reports', file)):
             all_backends.append(file)
 
     all_reports_names = []
     for backend in all_backends:
-        for report_name in os.listdir('byte_mlperf/reports/' + backend):
+        for report_name in os.listdir('general_perf/reports/' + backend):
             if report_name not in all_reports_names:
                 all_reports_names.append(report_name)
 

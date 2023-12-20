@@ -86,21 +86,11 @@ class PerfEngine:
         self.compile_backend = init_compile_backend(self.backend_type)
         self.runtime_backend = init_runtime_backend(self.backend_type)
 
-        output_dir = os.path.abspath('byte_mlperf/reports/' +
+        output_dir = os.path.abspath('general_perf/reports/' +
                                      self.backend_type)
         os.makedirs(output_dir, exist_ok=True)
         
         status = self.single_workload_perf(self.workload)
-
-        # results = {
-        #     "Backend": self.backend_type,
-        #     "Model Coverage": model_converge,
-        #     "Workloads": workload_reports
-        # }
-
-        # with open('byte_mlperf/reports/' + self.backend_type + "/Overall.json",
-        #           'w') as file:
-        #     json.dump(results, file, indent=4)
 
     def single_workload_perf(
             self, workload: Dict[str, Any]) -> bool:
@@ -168,7 +158,7 @@ class PerfEngine:
         base_report['Graph Compile'] = graph_compile_report
 
         # Initalize Output Dir and Reports
-        output_dir = os.path.abspath('byte_mlperf/reports/' +
+        output_dir = os.path.abspath('general_perf/reports/' +
                                      self.backend_type + '/' +
                                      workload['model'])
         os.makedirs(output_dir, exist_ok=True)
@@ -250,11 +240,11 @@ class PerfEngine:
 
         base_report.pop("Backend")
         log.info("Testing Finish. Report is saved in path: [ {}/{} ]".
-                 format(output_dir[output_dir.rfind('byte_mlperf'):],
+                 format(output_dir[output_dir.rfind('general_perf'):],
                  os.path.basename(output_report_path)))
         build_pdf(output_report_path)
         log.info("PDF Version is saved in path: [ {}/{}-TO-{}.pdf ]".format(
-            output_dir[output_dir.rfind('byte_mlperf'):],
+            output_dir[output_dir.rfind('general_perf'):],
             base_report['Model'],
             output_report_path.split('/')[-1].split('-')[1].upper()))
 
@@ -265,14 +255,14 @@ class PerfEngine:
         return []
 
     def get_accuracy_checker(self, dataset_name: str):
-        AccuracyChecker = importlib.import_module('byte_mlperf.datasets.' +
+        AccuracyChecker = importlib.import_module('general_perf.datasets.' +
                                                   dataset_name +
                                                   ".test_accuracy")
         AccuracyChecker = getattr(AccuracyChecker, 'AccuracyChecker')
         return AccuracyChecker()
 
     def get_model_info(self, model_name: str) -> Dict[str, Any]:
-        with open("byte_mlperf/model_zoo/" + model_name + '.json',
+        with open("general_perf/model_zoo/" + model_name + '.json',
                   'r') as file:
             model_info = json.load(file)
         return model_info
@@ -351,11 +341,11 @@ class PerfEngine:
         return answer
 
     def activate_venv(self, hardware_type: str) -> bool:
-        if os.path.exists('byte_mlperf/backends/' + hardware_type +
+        if os.path.exists('general_perf/backends/' + hardware_type +
                           '/requirements.txt'):
             log.info("Activating Virtual Env for " + hardware_type)
 
-            venv_dir = os.path.join("byte_mlperf/backends",
+            venv_dir = os.path.join("general_perf/backends",
                                     hardware_type + "/venv")
             activate_file = os.path.join(venv_dir, 'bin', 'activate_this.py')
             if not os.path.exists(venv_dir):
@@ -371,7 +361,7 @@ class PerfEngine:
                     python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
                 ])
                 subprocess.call([
-                    python_path, '-m', 'pip', 'install', '-r', 'byte_mlperf/backends/' +
+                    python_path, '-m', 'pip', 'install', '-r', 'general_perf/backends/' +
                     hardware_type + '/requirements.txt', '-q'
                 ])
             else:
@@ -384,7 +374,7 @@ class PerfEngine:
                     python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
                 ])
                 subprocess.call([
-                    python_path, '-m', 'pip', 'install', '-r', 'byte_mlperf/backends/' +
+                    python_path, '-m', 'pip', 'install', '-r', 'general_perf/backends/' +
                     hardware_type + '/requirements.txt', '-q'
                 ])
 

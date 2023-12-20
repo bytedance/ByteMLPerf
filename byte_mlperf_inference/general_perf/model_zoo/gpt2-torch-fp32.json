@@ -1,6 +1,6 @@
 {
     "model": "gpt2-torch-fp32",
-    "model_path": "byte_mlperf/model_zoo/sota/traced_gpt2/traced_gpt2.pt",
+    "model_path": "general_perf/model_zoo/sota/traced_gpt2/traced_gpt2.pt",
     "framework": "Pytorch",
     "framework_version": "1.8.1",
     "model_format": "pt",

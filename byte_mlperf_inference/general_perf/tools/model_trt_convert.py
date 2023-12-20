@@ -33,11 +33,11 @@ def my_calibration_input_fn():
         # yield tf.random.normal((1, 224, 224, 3)).astype(np.uint8),
 
 
-saved_model_path = '/data00/yarn/nmdata/usercache/zhoudongyan.daniel/appcache/application_1592202091440_0014/container_e06_1592202091440_0014_09_045658/byte_mlperf/model_zoo/resnet50_saved_model'
+saved_model_path = 'byte_mlperf/model_zoo/resnet50_saved_model'
 model_params = tf.experimental.tensorrt.ConversionParams(
     precision_mode="int8".upper(), max_batch_size=64, use_calibration=True)
 model_trt = tf.experimental.tensorrt.Converter(
     input_saved_model_dir=saved_model_path, conversion_params=model_params)
 model_trt.convert(calibration_input_fn=my_calibration_input_fn)
-output_saved_model_dir = '/data00/yarn/nmdata/usercache/zhoudongyan.daniel/appcache/application_1592202091440_0014/container_e06_1592202091440_0014_09_045658/test'
+output_saved_model_dir = 'test'
 model_trt.save(output_saved_model_dir)

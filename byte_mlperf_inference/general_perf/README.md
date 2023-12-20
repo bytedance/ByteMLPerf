@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="byte_mlperf/images/icon.png">
+  <img src="docs/images/icon.png">
 </div>
 
 

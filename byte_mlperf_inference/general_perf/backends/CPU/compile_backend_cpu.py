@@ -80,7 +80,7 @@ class CompileBackendCPU(compile_backend.CompileBackend):
 
     def get_interact_profile(self, config):
         model_profile = []
-        file_path = "byte_mlperf/backends/CPU/" + self.hardware_type + '.json'
+        file_path = "general_perf/backends/CPU/" + self.hardware_type + '.json'
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
                 model_profile = json.load(f)

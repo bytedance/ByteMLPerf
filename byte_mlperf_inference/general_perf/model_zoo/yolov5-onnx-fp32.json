@@ -1,6 +1,6 @@
 {
     "model": "yolov5-onnx-fp32",
-    "model_path": "byte_mlperf/model_zoo/popular/open_yolov5/yolov5s.onnx",
+    "model_path": "general_perf/model_zoo/popular/open_yolov5/yolov5s.onnx",
     "framework": "Onnx",
     "framework_version": "1.10.2",
     "model_format": "onnx",

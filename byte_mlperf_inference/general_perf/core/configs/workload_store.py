@@ -37,7 +37,7 @@ def load_workload(task: str) -> Dict[str, Any]:
                 and (file.endswith('.json') or os.path.isdir(path))
                 and file[:file.find('.json')] == task):
             module_name = file
-            with open("byte_mlperf/workloads/" + module_name, 'r') as f:
+            with open("general_perf/workloads/" + module_name, 'r') as f:
                 workload_dict = json.load(f)
             return workload_dict
     else:
