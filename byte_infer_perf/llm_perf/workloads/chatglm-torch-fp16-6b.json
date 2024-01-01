@@ -1,0 +1,10 @@
+{
+    "model": "chatglm-torch-fp16-6b",
+    "test_accuracy": true,
+    "test_perf": true,
+    "min_new_tokens": 0,
+    "max_new_tokens": 512,
+    "clients": 10,
+    "tp_sizes": [1, 2, 4, 8],
+    "batch_sizes":[4, 8, 16, 32]
+}

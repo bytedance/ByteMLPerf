@@ -1,0 +1,10 @@
+grpcio
+protobuf>=3.20.3,<4.0.0
+black==23.1.0
+isort
+sentencepiece
+pandas
+google-api-python-client
+transformers==4.33.2
+tqdm
+matplotlib

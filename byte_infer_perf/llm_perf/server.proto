@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package llm_perf;
+
+// Containers to hold repeated fundamental values.
+message FloatList {
+    repeated double values = 1;
+}
+
+message Int64List {
+    repeated int64 values = 1;
+}
+
+message BytesList {
+    repeated bytes values = 1;
+}
+
+message StringList {
+    repeated string values = 1;
+}
+
+message Struct {
+  // Unordered map of dynamically typed values.
+  map<string, Value> fields = 1;
+}
+
+// Container for non-sequential data.
+message Value {
+  oneof kind {
+    FloatList float_list = 1;
+    Int64List int64_list = 2;
+    BytesList bytes_list = 3;
+    float float_ = 4;
+    int64 int64_ = 5;
+    bytes bytes_ = 6;
+    StringList string_list = 7;
+    string string_ = 8;
+    Struct struct_ = 9;
+  }
+}
+
+message InferenceRequest {
+  string req_id = 1;
+  map<string, Value> inputs = 2;
+}
+
+message InferenceResponse {
+  string req_id = 1;
+  map<string, Value> outputs = 2;
+}
+
+service Inference {
+  // 1 request -> 1 response
+  rpc CompleteInference(InferenceRequest) returns (InferenceResponse) {}
+  // 1 request -> m response
+  rpc StreamingInference(InferenceRequest) returns (stream InferenceResponse) {}
+}
