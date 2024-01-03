@@ -8,7 +8,7 @@
     "inputs":"input_ids.1,attention_mask.1",
     "outputs":"start_logits,end_logits",
     "input_shape": {"input_ids.1": [1,384], "attention_mask.1": [1,384]},
-    "input_type": "LONG,LONG,LONG",
+    "input_type": "LONG,LONG",
     "dataset_name": "open_squad",
     "max_batch_size": 64,
     "is_quantized": false
