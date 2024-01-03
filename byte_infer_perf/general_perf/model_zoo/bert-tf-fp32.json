@@ -1,0 +1,15 @@
+{
+    "model": "bert-tf-fp32",
+    "model_path": "general_perf/model_zoo/regular/open_bert/bert_fp32",
+    "framework": "Tensorflow",
+    "framework_version": "2.4.0",
+    "model_format": "saved_model",
+    "model_precision": "FP32",
+    "inputs":"input_ids:0,input_mask:0,segment_ids:0",
+    "outputs":"logits:0",
+    "input_shape": {"input_ids:0": [1,384], "input_mask:0": [1,384], "segment_ids:0": [1,384]},
+    "input_type": "INT32,INT32,INT32",
+    "dataset_name": "open_squad",
+    "max_batch_size": 64,
+    "is_quantized": false
+}

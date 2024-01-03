@@ -1,0 +1,15 @@
+{
+    "model": "llama2-7b-torch-fp16",
+    "model_path": "general_perf/model_zoo/sota/llama/llama-2-7b",
+    "framework": "Pytorch",
+    "framework_version": "1.13.1",
+    "model_format": "pth",
+    "model_precision": "FP16",
+    "inputs": null,
+    "outputs": null,
+    "input_shape": null,
+    "input_type": null,
+    "dataset_name": null,
+    "max_batch_size": null,
+    "is_quantized": false
+}

@@ -1,0 +1,15 @@
+{
+    "model": "unet-onnx-fp32",
+    "model_path": "general_perf/model_zoo/sota/unet/model.onnx",
+    "framework": "Onnx",
+    "framework_version": "1.12.0",
+    "model_format": "onnx",
+    "model_precision": "FP32",
+    "inputs":"sample,timestep,encoder_hidden_states",
+    "outputs":"out_sample",
+    "input_shape": {"sample": [1,4,32,32],"timestep":[1],"encoder_hidden_states":[1,77,768]},
+    "input_type": "FLOAT32,INT64,FLOAT32",
+    "dataset_name": null,
+    "max_batch_size": 64,
+    "is_quantized": false
+}

@@ -1,0 +1,12 @@
+{
+  "model": "albert-torch-fp32",
+  "onnx_path": "general_perf/download/moffett/models/albert.onnx",
+  "model_path": "general_perf/download/moffett/converted_models/albert-mf-int8/albert-mf-int8.zip",
+  "calibration_dir": "general_perf/download/moffett/datasets/albert-base-v2_squad.npy",
+  "transform_file": "",
+  "batch_size": 12,
+  "verify": false,
+  "model_precision": "MixInt8bf16",
+  "dataset_name": "open_squad",
+  "framework": "sparsert"
+}

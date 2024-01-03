@@ -1,0 +1,15 @@
+{
+    "model": "resnet50-tf-fp32",
+    "model_path": "general_perf/model_zoo/regular/open_resnet50/resnet50-fp32",
+    "framework": "Tensorflow",
+    "framework_version": "2.4.0",
+    "model_format": "saved_model",
+    "model_precision": "FP32",
+    "inputs": "input_tensor:0",
+    "outputs": "softmax_tensor:0",
+    "input_shape": {"input_tensor:0": [1, 224, 224, 3]},
+    "input_type": "FLOAT32",
+    "dataset_name": "open_imagenet",
+    "max_batch_size": 64,
+    "layout": "NHWC"
+}

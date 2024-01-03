@@ -1,0 +1,14 @@
+{
+    "model": "roformer-tf-fp32",
+    "model_path": "general_perf/model_zoo/popular/open_roformer",
+    "framework": "Tensorflow",
+    "framework_version": "2.4.0",
+    "model_format": "saved_model",
+    "model_precision": "FP32",
+    "inputs": "input_segment:0,input_token:0",
+    "outputs": "Identity:0",
+    "input_shape": {"input_segment:0": [1, 1024], "input_token:0": [1, 1024]},
+    "input_type": "FLOAT32,FLOAT32",
+    "dataset_name": "open_cail2019",
+    "max_batch_size": 64
+}

@@ -1,0 +1,15 @@
+{
+    "model": "videobert-onnx-fp32",
+    "model_path": "general_perf/model_zoo/popular/open_videobert/video-bert.onnx",
+    "framework": "Onnx",
+    "framework_version": "1.8.1",
+    "model_format": "onnx",
+    "model_precision": "FP32",
+    "inputs":"image,text",
+    "outputs":"output",
+    "input_shape": {"image": [1,3,224,224], "text": [100, 77]},
+    "input_type": "FLOAT32,LONG",
+    "dataset_name": "open_cifar",
+    "max_batch_size": 64,
+    "is_quantized": false
+}

@@ -1,0 +1,14 @@
+{
+    "model": "widedeep-tf-fp32",
+    "model_path": "general_perf/model_zoo/regular/open_wide_deep_saved_model",
+    "framework": "Tensorflow",
+    "framework_version": "2.4.0",
+    "model_format": "saved_model",
+    "model_precision": "FP32",
+    "inputs": "new_categorical_placeholder:0,new_numeric_placeholder:0",
+    "outputs": "import/head/predictions/probabilities:0",
+    "input_shape": {"new_categorical_placeholder:0": [26, 2], "new_numeric_placeholder:0": [1, 13]},
+    "input_type": "INT64,FLOAT32",
+    "dataset_name": "open_criteo_kaggle",
+    "max_batch_size": 16384
+}

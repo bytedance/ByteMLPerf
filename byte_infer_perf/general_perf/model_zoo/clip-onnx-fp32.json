@@ -1,0 +1,15 @@
+{
+    "model": "clip-onnx-fp32",
+    "model_path": "general_perf/model_zoo/sota/stable_diffusion/clip-text-encoder.onnx",
+    "framework": "Onnx",
+    "framework_version": "1.12.0",
+    "model_format": "onnx",
+    "model_precision": "FP32",
+    "inputs":"input_ids",
+    "outputs":"last_hidden_state,pooler_output",
+    "input_shape": {"input_ids": [1,77]},
+    "input_type": "INT32",
+    "dataset_name": null,
+    "max_batch_size": 64,
+    "is_quantized": false
+}

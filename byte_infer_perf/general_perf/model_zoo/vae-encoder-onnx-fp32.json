@@ -1,0 +1,15 @@
+{
+    "model": "vae-encoder-onnx-fp32",
+    "model_path": "general_perf/model_zoo/sota/stable_diffusion/vae-encoder.onnx",
+    "framework": "Onnx",
+    "framework_version": "1.12.0",
+    "model_format": "onnx",
+    "model_precision": "FP32",
+    "inputs":"sample",
+    "outputs":"latent_sample",
+    "input_shape": {"sample": [1,3,256,256]},
+    "input_type": "FLOAT32",
+    "dataset_name": null,
+    "max_batch_size": 64,
+    "is_quantized": false
+}
