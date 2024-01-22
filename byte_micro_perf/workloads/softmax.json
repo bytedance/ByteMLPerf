@@ -1,0 +1,5 @@
+{
+    "operator": "softmax",
+    "iterations": 10000,
+    "input_shape": [[64 , 2048, 65536]]
+}

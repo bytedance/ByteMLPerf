@@ -352,7 +352,7 @@ class PerfEngine:
                 log.info("venv not exist, Creating Virtual Env for " +
                          hardware_type)
                 if (hardware_type == "HPU"):
-                    virtualenv.create_environment(venv_dir,True)
+                    virtualenv.create_environment(venv_dir, True)
                 else:
                     virtualenv.create_environment(venv_dir)
                 exec(open(activate_file).read(), {'__file__': activate_file})
