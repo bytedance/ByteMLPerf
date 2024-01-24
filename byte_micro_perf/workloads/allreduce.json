@@ -1,5 +1,6 @@
 {
     "operator": "allreduce",
     "iterations": 10000,
-    "input_shape": [[64 , 2048, 65536]]
+    "input_shape_list": [[64 , 2048, 65536]],
+    "dtype": "float32"
 }

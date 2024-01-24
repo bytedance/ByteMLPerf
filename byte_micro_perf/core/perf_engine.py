@@ -22,8 +22,12 @@ import sys
 import virtualenv
 from typing import Any, List, Dict
 
+BYTE_MLPERF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BYTE_MLPERF_ROOT)
+
 from backends.backend import Backend
 
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("PerfEngine")
 
 
@@ -54,7 +58,7 @@ def load_workload(task: str) -> Dict[str, Any]:
     Returns: List[dic]
     """
     modules_dir = os.path.dirname(os.path.dirname(
-        __file__)) + '/workloads'
+        os.path.abspath(__file__))) + '/workloads'
 
     for file in os.listdir(modules_dir):
         path = os.path.join(modules_dir, file)
@@ -97,7 +101,7 @@ class PerfEngine:
                                                 hardware_type.lower())
         backend = getattr(backend,
                                 "Backend" + hardware_type)
-        return backend(self.workload['iterations'])
+        return backend(self.workload['iterations'], self.workload['dtype'])
 
     def start_engine(self) -> None:
         status = self.activate_venv(self.backend_type)
@@ -117,7 +121,13 @@ class PerfEngine:
             self, workload: Dict[str, Any]) -> bool:
         log.info("******************************************* Start to test op: {}. *******************************************".format(workload['operator']))
 
-        op_name = workload['model']
+        # Initalize Output Dir and Reports
+        output_dir = os.path.abspath('reports/' +
+                                     self.backend_type + '/' +
+                                     workload['operator'])
+        os.makedirs(output_dir, exist_ok=True)
+
+        op_name = workload['operator']
         base_report = {
             "Operator": op_name.upper(),
             "Backend": self.backend_type,
@@ -126,7 +136,7 @@ class PerfEngine:
 
         op = getattr(self.backend, op_name.lower(), None)
         if op is not None and callable(op):
-            op(workload)
+            op()
         else:
             raise ValueError(f"Unknown operation: {op_name.lower()}")
 
@@ -135,17 +145,21 @@ class PerfEngine:
             shape_list = self.workload['input_shape_list'] 
         else:
             shape_list = []
-            for M, N, K in self.workload['input_shape_list']:
+            for M, N, K in self.workload['M/N/K']:
                 shape_list.append([[M,N], [N,K]])
 
         for input_shape in shape_list:
-            if op_name == "GEMM":
-                op(input_shape)
             if isinstance(input_shape[0], int):
                 input_shape = [input_shape]
             reports = self.backend.perf(input_shape)
             perf_reports.append(reports)
         base_report['Performance'] = perf_reports
+        print(base_report)
+        # write output to json file
+        output_report_path = output_dir + "/result-" + workload['dtype'].lower() + ".json"
+        with open(output_report_path, 'w') as file:
+            json.dump(base_report, file, indent=4)
+    
         return True
 
     def get_cpu_name(self):
@@ -154,11 +168,11 @@ class PerfEngine:
         return cpu_name.decode().strip()
 
     def activate_venv(self, hardware_type: str) -> bool:
-        if os.path.exists('general_perf/backends/' + hardware_type +
+        if os.path.exists('backends/' + hardware_type +
                           '/requirements.txt'):
             log.info("Activating Virtual Env for " + hardware_type)
 
-            venv_dir = os.path.join("general_perf/backends",
+            venv_dir = os.path.join("backends",
                                     hardware_type + "/venv")
             activate_file = os.path.join(venv_dir, 'bin', 'activate_this.py')
             if not os.path.exists(venv_dir):
@@ -173,7 +187,7 @@ class PerfEngine:
                     python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
                 ])
                 subprocess.call([
-                    python_path, '-m', 'pip', 'install', '-r', 'general_perf/backends/' +
+                    python_path, '-m', 'pip', 'install', '-r', 'backends/' +
                     hardware_type + '/requirements.txt', '-q'
                 ])
             else:
@@ -186,7 +200,7 @@ class PerfEngine:
                     python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
                 ])
                 subprocess.call([
-                    python_path, '-m', 'pip', 'install', '-r', 'general_perf/backends/' +
+                    python_path, '-m', 'pip', 'install', '-r', 'backends/' +
                     hardware_type + '/requirements.txt', '-q'
                 ])
 
