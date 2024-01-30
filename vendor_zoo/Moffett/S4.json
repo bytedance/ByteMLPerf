@@ -12,7 +12,7 @@
         "功耗(W/TDP)": 70
     },
     "内存参数": {
-        "内存层次架构图": "vendor_zoo/M o f fe t t/mem_7.png",
+        "内存层次架构图": "vendor_zoo/Moffett/mem_7.png",
         "内存": {
             "内存类型": "LPDDR4x",
             "内存容量(GB)": 20,
