@@ -227,7 +227,9 @@ class PerfEngine:
         test_perf = bool(workload["test_perf"])
         test_accuracy = bool(workload["test_accuracy"])
 
-        if (not os.path.exists("llm_perf/model_zoo/sota/" + workload["model"])) or (not os.path.exists("llm_perf/reports/GPU/" + workload["model"])):
+        if (not os.path.exists("llm_perf/model_zoo/sota/" + workload["model"])) or (
+            not os.path.exists("llm_perf/reports/GPU/" + workload["model"])
+        ):
             subprocess.call(
                 [
                     "bash",

@@ -2,6 +2,10 @@ import argparse
 import os
 import sys
 
+BYTE_MLPERF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(BYTE_MLPERF_ROOT)
+sys.path.insert(0, BYTE_MLPERF_ROOT)
+
 from llm_perf.server.serve import serve
 from llm_perf.utils.logger import setup_logger
 

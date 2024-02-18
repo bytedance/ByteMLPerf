@@ -1,5 +1,5 @@
 {
-    "model": "chatglm2",
+    "model_name": "chatglm2",
     "model_path": "llm_perf/model_zoo/sota/chatglm2-torch-fp16-6b",
     "model_interface": "ChatGLMForConditionalGeneration",
     "network": {

@@ -36,12 +36,10 @@ def setup_scheduler(
     elif model_name == "chatglm":
         engine = GpuEngineChatGLM(modelcls, model_config, tokenizer, max_batch_size)
     elif model_name == "chatglm2":
-        engine = GpuEngineChatGLM2(
-            modelcls, model_config, tokenizer.pad_token_id, max_batch_size
-        )
+        engine = GpuEngineChatGLM2(modelcls, model_config, tokenizer, max_batch_size)
     elif model_name == "llama2":
         engine = GpuEngineChineseLlama2(
-            modelcls, model_config, tokenizer.pad_token_id, max_batch_size
+            modelcls, model_config, tokenizer, max_batch_size
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")

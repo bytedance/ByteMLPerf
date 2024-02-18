@@ -1,6 +1,6 @@
 {
     "model_name": "llama2",
-    "model_path": "llm_perf/model_zoo/sota/chinese-llama-2-torch-fp16-13b",
+    "model_path": "llm_perf/model_zoo/sota/chinese-llama2-torch-fp16-13b",
     "model_interface": "LlamaForCausalLM",
     "network": {
         "_name_or_path": "meta-llama/Llama-2-13b-hf",
@@ -28,7 +28,7 @@
         "vocab_size": 55296
     },
     "tokenizer": {
-        "path": "llm_perf/model_zoo/sota/chinese-llama-2-torch-fp16-13b",
+        "path": "llm_perf/model_zoo/sota/chinese-llama2-torch-fp16-13b",
         "add_sep_token": false
     },
     "dataset": "llm_perf/datasets/merged_52_test.csv"

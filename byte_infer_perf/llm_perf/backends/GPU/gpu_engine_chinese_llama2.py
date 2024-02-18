@@ -63,15 +63,15 @@ class GpuEngineChineseLlama2(CoreEngine):
         all_input_ids = []
         max_seq_len = -1
         for packet in batch:
-            if len(packet.request.input_ids) + len(packet.new_token_ids) > max_seq_len:
-                max_seq_len = len(packet.request.input_ids) + len(packet.new_token_ids)
+            if len(packet.request.input_ids) + len(packet.generate_ids) > max_seq_len:
+                max_seq_len = len(packet.request.input_ids) + len(packet.generate_ids)
         for packet in batch:
             pad_len = max_seq_len - (
-                len(packet.request.input_ids) + len(packet.new_token_ids)
+                len(packet.request.input_ids) + len(packet.generate_ids)
             )
             input_ids = (
                 packet.request.input_ids
-                + packet.new_token_ids
+                + packet.generate_ids
                 + [self.pad_token_id] * pad_len
             )
             all_input_ids.append(input_ids)
