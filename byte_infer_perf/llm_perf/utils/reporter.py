@@ -123,6 +123,7 @@ class Reporter:
     def update_meta(self, tp_size: int, batch_size: int):
         self.tp_size = tp_size
         self.batch_size = batch_size
+        self.start_time = time.time()
         self.request = 0
         self.performance_datas.clear()
         logger.info(f"Update reporter meta: {self.tp_size}, {self.batch_size}")

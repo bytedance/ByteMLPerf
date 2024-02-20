@@ -13,7 +13,7 @@ mkdir -p $GPU_REPORT_BASELINE
 MODEL=$1
 ENABLE_ACC=$2
 
-if [ $MODEL == "chatglm-torch-fp16-6b" ] || [ $MODEL == "chatglm2-torch-fp16-6b" ] || [ $MODEL == "chinese-llama-2-torch-fp16-13b" ]; then
+if [ $MODEL == "chatglm-torch-fp16-6b" ] || [ $MODEL == "chatglm2-torch-fp16-6b" ] || [ $MODEL == "chinese-llama2-torch-fp16-13b" ]; then
     if [ -d "$SOTA_MODEL_CKPT/$MODEL" ]; then
         echo "already exist model, skip download"
     else
