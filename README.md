@@ -18,7 +18,7 @@ The ByteMLPerf benchmark is structured into three main categories: Inference, Tr
 
   - Large Language Model (LLM) Performance: Specifically designed to assess the capabilities of accelerators in handling large language models, this section addresses the unique challenges posed by the size and complexity of these models.
 
-- Micro: The Micro category focuses on the performance of specific operations or "ops" that are fundamental to AI computations, such as Gemm, Softmax, and various communication operations. This granular level of testing is crucial for understanding the capabilities and limitations of accelerators at a more detailed operational level.
+- Micro: The Micro category focuses on the performance of specific operations or "ops" that are fundamental to AI computations, such as Gemm, Softmax, and various communication operations. This granular level of testing is crucial for understanding the capabilities and limitations of accelerators at a more detailed operational level. Vendors can refer to this document for guidance on building general perf backend: [ByteMLPerf Micro Perf Guide](https://bytedance.us.larkoffice.com/docx/EpjFdSpRsoOIHWxtKgjuRsMPsFB)[[中文版](https://bytedance.us.larkoffice.com/docx/LJWvdGVAzoxXkTxF9h9uIETbsWc)]
 
 - Training: Currently under development, this category aims to evaluate the performance of AI accelerators in training scenarios. It will provide insights into how well accelerators can handle the computationally intensive process of training AI models, which is vital for the development of new and more advanced AI systems.
 
