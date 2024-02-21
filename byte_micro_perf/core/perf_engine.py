@@ -41,7 +41,7 @@ def get_args():
     parser.add_argument(
         "--hardware_type",
         default="GPU",
-        help="The backend going to be evaluted, refs to backends/")
+        help="The backend going to be evaluted, refs to backends/") 
     parser.add_argument("--compile_only",
                         action='store_true',
                         help="Run compilation only")
@@ -101,12 +101,12 @@ class PerfEngine:
                                                 hardware_type.lower())
         backend = getattr(backend,
                                 "Backend" + hardware_type)
-        return backend(self.workload['iterations'], self.workload['dtype'])
+        return backend(self.workload)
 
     def start_engine(self) -> None:
-        status = self.activate_venv(self.backend_type)
-        if not status:
-            log.warning("Activate virtualenv Failed, Please Check...")
+        # status = self.activate_venv(self.backend_type)
+        # if not status:
+        #     log.warning("Activate virtualenv Failed, Please Check...")
 
         self.backend = self.init_backend(self.backend_type)
         output_dir = os.path.abspath('reports/' +
@@ -115,7 +115,7 @@ class PerfEngine:
 
         status = self.start_perf(self.workload)
 
-        self.deactivate_venv()
+        # self.deactivate_venv()
 
     def start_perf(
             self, workload: Dict[str, Any]) -> bool:
@@ -198,7 +198,7 @@ class PerfEngine:
                 python_path = os.path.join(venv_dir, 'bin', 'python3')
                 subprocess.call([
                     python_path, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'
-                ])
+                ])      
                 subprocess.call([
                     python_path, '-m', 'pip', 'install', '-r', 'backends/' +
                     hardware_type + '/requirements.txt', '-q'

@@ -27,6 +27,11 @@ if __name__ == '__main__':
         "--hardware_type",
         default="CPU",
         help="The backend going to be evaluted, refs to backends/")
+    parser.add_argument(
+        "--group",
+        default="1",
+        type = int,
+        help="The number of ProcessGroup")          
     parser.add_argument("--compile_only",
                         action='store_true',
                         help="Task will stoped after compilation finished")
@@ -52,10 +57,14 @@ if __name__ == '__main__':
         subprocess.call([
             'python3', '-m', 'pip', 'install', 'pip', '--upgrade', '--quiet'])
 
-        # subprocess.call([
-        #     'python3', '-m', 'pip', 'install', '-r', 'requirements.txt', '--quiet'])
-
-
-        cmd = f'python3 core/perf_engine.py --hardware_type {args.hardware_type} --task {args.task}'
+        subprocess.call([
+            'python3', '-m', 'pip', 'install', '-r', 'requirements.txt', '--quiet'])
+        
+        if args.task in ["allreduce"]:
+            cmd = "torchrun --nnodes 1 --nproc_per_node {} --node_rank 0 --master_addr 127.0.0.1 --master_port 49373 \
+                    core/perf_engine.py --hardware_type {} --task {}" \
+                    .format(args.group, args.hardware_type, args.task)
+        else:    
+            cmd = "python3 core/perf_engine.py --hardware_type {} --task {}".format(args.hardware_type, args.task)
         exit_code = subprocess.call(cmd, shell=True)
         sys.exit(exit_code)

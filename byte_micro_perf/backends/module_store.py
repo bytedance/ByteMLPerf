@@ -1,4 +1,5 @@
 import torch
+import torch.distributed as dist
 
 class AddMulOp(torch.nn.Module):
     def __init__(self):
@@ -23,7 +24,16 @@ class SoftmaxOp(torch.nn.Module):
         super().__init__()
 
     def forward(self, hidden_states):
-        logits = torch.nn.functional.softmax(hidden_states)
+        logits = torch.nn.functional.softmax(hidden_states, dim=-1)
         return logits
+
+class AllReduceOp(torch.nn.Module):
+    def __init__(self, group):
+        super().__init__()
+        self.group = group
+
+    def forward(self, input_tensor):
+        dist.all_reduce(input_tensor, group = self.group)
+        return True  
 
 
