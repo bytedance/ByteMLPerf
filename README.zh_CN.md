@@ -13,8 +13,8 @@ ByteMLPerf是字节使用的一个基准套件，用于测量推理系统在各�
 ByteMLPerf 基准分为三个主要类别：推理（Inference）、训练（Training）和微观性能（Micro），每个类别针对 AI 加速器性能的不同方面：
 
 - Inference：此类别进一步细分为两个部分，以适应不同类型的模型：
-  - General Perf：此部分致力于使用常见模型（如 ResNet-50 和 BERT）评估加速器的推理能力。其目的是提供加速器在一系列典型任务中性能的广泛理解。想要接入General Perf的厂商可以参考该文档接入测试：[ByteMLPerf Inference General厂商接入指南](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf) 
-  - LLM Perf：专门设计用于评估加速器处理大型语言模型的能力，此部分解决了这些模型的大小和复杂性带来的独特挑战。
+  - General Perf：此部分致力于使用常见模型（如 ResNet-50 和 BERT）评估加速器的推理能力。其目的是提供加速器在一系列典型任务中性能的广泛理解。想要接入General Perf的厂商可以参考该文档接入测试：[ByteMLPerf Inference General Perf厂商接入指南](https://bytedance.feishu.cn/docs/doccno9eLS3OseTA5aMBeeQf2cf) 
+  - LLM Perf：专门设计用于评估加速器处理大型语言模型的能力，此部分解决了这些模型的大小和复杂性带来的独特挑战。想要接入LLM Perf的厂商可以参考该文档接入测试：[ByteMLPerf Inference LLM Perf厂商接入指南](https://bytedance.larkoffice.com/docx/ZoU7dkPXYoKtJtxlrRMcNGMwnTc) 
 
 - Micro：Micro Perf侧重于评估特定操作或“运算”（如 Gemm、Softmax 和各种通信操作）的性能，这些操作是 AI 计算的基础。这种详细级别的测试对于了解加速器在更细致的操作层面的能力和限制至关重要。想要接入Micro Perf的厂商可以参考该文档接入测试：[ByteMLPerf Micro Perf厂商接入指南](https://bytedance.us.larkoffice.com/docx/LJWvdGVAzoxXkTxF9h9uIETbsWc) 
 
