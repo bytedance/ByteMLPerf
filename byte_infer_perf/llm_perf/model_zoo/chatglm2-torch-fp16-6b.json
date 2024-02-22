@@ -47,6 +47,5 @@
     "tokenizer": {
         "path": "llm_perf/model_zoo/sota/chatglm2-torch-fp16-6b",
         "add_sep_token": false
-    },
-    "dataset": "llm_perf/datasets/merged_52_test.csv"
+    }
 }
