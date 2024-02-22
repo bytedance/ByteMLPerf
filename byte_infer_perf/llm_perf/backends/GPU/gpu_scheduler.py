@@ -34,19 +34,19 @@ class GpuScheduler(CoreScheduler):
             # 1. get new task
             batch = self.select_batch(batch)
             if not batch:
-                time.sleep(0.1)
+                with self.packet_queue.not_empty:
+                    self.packet_queue.not_empty.wait(0.1)
                 continue
+
             logger.debug(f"get batch size: {len(batch)}")
 
             # 2. do inference -> logits
             outputs = self.engine.do_inference(batch)
-            # logger.debug(f"get output: {outputs}")
 
             # 3. sample logits -> tokens
             next_tokens, softmax_out = self.sampler.sample(
                 packets=batch, logits=outputs["last_logits"]
             )
-            # logger.debug(f"get next_tokens: {next_tokens}")
 
             # 4.postprocess -> gen result
             generation_results = self.sampler.postprocess(
@@ -58,6 +58,8 @@ class GpuScheduler(CoreScheduler):
             # 5. add result to packet
             for i, gen_res in enumerate(generation_results):
                 batch[i].add_result(gen_res)
+                if gen_res.finish_reason:
+                    batch[i].finish()
 
             # 6. is not finished -> remain
             remained: List[Packet] = []

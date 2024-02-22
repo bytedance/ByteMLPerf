@@ -34,20 +34,17 @@ def get_cpu_name():
     return cpu_name.decode().strip()
 
 
-def calc_ppl(input_logits: torch.FloatTensor, labels: torch.LongTensor) -> float:
+def calc_perplexity(input_logits: torch.FloatTensor, labels: torch.LongTensor) -> float:
     # Shift so that tokens < n predict n
     shift_logits = input_logits
     shift_labels = labels[..., 1:].contiguous()
-    # logger.debug(
-    #     f"shift_logits: {shift_logits.shape} {shift_logits.dtype}, shift_label: {shift_labels.shape} {shift_labels.dtype}"
-    # )
-    # logger.debug(f"shift_logits: {shift_logits}, shift_label: {shift_labels}")
+
     # Flatten the tokens
     loss_fct = torch.nn.CrossEntropyLoss()
     loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    ppl = torch.exp(loss)
-    logger.debug(f"Loss: {loss}, PPL: {ppl}")
-    return ppl.tolist()
+    perplexity = torch.exp(loss)
+    logger.debug(f"Loss: {loss}, PPL: {perplexity}")
+    return perplexity.tolist()
 
 
 class Reporter:
@@ -57,6 +54,7 @@ class Reporter:
         backend: str,
         tp_size: int,
         batch_size: int,
+        input_tokens: int,
         min_new_tokens: int,
         max_new_tokens: int,
         test_perf: bool,
@@ -79,6 +77,7 @@ class Reporter:
 
         self.tp_size = tp_size
         self.batch_size = batch_size
+        self.input_tokens = input_tokens
 
         self.result: Dict[str, Any] = {
             "Model": self.task,
@@ -87,7 +86,13 @@ class Reporter:
             "Min New Tokens": min_new_tokens,
             "Max New Tokens": max_new_tokens,
             "Accuracy": {"PPL": [], "Token Diff": {}, "Logits Diff": {}},
-            "Performance": [{"TP Size": self.tp_size, "Batch Size": self.batch_size}],
+            "Performance": [
+                {
+                    "TP Size": self.tp_size,
+                    "Batch Size": self.batch_size,
+                    "Input Tokens": self.input_tokens,
+                }
+            ],
         }
 
     def start(self):
@@ -112,6 +117,7 @@ class Reporter:
                 self._is_performance = True
                 self.performance_datas.append(data)
                 self.request += 1
+                self.last_submit_time = time.time()
             self.cond.notify()
 
     def worker(self):
@@ -120,23 +126,26 @@ class Reporter:
                 self.cond.wait()
                 self.calc()
 
-    def update_meta(self, tp_size: int, batch_size: int):
+    def update_meta(self, tp_size: int, batch_size: int, input_tokens: int):
         self.tp_size = tp_size
         self.batch_size = batch_size
+        self.input_tokens = input_tokens
         self.start_time = time.time()
         self.request = 0
         self.performance_datas.clear()
-        logger.info(f"Update reporter meta: {self.tp_size}, {self.batch_size}")
+        logger.info(
+            f"Update reporter meta: TP={self.tp_size}, BS={self.batch_size}, Inputs={self.input_tokens}"
+        )
 
     def _calc_performance(self):
         # Calc avg/p99/sum of data, return result
         ttfts = []
         tpots = []
-        gen_len = 0
+        completion_tokens = 0
         for i, data in enumerate(self.performance_datas):
             ttfts.append(data["first_token_latency"])
             tpots.append(data["per_token_latency"])
-            gen_len += data["generate_tokens_len"]
+            completion_tokens += data["completion_tokens"]
         cur_ttft_avg = np.mean(ttfts)
         cur_tpot_avg = np.mean(tpots)
         cur_ttft_p90 = np.percentile(ttfts, 90)
@@ -147,11 +156,16 @@ class Reporter:
             if (
                 perf["TP Size"] == self.tp_size
                 and perf["Batch Size"] == self.batch_size
+                and perf["Input Tokens"] == self.input_tokens
             ):
                 performance = perf
 
         if performance is None:
-            performance = {"TP Size": self.tp_size, "Batch Size": self.batch_size}
+            performance = {
+                "TP Size": self.tp_size,
+                "Batch Size": self.batch_size,
+                "Input Tokens": self.input_tokens,
+            }
             self.result["Performance"].append(performance)
 
         performance[__TTFT_AVG__] = cur_ttft_avg
@@ -163,9 +177,11 @@ class Reporter:
             f"TTFT(AVG)={cur_ttft_avg}, TTFT(P90)={cur_ttft_p90}, TPOT(AVG)={cur_tpot_avg}, TPOT(P90)={cur_tpot_p90}"
         )
 
-        performance["Token Throughput"] = gen_len / (time.time() - self.start_time)
+        performance["Token Throughput"] = completion_tokens / (
+            self.last_submit_time - self.start_time
+        )
         performance["Request Number"] = self.request
-        performance["QPS"] = self.request / (time.time() - self.start_time)
+        performance["QPS"] = self.request / (self.last_submit_time - self.start_time)
 
         logger.info(
             f"Request Number={performance['Request Number']}, Token Throughput={performance['Token Throughput']}, QPS={performance['QPS']}"
@@ -173,15 +189,17 @@ class Reporter:
 
     def _calc_accuracy(self):
         accuracy = self.result["Accuracy"]
-        ppl = []
+        perplexity_list = []
         dump_files = []
         for i, data in enumerate(self.accuracy_datas):
-            ppl.append(data["ppl"])
-            if data["dump_file"] != "":
-                dump_files.append(data["dump_file"])
+            perplexity_list.append(data["perplexity"])
+            if data["logits_dump"] != "":
+                dump_files.append(data["logits_dump"])
 
         # 1. PPL
-        accuracy["PPL"] = [sum(prompt_ppl) / len(prompt_ppl) for prompt_ppl in ppl]
+        accuracy["PPL"] = [
+            sum(prompt_ppl) / len(prompt_ppl) for prompt_ppl in perplexity_list
+        ]
         logger.info(f"PPL={accuracy['PPL']}")
 
         # Diff Prepare
