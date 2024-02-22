@@ -104,24 +104,28 @@ class GpuSampler(CoreSampler):
             token_id = next_tokens[i]
             packet = packets[i]
 
+            if token_id == packet.request.generate_config.eos_token_id:
+                finish_reason = "stop"
+            elif (
+                len(packet.generate_ids)
+                >= packet.request.generate_config.max_new_tokens
+            ):
+                finish_reason = "max_length"
+            else:
+                finish_reason = ""
+
             if packet.request.generate_config.get_input_logits:
                 last_logits = infer_outputs["last_logits"]
                 input_logits = infer_outputs["input_logits"]
                 gen_res = GenerateResult(
                     token_id=token_id,
+                    finish_reason=finish_reason,
                     last_logits=last_logits.view(-1).tolist(),
                     input_logits=input_logits.view(-1).tolist(),
                 )
             else:
-                gen_res = GenerateResult(token_id=token_id)
+                gen_res = GenerateResult(token_id=token_id, finish_reason=finish_reason)
 
             generate_result.append(gen_res)
 
-            if token_id == packet.request.generate_config.eos_token_id:
-                packet.finish()
-            elif (
-                len(packet.generate_ids)
-                >= packet.request.generate_config.max_new_tokens
-            ):
-                packet.finish()
         return generate_result

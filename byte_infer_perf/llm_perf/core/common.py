@@ -1,3 +1,5 @@
+import asyncio
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from queue import Queue
@@ -35,38 +37,64 @@ class GenerateRequest:
 @dataclass
 class GenerateResult:
     token_id: int
+    finish_reason: str
     last_logits: List[float] = field(default_factory=list)
     input_logits: List[float] = field(default_factory=list)
 
 
+class ResultQueue:
+    def __init__(self):
+        self._q = asyncio.Queue()
+        try:
+            self._loop = self._q._get_loop()
+        except:
+            self._loop = asyncio.get_running_loop()
+
+    def put(self, item):
+        self._loop.call_soon_threadsafe(self._q.put_nowait, item)
+
+    async def get(self):
+        return await self._q.get()
+
+
 class Packet:
     request: GenerateRequest
-    # result_queue: mp.Queue
     state: PacketStatus
     generate_ids: List[int]
 
     def __init__(self, request: GenerateRequest):
         self.request = request
-        self.result_queue = mp.Manager().Queue()
+        self.result_queue = ResultQueue()
         self.state = PacketStatus.PENDING
         self.generate_ids = []
+        self.exception = None
 
     def add_result(self, res: GenerateResult):
         self.generate_ids.append(res.token_id)
         self.result_queue.put(res)
 
-    def get_result(self) -> GenerateResult:
-        result = self.result_queue.get()
-        return result
+    async def get_result(self) -> GenerateResult:
+        return await self.result_queue.get()
 
     def finish(self) -> None:
         self.state = PacketStatus.FINISH
+        self.result_queue.put(None)
 
     def error(self) -> None:
-        self.state = PacketStatus.ERROR
+        self.state == PacketStatus.ERROR
 
     def is_finished(self) -> bool:
         return self.state == PacketStatus.FINISH
 
     def result_q_empty(self) -> bool:
         return self.result_queue.empty()
+
+
+class MultiProcessMsgr(ABC):
+    @abstractmethod
+    def broadcast(self, obj):
+        raise NotImplementedError
+
+    @abstractmethod
+    def receive(self):
+        raise NotImplementedError

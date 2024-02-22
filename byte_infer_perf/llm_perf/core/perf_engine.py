@@ -18,11 +18,8 @@ import os
 import signal
 import subprocess
 import sys
-import threading
 import time
 from typing import Any, Dict, Iterable, List
-
-import pandas as pd
 
 BYTE_MLPERF_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,8 +28,7 @@ os.chdir(BYTE_MLPERF_ROOT)
 sys.path.insert(0, BYTE_MLPERF_ROOT)
 
 
-from llm_perf.benchmark.bench import bench_accuracy, bench_performance
-from llm_perf.server.serve import serve
+from llm_perf.benchmark.bench import benchmark
 from llm_perf.utils.logger import logger, setup_logger
 from llm_perf.utils.reporter import Reporter, ReportType
 
@@ -50,15 +46,10 @@ def get_args():
         default="GPU",
         help="The backend going to be evaluted, refs to backends/",
     )
-    parser.add_argument("--port", default="50052", help="port of the server")
-    parser.add_argument(
-        "--compile_only", action="store_true", help="Run compilation only"
-    )
-    parser.add_argument("--top-p", type=float, default=0.9, help="Top-p for sampling")
-    parser.add_argument("--top-k", type=int, default=1, help="Top-k for sampling")
     parser.add_argument(
         "--host", type=str, default="127.0.0.1", help="Host for the gRPC server"
     )
+    parser.add_argument("--port", default="50052", help="port of the server")
 
     args = parser.parse_args()
     return args
@@ -160,20 +151,22 @@ class PerfEngine:
             # logger already exit
             print(f"server process already exit with {self.server_process.poll()}")
 
-    def start_benchmark(self, workload, model_config, report_type: ReportType):
-        if report_type == ReportType.ACCURACY:
-            clients = 1
-            bench = bench_accuracy
-        elif report_type == ReportType.PERFORMANCE:
-            clients = workload["clients"]
-            bench = bench_performance
+    def start_benchmark(
+        self,
+        workload: Dict[str, Any],
+        batch_size: int,
+        input_tokens: int,
+        report_type: ReportType,
+    ):
+        clients = 1 if report_type == ReportType.ACCURACY else batch_size
         for i in range(clients):
             p = mp.Process(
-                target=bench,
+                target=benchmark,
                 args=(
-                    self.backend_type,
+                    i,
                     workload,
-                    model_config,
+                    report_type,
+                    input_tokens,
                     self.result_queue,
                     self.args,
                 ),
@@ -184,25 +177,29 @@ class PerfEngine:
     def run_perf(
         self,
         workload: Dict[str, Any],
-        model_config: Dict[str, Any],
         tp_size: int,
         batch_size: int,
+        input_tokens: int,
         report_type: ReportType,
     ) -> None:
-        self.reporter.update_meta(tp_size=tp_size, batch_size=batch_size)
-        # 1. Start Server
+        # 1. Start server
         self.start_server(tp_size, batch_size)
 
-        # 2. Benchmark
-        self.start_benchmark(workload, model_config, report_type)
+        # 2. Benchmark clients
+        self.start_benchmark(workload, batch_size, input_tokens, report_type)
 
-        # 3. Get Result
-        alive_clients = (
-            workload["clients"] if report_type == ReportType.PERFORMANCE else 1
-        )
+        # 3. Get result
+        alive_clients = batch_size if report_type == ReportType.PERFORMANCE else 1
+        started: bool = False
         while alive_clients:
             result = self.result_queue.get()
-            if result is None:
+            if isinstance(result, str) and result == "@start":
+                if not started:
+                    # Reset reporter mate information
+                    self.reporter.update_meta(tp_size, batch_size, input_tokens)
+                started = True
+                continue
+            elif result is None:
                 alive_clients = alive_clients - 1
                 continue
             self.reporter.submit(result, report_type)
@@ -218,11 +215,10 @@ class PerfEngine:
         """
         Byte MlPerf will create an virtual env for each backend to avoid dependance conflict
         """
-        loglevel = os.environ.get("LOG_LEVEL", "debug")
+        loglevel = os.environ.get("LOG_LEVEL", "info")
         setup_logger(loglevel)
 
         workload = load_workload(self.task)
-        model_config = get_model_info(workload["model"])
 
         test_perf = bool(workload["test_perf"])
         test_accuracy = bool(workload["test_accuracy"])
@@ -243,14 +239,16 @@ class PerfEngine:
             logger.info(f"End of the llm_perf, enable at least one test item")
             return
 
-        default_batch_size = workload["batch_sizes"][0] if test_perf else 1
-        default_tp_size = workload["tp_sizes"][0] if test_perf else 1
+        tp_size = workload["tp_sizes"][0] if test_perf else 1
+        batch_size = workload["batch_sizes"][0] if test_perf else 1
+        input_tokens = workload["input_tokens"][0] if test_perf else 1
         # 0. Start Reporter
         self.reporter = Reporter(
             task=self.task,
             backend=self.backend_type,
-            tp_size=default_tp_size,
-            batch_size=default_batch_size,
+            tp_size=tp_size,
+            batch_size=batch_size,
+            input_tokens=input_tokens,
             min_new_tokens=workload["min_new_tokens"],
             max_new_tokens=workload["max_new_tokens"],
             test_perf=test_perf,
@@ -260,19 +258,20 @@ class PerfEngine:
 
         # 1. Accuracy Test: default batch_size & tp_size are both 1
         if test_accuracy:
-            self.run_perf(workload, model_config, 1, 1, ReportType.ACCURACY)
+            self.run_perf(workload, 1, 1, 1, ReportType.ACCURACY)
 
         # 2. Performance Test
         if test_perf:
             for tp_size in workload["tp_sizes"]:
                 for batch_size in workload["batch_sizes"]:
-                    self.run_perf(
-                        workload,
-                        model_config,
-                        tp_size,
-                        batch_size,
-                        ReportType.PERFORMANCE,
-                    )
+                    for input_tokens in workload["input_tokens"]:
+                        self.run_perf(
+                            workload,
+                            tp_size,
+                            batch_size,
+                            input_tokens,
+                            ReportType.PERFORMANCE,
+                        )
 
         self.reporter.stop()
         self.reporter.summary()

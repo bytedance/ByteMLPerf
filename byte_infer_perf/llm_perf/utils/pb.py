@@ -19,6 +19,10 @@ def deserialize_value(value: server_pb2.Value) -> Any:
         return [v for v in value.int64_list.values]
     elif kind == "bytes_list":
         return [v for v in value.bytes_list.values]
+    elif kind == "string_list":
+        return [v for v in value.string_list.values]
+    elif kind == "struct_":
+        return {k: deserialize_value(v) for k, v in value.struct_.fields.items()}
     else:
         raise TypeError(f"Invalid type {type(value)}")
 
@@ -43,7 +47,7 @@ def serialize_value(value: Any) -> server_pb2.Value:
             return server_pb2.Value(string_list=server_pb2.StringList(values=value))
     elif isinstance(value, dict):
         return server_pb2.Value(
-            struct_=server_pb2.Value(
+            struct_=server_pb2.Struct(
                 fields={k: serialize_value(v) for k, v in value.items()}
             )
         )

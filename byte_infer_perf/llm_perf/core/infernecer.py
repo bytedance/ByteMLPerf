@@ -1,6 +1,9 @@
-from typing import Any, Dict, Iterable
+import asyncio
+from typing import Any, AsyncIterable, Dict, Iterable
 
-from llm_perf.core.common import GenerateConfig, GenerateRequest
+from transformers import PreTrainedTokenizer
+
+from llm_perf.core.common import GenerateConfig, GenerateRequest, GenerateResult
 from llm_perf.core.scheduler import CoreScheduler
 from llm_perf.utils.logger import logger
 
@@ -9,13 +12,13 @@ class CoreInferencer:
     def __init__(self, scheduler: CoreScheduler) -> None:
         super().__init__()
         self.scheduler = scheduler
-        self.tokenizer = scheduler.tokenizer
+        self.tokenizer: PreTrainedTokenizer = scheduler.tokenizer
         self.add_sep_token = scheduler.add_sep_token
 
         self.scheduler.start()
         self.warmup()
 
-    def prepare_request(
+    async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
     ) -> GenerateRequest:
         input_ids = self.tokenizer.encode(prompt)
@@ -35,32 +38,56 @@ class CoreInferencer:
         req = GenerateRequest(input_ids, config)
         return req
 
-    def streaming_inference(
+    async def streaming_inference(
         self, prompt: str, generate_config: Dict[str, Any]
-    ) -> Iterable[Dict[str, Any]]:
-        req = self.prepare_request(prompt, generate_config)
-        for gen_res in self.scheduler.generate(req):
-            if req.generate_config.get_input_logits:
-                res, ppl, dump_file = gen_res
-                result = {"ppl": ppl, "dump_file": dump_file}
-            else:
-                res = gen_res
-                result = {"ppl": 0, "dump_file": ""}
-            token = self.tokenizer.decode(res.token_id)
-            result["token"] = token
-            logger.debug(f"inference result: {result}")
-            yield result
+    ) -> AsyncIterable[Dict[str, Any]]:
+        try:
+            req = await self.prepare_request(prompt, generate_config)
+            prompt_tokens = len(req.input_ids)
+            completion_tokens = 0
+            async for gen_res in self.scheduler.generate(req):
+                completion_tokens += 1
+                outputs = {
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": prompt_tokens + completion_tokens,
+                    },
+                    "choice": {},
+                }
+
+                if req.generate_config.get_input_logits:
+                    result, perplexity, logits_dump = gen_res
+                    if result is None:
+                        outputs["choice"].update(
+                            {
+                                "message": "",
+                                "perplexity": perplexity,
+                                "logits_dump": logits_dump,
+                            }
+                        )
+                    else:
+                        outputs["choice"].update(
+                            {
+                                "message": self.tokenizer.decode(result.token_id),
+                                "perplexity": perplexity,
+                                "logits_dump": logits_dump,
+                            }
+                        )
+                else:
+                    result: GenerateResult = gen_res
+                    outputs["choice"].update(
+                        {"message": self.tokenizer.decode(result.token_id)}
+                    )
+
+                logger.debug(f"steam inference result: {outputs}")
+                yield outputs
+        except Exception as e:
+            logger.error(f"stream inference error: {e}")
+            raise e
 
     def warmup(self):
-        prompt = "1+1=?"
-        # prompt = "你好"
-        #         prompt = "有关涉外仲裁协议的效力问题，下列表述不正确的是：____ \
-        # A. 约定的仲裁事项超出法律规定的范围的，仲裁协议无效 \
-        # B. 如果仲裁协议对仲裁事项和仲裁委员会约定不明确，当事人不能达成补充协议的，该仲裁协议无效 \
-        # C. 当事人约定两个或两个以上的仲裁机构进行仲裁的，该仲裁协议无效 \
-        # D. 当事人达成的仲裁协议只规定了仲裁地点，未约定仲裁机构，双方当事人在补充协议中选定了在该地点依法重新组建的仲裁机构的，仲裁协议有效 \
-        # 答案："
-        # prompt = "写一个美好结局的《卖火柴的小女孩》童话故事"
+        prompt = "中国的首都是哪里？"
         generate_config = {
             "min_new_tokens": 1,
             "max_new_tokens": 512,
@@ -70,8 +97,12 @@ class CoreInferencer:
         }
         logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
 
-        res = ""
-        for result in self.streaming_inference(prompt, generate_config):
-            res += result["token"]
+        async def _steram_warmup():
+            message = ""
+            async for result in self.streaming_inference(prompt, generate_config):
+                message += result["choice"]["message"]
+            result["choice"]["message"] = message
+            return result
 
-        logger.info(f"warmup response:{res}")
+        result = asyncio.run(_steram_warmup())
+        logger.info(f"warmup response: {result}")
