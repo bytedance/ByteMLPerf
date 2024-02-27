@@ -1,0 +1,31 @@
+{
+    "operator": "indexadd",
+    "iterations": 100,
+    "input_shape_list": [
+        [
+            [
+                4,
+                7168
+            ],
+            [
+                20,
+                7168
+            ]
+        ],
+        [
+            [
+                2048,
+                7168
+            ],
+            [
+                10240,
+                7168
+            ]
+        ]
+    ],
+    "dtype": [
+        "float32",
+        "bfloat16",
+        "half"
+    ]
+}
