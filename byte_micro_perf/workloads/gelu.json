@@ -1,0 +1,15 @@
+{
+    "operator": "gelu",
+    "iterations": 100,
+    "input_shape_list": [
+        [
+            1024,
+            1024
+        ]
+    ],
+    "dtype": [
+        "float32",
+        "bfloat16",
+        "half"
+    ]
+}

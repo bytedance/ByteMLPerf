@@ -1,0 +1,13 @@
+matplotlib
+pandas
+virtualenv==16.7.9
+scikit-learn
+prompt_toolkit
+tqdm
+opencv-python
+transformers
+tokenization
+fpdf
+attrs
+decorator
+typing-extensions==4.9.0

@@ -1,0 +1,15 @@
+{
+    "operator": "device2host",
+    "iterations": 100,
+    "input_shape_list": [
+        [
+            16,
+            1024,
+            1024
+        ]
+    ],
+    "dtype": [
+        "float32",
+        "half"
+    ]
+}
