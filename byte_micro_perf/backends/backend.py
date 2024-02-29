@@ -12,17 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
-import time
-import os
+
 from backends.utils import dump_communication_ops_report, dump_computation_ops_report
+
 
 class Backend(ABC):
     def __init__(self, workload_dict: Dict[str, Any], vendor_path: str):
-        self.op_name = workload_dict['operator']
-        self.iterations = workload_dict['iterations']
-        self.warmup = int(0.1 * workload_dict['iterations'])
+        self.op_name = workload_dict["operator"]
+        self.iterations = workload_dict["iterations"]
+        self.warmup = int(0.1 * workload_dict["iterations"])
         self.vendor_path = vendor_path
         self.op = None
         # communication params
@@ -37,10 +39,10 @@ class Backend(ABC):
     @abstractmethod
     def get_device_name(self):
         pass
-    
+
     @abstractmethod
     def get_backend_properties(self):
-        pass                                    
+        pass
 
     @abstractmethod
     def build_tensor(self, input_shapes: List[List[int]], dtype):
@@ -53,14 +55,14 @@ class Backend(ABC):
     @abstractmethod
     def sync_xpu(self):
         pass
-    
+
     @abstractmethod
     def initialize_ccl(self, rank, world_size):
-        pass    
-    
+        pass
+
     @abstractmethod
     def setup_2d_group(self):
-        pass        
+        pass
 
     def gemm(self):
         pass
@@ -90,10 +92,10 @@ class Backend(ABC):
         pass
 
     def unique(self):
-        pass                                    
+        pass
 
     def softmax(self):
-        pass     
+        pass
 
     def allreduce(self):
         pass
@@ -111,7 +113,7 @@ class Backend(ABC):
         pass
 
     def device2host(self):
-        pass   
+        pass
 
     def perf(self, input_shapes: List[List[int]], dtype):
         self.get_backend_properties()
@@ -119,18 +121,26 @@ class Backend(ABC):
         for _ in range(20):
             inputs = self.build_tensor(input_shapes, dtype)
             self._run_operation(self.op, inputs)
-        
+
         inputs = self.build_tensor(input_shapes, dtype)
-        
+
         start_time = time.time()
         for i in range(self.iterations):
-               result = self._run_operation(self.op, inputs)
-        self.sync_xpu() 
+            result = self._run_operation(self.op, inputs)
+        self.sync_xpu()
         execution_time = time.time() - start_time
-        latency = round(execution_time*1e6 / self.iterations, 2)
-        if self.op_name in ['allreduce', 'allgather', 'reducescatter', 'alltoall']:
-            report = dump_communication_ops_report(self.op_name, dtype, input_shapes, 
-                        self.group.size(), self.bandwidth_limit, latency)
+        latency = round(execution_time * 1e6 / self.iterations, 2)
+        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall"]:
+            report = dump_communication_ops_report(
+                self.op_name,
+                dtype,
+                input_shapes,
+                self.group.size(),
+                self.bandwidth_limit,
+                latency,
+            )
         else:
-            report = dump_computation_ops_report(dtype, input_shapes, self.bandwidth_limit, latency)    
+            report = dump_computation_ops_report(
+                dtype, input_shapes, self.bandwidth_limit, latency
+            )
         return report

@@ -13,28 +13,42 @@
 # limitations under the License.
 
 import json
-import os
+import logging
 import math
-from typing import Any, List, Dict
+import os
 from datetime import timedelta
-from backends.backend import Backend
-from backends.module_store import *
+from typing import Any, Dict, List
 
 import torch
 import torch.distributed as dist
 import torch.distributed.distributed_c10d as dist_c10d
+from backends.backend import Backend
+from backends.module_store import *
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("PerfEngine")
+
+
 class BackendGPU(Backend):
     def get_device_name(self):
         return torch.cuda.get_device_name(0)
-    
+
     def get_backend_properties(self):
-        self.memory_limit = int(torch.cuda.get_device_properties(0).total_memory / (1024 ** 3))
-        
-        if os.path.exists(self.vendor_path):
-            with open(self.vendor_path, 'r') as f:
+        self.memory_limit = int(
+            torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        )
+
+        if os.path.exists(self.vendor_path) and (self.vendor_path).endswith(".json"):
+            with open(self.vendor_path, "r") as f:
                 self.hw_info_dict = json.load(f)
                 # if the vendor path does not exist, please set this param manaually
                 self.bandwidth_limit = self.hw_info_dict["内存参数"]["内存"]["内存带宽(GB/s)"]
+        else:
+            log.warning(
+                "Vendor_path: [ {} ] was not found or not a full path points to json, please check your path!!! Otherwise, please set the hardware info manaually.".format(
+                    self.vendor_path
+                )
+            )
 
     def gemm(self):
         self.op = GemmOp()
@@ -61,10 +75,10 @@ class BackendGPU(Backend):
         self.op = SortOp()
 
     def unique(self):
-        self.op = UniqueOp()    
+        self.op = UniqueOp()
 
     def indexadd(self):
-        self.op = IndexAddOp()                                  
+        self.op = IndexAddOp()
 
     def softmax(self):
         self.op = SoftmaxOp()
@@ -86,46 +100,49 @@ class BackendGPU(Backend):
         self.op = AllToAllOp(self.group)
 
     def host2device(self):
-        self.op = Host2DeviceOp(torch.device('cuda'))
+        self.op = Host2DeviceOp(torch.device("cuda"))
 
     def device2host(self):
-        self.op = Device2HostOp()            
+        self.op = Device2HostOp()
 
     def build_tensor(self, input_shapes, dtype):
         dtype_size = torch.finfo(getattr(torch, dtype)).bits // 8
         size = sum([math.prod(shape) for shape in input_shapes])
         data_amount = size * 2 * dtype_size
-        data_cnt = (self.memory_limit - 4)* 1024**3 // data_amount
+        data_cnt = (self.memory_limit - 4) * 1024**3 // data_amount
         data_cnt = min(data_cnt, self.iterations)
         input_tensors_list = []
         for _ in range(data_cnt):
-            input_tensors = [torch.randn(shape).type(getattr(torch, dtype)).to(torch.device('cuda')) for shape in input_shapes]
+            input_tensors = [
+                torch.randn(shape).type(getattr(torch, dtype)).to(torch.device("cuda"))
+                for shape in input_shapes
+            ]
             input_tensors_list.append(input_tensors)
 
-        rand_idx = torch.randint(0, data_cnt, (1,)) 
+        rand_idx = torch.randint(0, data_cnt, (1,))
         if hasattr(self.op, "process_inputs"):
             input_tensors = self.op.process_inputs(*(input_tensors_list[rand_idx]))
-            return input_tensors   
+            return input_tensors
         return input_tensors_list[rand_idx]
 
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)
         return result
-    
+
     def sync_xpu(self):
         torch.cuda.synchronize()
         return True
 
     def initialize_ccl(self, rank, world_size):
         """
-        initialize distributed process groups and relevant ENVs 
+        initialize distributed process groups and relevant ENVs
         """
         torch.manual_seed(1)
-        os.environ['MASTER_ADDR'] = '127.0.0.1'
-        os.environ['MASTER_PORT'] = '49373'
-        os.environ['LOCAL_RANK'] = str(rank)
-        os.environ['RANK'] = str(rank)
-        os.environ['WORLD_SIZE'] = str(world_size)
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+        os.environ["MASTER_PORT"] = "49373"
+        os.environ["LOCAL_RANK"] = str(rank)
+        os.environ["RANK"] = str(rank)
+        os.environ["WORLD_SIZE"] = str(world_size)
 
         torch.cuda.set_device(rank)
         # Call the init process
@@ -135,9 +152,10 @@ class BackendGPU(Backend):
             world_size=world_size,
             rank=rank,
             store=None,
-            timeout=timedelta(seconds=timeout_seconds))
+            timeout=timedelta(seconds=timeout_seconds),
+        )
         self.setup_2d_group()
-        print(f'DIST INFO: rank {rank}, world_size {world_size}', flush=True)
+        log.warning("DIST: rank {}, world_size {}".format(rank, world_size))
 
     def setup_2d_group(self):
         self.rank = dist.get_rank()
@@ -152,4 +170,3 @@ class BackendGPU(Backend):
         dist_c10d._store_based_barrier = origin_store_based_barrier
         # wait for all ranks finish group initializing
         torch.distributed.barrier()
-        

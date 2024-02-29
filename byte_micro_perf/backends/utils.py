@@ -12,20 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
 import math
-import torch
-import numpy as np
+from typing import List
 
-def dump_communication_ops_report(op_name: str, dtype: str, input_shapes: List[List[int]], group_size: List[int], 
-                                bandwidth_limit: float, latency: float):
+import numpy as np
+import torch
+
+
+def dump_communication_ops_report(
+    op_name: str,
+    dtype: str,
+    input_shapes: List[List[int]],
+    group_size: List[int],
+    bandwidth_limit: float,
+    latency: float,
+):
     size = sum([math.prod(shape) for shape in input_shapes])
     dtype_size = torch.finfo(getattr(torch, dtype)).bits // 8
     mb = dtype_size * size / 1024 / 1024
-    algo_bw = dtype_size * size / latency / 1e3 
+    algo_bw = dtype_size * size / latency / 1e3
     bus_bw = algo_bw * (group_size - 1) / group_size
-    if op_name == 'allreduce':
-        bus_bw *=2
+    if op_name == "allreduce":
+        bus_bw *= 2
 
     bandwidth_utils = None
     if bandwidth_limit is not None:
@@ -36,14 +44,17 @@ def dump_communication_ops_report(op_name: str, dtype: str, input_shapes: List[L
         "Memory Size(MB)": round(mb, 2),
         "Group": group_size,
         "Algo bandwidth(GB/s)": round(algo_bw, 2),
-        "Bus bandwidth(GB/s)" : round(bus_bw, 2),
+        "Bus bandwidth(GB/s)": round(bus_bw, 2),
         "Bandwidth Utilization(%)": bandwidth_utils,
-        "Avg latency(us)" : round(latency, 2),
+        "Avg latency(us)": round(latency, 2),
     }
     return report
 
-def dump_computation_ops_report(dtype: str, input_shapes: List[List[int]], bandwidth_limit: float, latency: float):
-    size = sum([math.prod(shape) for shape in input_shapes])    
+
+def dump_computation_ops_report(
+    dtype: str, input_shapes: List[List[int]], bandwidth_limit: float, latency: float
+):
+    size = sum([math.prod(shape) for shape in input_shapes])
     dtype_size = torch.finfo(getattr(torch, dtype)).bits // 8
     mb = dtype_size * size / 1024 / 1024
     algo_bw = dtype_size * size / latency / 1e3
@@ -57,6 +68,6 @@ def dump_computation_ops_report(dtype: str, input_shapes: List[List[int]], bandw
         "Memory Size(MB)": round(mb, 2),
         "Algo bandwidth(GB/s)": round(algo_bw, 2),
         "Bandwidth Utilization(%)": bandwidth_utils,
-        "Avg latency(us)" : round(latency, 2)
+        "Avg latency(us)": round(latency, 2),
     }
     return report
