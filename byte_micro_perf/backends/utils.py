@@ -37,7 +37,7 @@ def dump_communication_ops_report(
 
     bandwidth_utils = None
     if bandwidth_limit is not None:
-        bandwidth_utils = round((algo_bw / bandwidth_limit), 2)
+        bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
 
     report = {
         "Dtype": dtype,
@@ -61,7 +61,7 @@ def dump_computation_ops_report(
 
     bandwidth_utils = None
     if bandwidth_limit is not None:
-        bandwidth_utils = round((algo_bw / bandwidth_limit), 2)
+        bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
 
     report = {
         "Dtype": dtype,

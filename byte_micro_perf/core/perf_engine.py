@@ -183,9 +183,9 @@ class PerfEngine:
                 if isinstance(input_shape[0], int):
                     input_shape = [input_shape]
                 reports = self.backend.perf(input_shape, dtype)
+                print(reports)
                 perf_reports.append(reports)
             base_report["Performance"] = perf_reports
-            print(base_report)
             # write output to json file
             if "Group" in base_report["Performance"][0]:
                 output_report_path = (

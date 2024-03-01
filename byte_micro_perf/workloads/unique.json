@@ -1,14 +1,20 @@
 {
-    "operator": "unique",
-    "iterations": 100,
-    "input_shape_list": [
-        [
-            10240
-        ]
+  "operator": "unique",
+  "iterations": 100,
+  "input_shape_list": [
+    [
+      10240
     ],
-    "dtype": [
-        "float32",
-        "bfloat16",
-        "half"
+    [
+      61440
+    ],
+    [
+      102400
     ]
+  ],
+  "dtype": [
+    "float32",
+    "bfloat16",
+    "half"
+  ]
 }
