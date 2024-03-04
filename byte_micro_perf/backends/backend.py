@@ -97,6 +97,9 @@ class Backend(ABC):
     def softmax(self):
         pass
 
+    def layernorm(self):
+        pass
+
     def allreduce(self):
         pass
 

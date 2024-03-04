@@ -90,7 +90,7 @@ class UniqueOp(torch.nn.Module):
         super().__init__()
 
     def forward(self, input_tensors):
-        result = torch.unique(input_tensors)
+        result = torch.unique(input_tensors, return_counts=True)
         return result
 
 
@@ -118,6 +118,17 @@ class SoftmaxOp(torch.nn.Module):
 
     def forward(self, hidden_states):
         logits = torch.nn.functional.softmax(hidden_states, dim=-1)
+        return logits
+
+
+class LayerNormOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, hidden_states):
+        logits = torch.nn.functional.layer_norm(
+            hidden_states, (hidden_states.shape[-1],)
+        )
         return logits
 
 

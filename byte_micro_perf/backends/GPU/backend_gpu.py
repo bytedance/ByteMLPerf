@@ -83,6 +83,9 @@ class BackendGPU(Backend):
     def softmax(self):
         self.op = SoftmaxOp()
 
+    def layernorm(self):
+        self.op = LayerNormOp()
+
     def allreduce(self):
         self.setup_2d_group()
         self.op = AllReduceOp(self.group)
