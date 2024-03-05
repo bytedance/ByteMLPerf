@@ -182,8 +182,12 @@ class PerfEngine:
             for input_shape in shape_list:
                 if isinstance(input_shape[0], int):
                     input_shape = [input_shape]
-                reports = self.backend.perf(input_shape, dtype)
-                print(reports)
+                try:    
+                    reports = self.backend.perf(input_shape, dtype)
+                    print(reports)
+                except Exception as e:
+                    print(e)
+                    reports = {}  
                 perf_reports.append(reports)
             base_report["Performance"] = perf_reports
             # write output to json file

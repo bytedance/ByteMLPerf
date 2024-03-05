@@ -122,17 +122,16 @@ class BackendGPU(Backend):
             ]
             input_tensors_list.append(input_tensors)
 
-        rand_idx = torch.randint(0, data_cnt, (1,))
         if hasattr(self.op, "process_inputs"):
-            input_tensors = self.op.process_inputs(*(input_tensors_list[rand_idx]))
-            return input_tensors
-        return input_tensors_list[rand_idx]
+            input_tensors_list = [self.op.process_inputs(*(input_tensor)) for input_tensor in input_tensors_list]
+
+        return input_tensors_list, data_cnt
 
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)
         return result
 
-    def sync_xpu(self):
+    def device_synchronize(self):
         torch.cuda.synchronize()
         return True
 
@@ -140,7 +139,6 @@ class BackendGPU(Backend):
         """
         initialize distributed process groups and relevant ENVs
         """
-        torch.manual_seed(1)
         os.environ["MASTER_ADDR"] = "127.0.0.1"
         os.environ["MASTER_PORT"] = "49373"
         os.environ["LOCAL_RANK"] = str(rank)
