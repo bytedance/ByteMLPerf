@@ -138,7 +138,7 @@ class AllReduceOp(torch.nn.Module):
         self.group = group
 
     def forward(self, input_tensors):
-        dist.all_reduce(input_tensors[0], group=self.group)
+        dist.all_reduce(input_tensors, group=self.group)
         return True
 
 

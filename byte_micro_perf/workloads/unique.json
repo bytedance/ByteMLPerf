@@ -3,6 +3,15 @@
   "iterations": 100,
   "input_shape_list": [
     [
+      20
+    ],
+    [
+      128
+    ],
+    [
+      1024
+    ],
+    [
       10240
     ],
     [
@@ -14,7 +23,7 @@
   ],
   "dtype": [
     "float32",
-    "bfloat16",
-    "half"
+    "half",
+    "int32"
   ]
 }

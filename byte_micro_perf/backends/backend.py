@@ -14,6 +14,7 @@
 
 import os
 import time
+import random
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
@@ -53,7 +54,7 @@ class Backend(ABC):
         pass
 
     @abstractmethod
-    def sync_xpu(self):
+    def device_synchronize(self):
         pass
 
     @abstractmethod
@@ -120,18 +121,23 @@ class Backend(ABC):
 
     def perf(self, input_shapes: List[List[int]], dtype):
         self.get_backend_properties()
-        # warmup
-        for _ in range(20):
-            inputs = self.build_tensor(input_shapes, dtype)
-            self._run_operation(self.op, inputs)
 
-        inputs = self.build_tensor(input_shapes, dtype)
+        inputs_list, data_cnt = self.build_tensor(input_shapes, dtype)
+        input_index_list = [
+            random.randint(0, data_cnt - 1) for _ in range(self.iterations)
+        ]
+
+        # warmup
+        for _ in range(10):
+            self._run_operation(self.op, inputs_list[0])
+        self.device_synchronize()
 
         start_time = time.time()
         for i in range(self.iterations):
-            result = self._run_operation(self.op, inputs)
-        self.sync_xpu()
+            result = self._run_operation(self.op, inputs_list[input_index_list[i]])
+        self.device_synchronize()
         execution_time = time.time() - start_time
+
         latency = round(execution_time * 1e6 / self.iterations, 2)
         if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall"]:
             report = dump_communication_ops_report(
@@ -144,6 +150,6 @@ class Backend(ABC):
             )
         else:
             report = dump_computation_ops_report(
-                dtype, input_shapes, self.bandwidth_limit, latency
+                self.op_name, dtype, input_shapes, self.bandwidth_limit, latency
             )
         return report

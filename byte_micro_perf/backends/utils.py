@@ -27,8 +27,12 @@ def dump_communication_ops_report(
     bandwidth_limit: float,
     latency: float,
 ):
-    size = sum([math.prod(shape) for shape in input_shapes])
-    dtype_size = torch.finfo(getattr(torch, dtype)).bits // 8
+    size = math.prod(input_shapes[0])
+    torch_type = getattr(torch, dtype)
+    if torch_type == torch.int32:
+        dtype_size = torch.iinfo(torch_type).bits // 8
+    else:
+        dtype_size = torch.finfo(torch_type).bits // 8
     mb = dtype_size * size / 1024 / 1024
     algo_bw = dtype_size * size / latency / 1e3
     bus_bw = algo_bw * (group_size - 1) / group_size
@@ -52,10 +56,37 @@ def dump_communication_ops_report(
 
 
 def dump_computation_ops_report(
-    dtype: str, input_shapes: List[List[int]], bandwidth_limit: float, latency: float
+    op_name: str,
+    dtype: str,
+    input_shapes: List[List[int]],
+    bandwidth_limit: float,
+    latency: float,
 ):
-    size = sum([math.prod(shape) for shape in input_shapes])
-    dtype_size = torch.finfo(getattr(torch, dtype)).bits // 8
+    if op_name == "add":
+        # c = a + b
+        # MAC_total = MAC_a + MAC_b + MAC_c
+        size = sum(
+            [math.prod(shape) for shape in input_shapes], math.prod(input_shapes[0])
+        )
+    elif op_name == "gemm":
+        # c = gemm(a, b)
+        # MAC_total = MAC_a + MAC_b + MAC_c
+        M = input_shapes[0][0]
+        K = input_shapes[0][1]
+        N = input_shapes[1][1]
+        size = M * K + K * N + M * N
+    elif op_name == "unique":
+        size = sum([math.prod(shape) for shape in input_shapes])
+    else:
+        # out = func(in)
+        # MAC_total = MAC_in + MAC_out
+        size = sum([math.prod(shape) for shape in input_shapes]) * 2
+
+    torch_type = getattr(torch, dtype)
+    if torch_type == torch.int32:
+        dtype_size = torch.iinfo(torch_type).bits // 8
+    else:
+        dtype_size = torch.finfo(torch_type).bits // 8
     mb = dtype_size * size / 1024 / 1024
     algo_bw = dtype_size * size / latency / 1e3
 
