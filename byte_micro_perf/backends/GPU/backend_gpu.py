@@ -109,7 +109,11 @@ class BackendGPU(Backend):
         self.op = Device2HostOp()
 
     def build_tensor(self, input_shapes, dtype):
-        dtype_size = torch.finfo(getattr(torch, dtype)).bits // 8
+        torch_type = getattr(torch, dtype)
+        if torch_type == torch.int32:
+            dtype_size = torch.iinfo(torch_type).bits // 8
+        else:
+            dtype_size = torch.finfo(torch_type).bits // 8
         size = sum([math.prod(shape) for shape in input_shapes])
         data_amount = size * 2 * dtype_size
         data_cnt = (self.memory_limit - 4) * 1024**3 // data_amount
@@ -117,15 +121,18 @@ class BackendGPU(Backend):
         input_tensors_list = []
         for _ in range(data_cnt):
             input_tensors = [
-                torch.randn(shape).type(getattr(torch, dtype)).to(torch.device("cuda"))
+                torch.randn(shape).type(torch_type).to(torch.device("cuda"))
                 for shape in input_shapes
             ]
             input_tensors_list.append(input_tensors)
 
         if hasattr(self.op, "process_inputs"):
-            input_tensors_list = [self.op.process_inputs(*(input_tensor)) for input_tensor in input_tensors_list]
+            input_tensors_list = [
+                self.op.process_inputs(*(input_tensor))
+                for input_tensor in input_tensors_list
+            ]
 
-        return input_tensors_list, data_cnt
+        return input_tensors_list, max(data_cnt, 1)
 
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)

@@ -123,8 +123,10 @@ class Backend(ABC):
         self.get_backend_properties()
 
         inputs_list, data_cnt = self.build_tensor(input_shapes, dtype)
-        input_index_list = [random.randint(0, data_cnt-1) for _ in range(self.iterations)]
-        
+        input_index_list = [
+            random.randint(0, data_cnt - 1) for _ in range(self.iterations)
+        ]
+
         # warmup
         for _ in range(10):
             self._run_operation(self.op, inputs_list[0])
@@ -148,6 +150,6 @@ class Backend(ABC):
             )
         else:
             report = dump_computation_ops_report(
-                dtype, input_shapes, self.bandwidth_limit, latency
+                self.op_name, dtype, input_shapes, self.bandwidth_limit, latency
             )
         return report
