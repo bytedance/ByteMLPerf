@@ -192,12 +192,8 @@ class PerfEngine:
 
             # write output to json file
             has_group = "Group" in base_report["Performance"][0]
-            output_report_path = (
-                f"result-{str(dtype)}"
-                + f"-group{base_report['Performance'][0]['Group']}"
-                if has_group
-                else "" + ".json"
-            )
+            output_report_path = (f"result-{str(dtype)}" + 
+              (f"-group{base_report['Performance'][0]['Group']}" if has_group else "") + ".json" )
             output_report_path = os.path.join(output_dir, output_report_path)
             local_rank = int(os.environ.get("LOCAL_RANK", 0))
             if local_rank == 0:
