@@ -75,7 +75,7 @@ def dump_computation_ops_report(
         K = input_shapes[0][1]
         N = input_shapes[1][1]
         size = M * K + K * N + M * N
-    elif op_name == "unique":
+    elif op_name == "unique" or op_name == "device2host" or "host2device":
         size = sum([math.prod(shape) for shape in input_shapes])
     else:
         # out = func(in)
