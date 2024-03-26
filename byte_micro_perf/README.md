@@ -29,10 +29,18 @@ python3 launch.py --task exp --hardware_type GPU
 --task: operator name                              please create a workload file for new operators by following the existing style in byte_micro_perf/workloads.
 
 --hardware_type: hardware category name            please derive a Backend class for your heterogeneous hardware in byte_micro_perf/backends.
-
 ```
 
 ### Expected Output
+For different types of operators (Compute-bound / Memory-bound), we adopt various metrics to comprehensively evaluate the performance of the operator. Regarding the various metrics, the explanations are as follows:
+| Metric    | Description |
+| -------- | ------- |
+| Memory Size(MB) | the rough sum of read/write bytes    |
+| Kernel bandwidth(GB/s) | the achieved bandwidth under given input size of this kernel     |
+| Bandwidth Utilization(%)    | the ratio of achieved bandwidth and theoretical bandwidth   |
+| Avg latency(us) |the average of kernel latencies|
+
+Example:
 ```
 {
     "Operator": "EXP",
@@ -43,7 +51,7 @@ python3 launch.py --task exp --hardware_type GPU
         {
             "Dtype": "float32",
             "Memory Size(MB)": 4.0,
-            "Algo bandwidth(GB/s)": 271.83,
+            "Kernel bandwidth(GB/s)": 271.83,
             "Bandwidth Utilization(%)": 0.17,
             "Avg latency(us)": 15.43
         }
