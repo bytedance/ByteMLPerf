@@ -54,7 +54,7 @@ elif [ $1 == "unet-onnx-fp32" ]; then
     tar xf general_perf/download/unet.tar -C general_perf/model_zoo/sota/
 elif [ $1 == "gpt2-torch-fp32" ]; then
     wget -O general_perf/download/traced_gpt2.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/traced_gpt2.tar
-    tar xf general_perf/download/gpt2.tar -C general_perf/model_zoo/sota/
+    tar xf general_perf/download/traced_gpt2.tar -C general_perf/model_zoo/sota/
 elif [ $1 == "chatglm2-6b-torch-fp16" ]; then
     wget -O general_perf/download/chatglm2-6b.tar https://lf-bytemlperf.17mh.cn/obj/bytemlperf-zoo/chatglm2-6b.tar
     tar xf general_perf/download/chatglm2-6b.tar -C general_perf/model_zoo/sota/
