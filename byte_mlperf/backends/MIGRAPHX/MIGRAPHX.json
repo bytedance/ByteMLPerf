@@ -1,0 +1,11 @@
+[
+    {
+      "name": "model_precision",
+      "note": "請指定模型的精度",
+      "dialog_type": "Radiolist Dialog",
+      "options": ["FP32","FP16"],
+      "type": "str",
+      "default": "FP32",
+      "depends": null
+    }
+]
