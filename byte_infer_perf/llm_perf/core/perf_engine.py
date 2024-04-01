@@ -28,10 +28,11 @@ os.chdir(BYTE_MLPERF_ROOT)
 sys.path.insert(0, BYTE_MLPERF_ROOT)
 
 
-from llm_perf.benchmark.bench import benchmark
+from llm_perf.benchmark.bench import benchmark, bench_performance_ILU
 from llm_perf.utils.logger import logger, setup_logger
 from llm_perf.utils.reporter import Reporter, ReportType
 
+from llm_perf.backends.ILU.benchmark import ILUbenchmark
 
 def get_args():
     """Parse commandline."""
@@ -98,6 +99,11 @@ class PerfEngine:
         self.result_queue = mp.Queue()
         self.jobs: List[mp.Process] = []
         self.server_process = None
+        
+        #lzh modify for 0328
+        self.batch_size = 1
+        self.ilu_benchmark = None
+
 
     def __del__(self):
         self.stop_server()
@@ -112,7 +118,7 @@ class PerfEngine:
             "torchrun",
             "--master_port",
             "19999",
-            "--nproc-per-node",
+            "--nproc_per_node",
             str(tp_size),
             "llm_perf/launch.py",
             "--task",
@@ -151,6 +157,7 @@ class PerfEngine:
             # logger already exit
             print(f"server process already exit with {self.server_process.poll()}")
 
+
     def start_benchmark(
         self,
         workload: Dict[str, Any],
@@ -158,21 +165,44 @@ class PerfEngine:
         input_tokens: int,
         report_type: ReportType,
     ):
-        clients = 1 if report_type == ReportType.ACCURACY else batch_size
-        for i in range(clients):
-            p = mp.Process(
-                target=benchmark,
-                args=(
-                    i,
-                    workload,
-                    report_type,
-                    input_tokens,
-                    self.result_queue,
-                    self.args,
-                ),
-            )
-            self.jobs.append(p)
-            p.start()
+        
+        #lzh add for 0328
+        if not self.isILU(self.backend_type):
+            clients = 1 if report_type == ReportType.ACCURACY else batch_size
+        else:
+            self.batch_size = batch_size
+            clients = 1
+            max_tokens = workload['max_new_tokens']
+            if report_type == ReportType.PERFORMANCE and self.ilu_benchmark == None:
+                self.ilu_benchmark = ILUbenchmark(self.batch_size, workload, input_tokens, self.result_queue, max_tokens)
+
+        if self.isILU(self.backend_type) and report_type == ReportType.PERFORMANCE:
+            pass
+        else:
+            for i in range(clients):
+                p = mp.Process(
+                    target=benchmark,
+                    args=(
+                        i,
+                        workload,
+                        report_type,
+                        input_tokens,
+                        self.result_queue,
+                        self.args,
+                        self.batch_size,
+                        self.backend_type
+                        ,self.ilu_benchmark
+                    ),
+                )
+                self.jobs.append(p)
+                p.start()
+
+
+    def isILU(self, backend_type):
+        return backend_type == 'ILU'
+    
+    def isAccuracyTest(self, report_type):
+        return report_type == ReportType.ACCURACY
 
     def run_perf(
         self,
@@ -182,14 +212,25 @@ class PerfEngine:
         input_tokens: int,
         report_type: ReportType,
     ) -> None:
-        # 1. Start server
-        self.start_server(tp_size, batch_size)
-
+        
+        if self.isILU(self.backend_type) and not self.isAccuracyTest(report_type):
+            pass
+        else:
+            # 1. Start server
+            self.start_server(tp_size, batch_size)
         # 2. Benchmark clients
         self.start_benchmark(workload, batch_size, input_tokens, report_type)
 
         # 3. Get result
-        alive_clients = batch_size if report_type == ReportType.PERFORMANCE else 1
+        #lzh add for 0328 start
+        if self.backend_type != 'ILU':
+            alive_clients = batch_size if report_type == ReportType.PERFORMANCE else 1
+        else:
+            alive_clients = 1
+            if report_type == ReportType.PERFORMANCE:
+                self.result_queue.put("@start")
+        #lzh add for 0328 stop    
+
         started: bool = False
         while alive_clients:
             result = self.result_queue.get()
@@ -197,19 +238,28 @@ class PerfEngine:
                 if not started:
                     # Reset reporter mate information
                     self.reporter.update_meta(tp_size, batch_size, input_tokens)
+                    if self.backend_type == 'ILU' and report_type == ReportType.PERFORMANCE:
+                        bench_performance_ILU(self.ilu_benchmark, batch_size, input_tokens, self.result_queue)
                 started = True
                 continue
             elif result is None:
                 alive_clients = alive_clients - 1
                 continue
+
+            
             self.reporter.submit(result, report_type)
+
+        logger.info(f"run_perf batch_size:{batch_size}")
 
         # 4. Join benchmark client process
         for p in self.jobs:
             p.join()
 
-        # 5. Kill server process
-        self.stop_server()
+        if self.isILU(self.backend_type) and not self.isAccuracyTest(report_type):
+            pass
+        else:
+            # 5. Kill server process
+            self.stop_server()
 
     def start_engine(self) -> None:
         """
@@ -265,6 +315,7 @@ class PerfEngine:
             for tp_size in workload["tp_sizes"]:
                 for batch_size in workload["batch_sizes"]:
                     for input_tokens in workload["input_tokens"]:
+                        logger.info(f"***** start_engine batch_size:{batch_size} input_tokens:{input_tokens} *******")
                         self.run_perf(
                             workload,
                             tp_size,
