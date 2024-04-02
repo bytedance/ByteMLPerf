@@ -133,7 +133,7 @@ class PerfEngine:
         output_dir = os.path.abspath("reports/" + self.backend_type)
         os.makedirs(output_dir, exist_ok=True)
 
-        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
+        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall"]:
             for group in self.workload["group"]:
                 mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
         else:
