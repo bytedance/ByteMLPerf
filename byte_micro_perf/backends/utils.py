@@ -47,7 +47,7 @@ def dump_communication_ops_report(
         "Dtype": dtype,
         "Memory Size(MB)": round(mb, 2),
         "Group": group_size,
-        "Algo bandwidth(GB/s)": round(algo_bw, 2),
+        "Kernel bandwidth(GB/s)": round(algo_bw, 2),
         "Bus bandwidth(GB/s)": round(bus_bw, 2),
         "Bandwidth Utilization(%)": bandwidth_utils,
         "Avg latency(us)": round(latency, 2),
@@ -97,7 +97,7 @@ def dump_computation_ops_report(
     report = {
         "Dtype": dtype,
         "Memory Size(MB)": round(mb, 2),
-        "Algo bandwidth(GB/s)": round(algo_bw, 2),
+        "Kernel bandwidth(GB/s)": round(algo_bw, 2),
         "Bandwidth Utilization(%)": bandwidth_utils,
         "Avg latency(us)": round(latency, 2),
     }
