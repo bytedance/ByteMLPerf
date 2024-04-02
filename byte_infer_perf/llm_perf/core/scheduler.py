@@ -11,7 +11,6 @@ from typing import Any, AsyncIterable, Dict, Iterable, List, Tuple, Union
 import torch
 import torch.multiprocessing as mp
 from torch import distributed as dist
-from transformers import PreTrainedTokenizer
 
 import llm_perf.core.common as core_comm
 from llm_perf.core.common import (
@@ -32,7 +31,6 @@ class CoreScheduler(ABC):
         self,
         engine: CoreEngine,
         sampler: CoreSampler,
-        tokenizer: PreTrainedTokenizer,
         comm=core_comm,
         **kwargs,
     ) -> None:
@@ -41,8 +39,6 @@ class CoreScheduler(ABC):
         self.packet_queue: Queue[self.Packet] = Queue()
         self.engine: CoreEngine = engine
         self.sampler: CoreSampler = sampler
-        self.tokenizer = tokenizer
-        self.add_sep_token = kwargs.get("add_sep_token", False)
 
     def start(self):
         if dist.is_initialized():
@@ -116,7 +112,9 @@ class CoreScheduler(ABC):
             return ""
 
     async def get_packet_results(
-        self, get_input_logits: bool, packet: Packet
+        self, 
+        get_input_logits: bool, 
+        packet: Packet
     ) -> Union[
         AsyncIterable[GenerateResult], Tuple[AsyncIterable[GenerateResult], float, str]
     ]:
@@ -154,7 +152,8 @@ class CoreScheduler(ABC):
         return
 
     async def generate(
-        self, req: GenerateRequest
+        self, 
+        req: GenerateRequest
     ) -> Union[
         AsyncIterable[GenerateResult], Tuple[AsyncIterable[GenerateResult], float, str]
     ]:

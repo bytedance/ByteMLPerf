@@ -12,7 +12,7 @@ import torch
 import transformers
 
 from llm_perf import server_pb2, server_pb2_grpc
-from llm_perf.core.infernecer import CoreInferencer
+from llm_perf.core.inferencer import CoreInferencer
 from llm_perf.utils.logger import logger
 from llm_perf.utils.pb import deserialize_value, serialize_value
 

@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
 import torch
-from transformers import PreTrainedTokenizer
 
 import llm_perf.backends.GPU.common as comm
 from llm_perf.core.common import Packet
@@ -19,11 +18,10 @@ class GpuScheduler(CoreScheduler):
         self,
         engine: CoreEngine,
         sampler: CoreSampler,
-        tokenizer: PreTrainedTokenizer,
         **kwargs,
     ) -> None:
         super().__init__(
-            engine=engine, sampler=sampler, tokenizer=tokenizer, comm=comm, **kwargs
+            engine=engine, sampler=sampler, comm=comm, **kwargs
         )
         self.max_batch_size = kwargs.get("max_batch_size")
 
@@ -31,7 +29,7 @@ class GpuScheduler(CoreScheduler):
     def scheduler_loop(self):
         batch: List[Packet] = []
         while True:
-            # 1. get new task
+            # 1. select batch --> batch
             batch = self.select_batch(batch)
             if not batch:
                 with self.packet_queue.not_empty:
