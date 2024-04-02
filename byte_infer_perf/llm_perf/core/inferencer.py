@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 from typing import Any, AsyncIterable, Dict, Iterable
 
 from transformers import AutoTokenizer, PreTrainedTokenizer
@@ -6,51 +7,6 @@ from transformers import AutoTokenizer, PreTrainedTokenizer
 from llm_perf.core.common import GenerateConfig, GenerateRequest, GenerateResult
 from llm_perf.core.scheduler import CoreScheduler
 from llm_perf.utils.logger import logger
-
-import os
-import importlib
-
-
-# get model impl from orig or vendor 
-def get_model_impl(
-    model_config: Dict[str, Any], 
-    hardware_type: str
-):
-    # for example, "ChatGLMForConditionalGeneration"
-    model_inferface = model_config["model_interface"]
-    model_name = model_config["model_name"]
-
-    # Get orig model
-    spec = importlib.util.spec_from_file_location(
-        model_name, f"llm_perf/model_zoo/{model_name.split('-')[0]}.py"
-    )
-    base_module_impl = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(base_module_impl)
-
-    orig_model = getattr(base_module_impl, model_inferface)
-
-    # Get vendor model
-    vendor_model_path = f"llm_perf/backends/{hardware_type}/model_impl"
-    if not os.path.exists(vendor_model_path):
-        logger.info(
-            f"{vendor_model_path} not exists, {model_inferface} model select <ByteMLPerf base model>"
-        )
-        return orig_model
-
-    vendor_model_impl = importlib.import_module(
-        ".", package=vendor_model_path.replace("/", ".")
-    )
-    if not model_name in vendor_model_impl.__all__.keys():
-        logger.info(
-            f"can't find {model_name} in {vendor_model_path}/__init__, model select <ByteMLPerf base model>"
-        )
-        return orig_model
-
-    vendor_model = vendor_model_impl.__all__[model_name]
-    logger.info(
-        f"find {model_inferface} in {vendor_model_path}, model select <Vendor model>"
-    )
-    return vendor_model
 
 
 class CoreInferencer:
@@ -69,22 +25,21 @@ class CoreInferencer:
             trust_remote_code=True
         )
         logger.info(f'load tokenizer: {tokenizer_path}')
-   
-        # set up model and scheduler
+        
+        # import setup
         setup = importlib.import_module(
             ".setup", package=f"llm_perf.backends.{hardware_type}"
         )
         logger.info(f"import setup: {setup}")
 
-        # load model impl: orig or vendor_custom
-        model_impl = get_model_impl(model_config, hardware_type)
-
+        # set up scheduler
         self.scheduler = setup.setup_scheduler(
-            model_impl, 
             model_config, 
-            tokenizer=self.tokenizer, 
-            max_batch_size=max_batch_size
+            self.tokenizer.pad_token_id, 
+            max_batch_size
         )
+
+        # start scheduler and warmup
         self.scheduler.start()
         self.warmup()
 

@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List
 
 import torch
@@ -10,72 +11,38 @@ from llm_perf.core.engine import CoreEngine
 from llm_perf.utils.logger import logger
 
 
-
 class GpuEngine(CoreEngine):
     def __init__(
-        self, 
-        model_cls, 
-        model_config: Dict[str, Any], 
-        tokenizer: PreTrainedTokenizer, 
+        self, model_config, pad_token_id, 
         **kwarg
     ) -> None:
         super().__init__()
-        
-        # check dist
-        if dist.is_initialized():
-            self.local_rank = dist.get_rank()
-            self.world_size = dist.get_world_size()
-        else:
-            self.local_rank = 0
-            self.world_size = 1
 
+        self.model_config = model_config
+        self.pad_token_id = pad_token_id
+        
+        # set up environ
+        self.setup()
+        
         # init multiprocessr msgr
         if self.world_size > 1:
             self.mlp_manager = GPUMultiProcessMsgr(
                 self.local_rank, self.world_size, "MultiProcessMsgr"
             )
-
-        # aux configs
-        self.pad_token_id = tokenizer.pad_token_id
-        self.model_cls = model_cls
-        self.model_config = model_config
-
-        # init inference
-        self.init_inference()
-
-        
-    def init_inference(self):
-        # set device
-        torch.cuda.set_device(self.local_rank)
-
-        # create model based on model_name
-        model_name = self.model_config['model_name']
-        if model_name == 'gpt2':
-            pass
-        elif model_name == 'chatglm':
-            from llm_perf.model_zoo.chatglm import ChatGLMConfig
-            self.model = self.model_cls.from_pretrained(
-                self.model_config["model_path"], config=ChatGLMConfig(**self.model_config["network"])
+    
+    def setup(self):
+        # init distributed env if needed
+        self.world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        self.local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        if self.world_size > 1:
+            torch.distributed.init_process_group(
+                backend="nccl", 
+                world_size=self.world_size, 
+                rank=self.local_rank
             )
-        elif model_name == 'chatglm2':
-            from llm_perf.model_zoo.chatglm2 import ChatGLMConfig
-            self.model = self.model_cls.from_pretrained(
-                self.model_config["model_path"], config=ChatGLMConfig(**self.model_config["network"])
-            )
-        elif model_name == 'llama2':
-            from llm_perf.model_zoo.llama2 import LlamaConfig
-            self.model = self.model_cls.from_pretrained(
-                self.model_config["model_path"], config=LlamaConfig(**self.model_config["network"])
-            )
-        else:
-            raise ValueError(f'Unknown model name: {model_name}')
 
-        # set model
-        self.model.eval()
-        self.model.half().cuda()
-
-        logger.info(f"cuda model {self.model_config['model_path']} loaded {self.model}")
-
+        # load model using base method
+        self.model = GpuEngine.load_model(self.model_config, "GPU")
 
 
     def broadcast_inputs(self, *args):
@@ -151,7 +118,7 @@ class GpuEngine(CoreEngine):
             input_logits = outputs.logits[..., :-1, :].contiguous()
             next_tokens_logits = outputs.logits[:, -1, :].contiguous()
 
-            logger.info(
+            logger.debug(
                 f"tensor shape: {outputs.logits.shape}\n"
                 f"next tokens logits: {next_tokens_logits.shape}\n"
                 f"input logits: {input_logits.shape}\n"
