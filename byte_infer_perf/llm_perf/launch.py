@@ -25,7 +25,6 @@ def main():
     loglevel = os.environ.get("LOG_LEVEL", "info")
     setup_logger(loglevel)
 
-    # Get Model config
     config_path = "llm_perf/model_zoo/" + args.task + ".json"
     if os.path.exists(config_path):
         with open(config_path, "r") as f:
@@ -33,7 +32,7 @@ def main():
             logger.info(f"load model config: {config_path}")
     else:
         logger.error(
-            f"{config_path} not exists! The json file corresponding to the task {task} cannot be found. \
+            f"{config_path} not exists! The json file corresponding to the task {args.task} cannot be found. \
             Please confirm whether the file path is correct."
         )
         sys.exit(1)
