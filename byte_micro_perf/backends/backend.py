@@ -113,6 +113,9 @@ class Backend(ABC):
     def alltoall(self):
         pass
 
+    def broadcast(self):
+        pass
+
     def host2device(self):
         pass
 
@@ -139,7 +142,7 @@ class Backend(ABC):
         execution_time = time.time() - start_time
 
         latency = round(execution_time * 1e6 / self.iterations, 2)
-        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall"]:
+        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
             report = dump_communication_ops_report(
                 self.op_name,
                 dtype,
