@@ -113,9 +113,6 @@ class Backend(ABC):
     def alltoall(self):
         pass
 
-    def broadcast(self):
-        pass
-
     def host2device(self):
         pass
 

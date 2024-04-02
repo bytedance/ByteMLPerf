@@ -201,16 +201,6 @@ class AllToAllOp(torch.nn.Module):
         return True
 
 
-class BroadcastOp(torch.nn.Module):
-    def __init__(self, group):
-        super().__init__()
-        self.group = group
-
-    def forward(self, input_tensors):
-        dist.broadcast(input_tensors, 0, self.group)
-        return True
-    
-
 class Device2HostOp(torch.nn.Module):
     def __init__(self):
         super().__init__()
