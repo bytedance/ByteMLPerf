@@ -40,8 +40,32 @@ class CoreInferencer:
         )
 
         # start scheduler and warmup
-        self.scheduler.start()
+        if not self.scheduler.started:
+            self.scheduler.start()
+
         self.warmup()
+
+
+    def warmup(self):
+        prompt = "中国的首都是哪里？"
+        generate_config = {
+            "min_new_tokens": 1,
+            "max_new_tokens": 512,
+            "top_k": 1,
+            "temperature": 0.2,
+            "presence_penalty": 1.0,
+        }
+        logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
+
+        async def _steram_warmup():
+            message = ""
+            async for result in self.streaming_inference(prompt, generate_config):
+                message += result["choice"]["message"]
+            result["choice"]["message"] = message
+            return result
+
+        result = asyncio.run(_steram_warmup())
+        logger.info(f"warmup response: {result}")
 
 
     async def prepare_request(
@@ -117,23 +141,4 @@ class CoreInferencer:
             logger.error(f"stream inference error: {e}")
             raise e
 
-    def warmup(self):
-        prompt = "中国的首都是哪里？"
-        generate_config = {
-            "min_new_tokens": 1,
-            "max_new_tokens": 512,
-            "top_k": 1,
-            "temperature": 0.2,
-            "presence_penalty": 1.0,
-        }
-        logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
 
-        async def _steram_warmup():
-            message = ""
-            async for result in self.streaming_inference(prompt, generate_config):
-                message += result["choice"]["message"]
-            result["choice"]["message"] = message
-            return result
-
-        result = asyncio.run(_steram_warmup())
-        logger.info(f"warmup response: {result}")
