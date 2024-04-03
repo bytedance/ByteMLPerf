@@ -112,7 +112,7 @@ class PerfEngine:
             "torchrun",
             "--master_port",
             "19999",
-            "--nproc-per-node",
+            "--nproc_per_node",
             str(tp_size),
             "llm_perf/launch.py",
             "--task",
