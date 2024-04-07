@@ -102,6 +102,10 @@ class BackendGPU(Backend):
         self.setup_2d_group()
         self.op = AllToAllOp(self.group)
 
+    def broadcast(self):
+        self.setup_2d_group()
+        self.op = BroadcastOp(self.group)
+
     def host2device(self):
         self.op = Host2DeviceOp(torch.device("cuda"))
 
