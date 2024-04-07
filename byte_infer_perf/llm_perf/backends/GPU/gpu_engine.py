@@ -1,17 +1,67 @@
 import os
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import torch
-from torch import distributed as dist
-from transformers import PreTrainedTokenizer
 
-from llm_perf.backends.GPU.common import GPUMultiProcessMsgr
-from llm_perf.core.common import Packet
+from llm_perf.core.generation import GenerateRequest
 from llm_perf.core.engine import CoreEngine
+from llm_perf.backends.GPU.gpu_process_messager import GPUMultiProcessMsgr
 from llm_perf.utils.logger import logger
 
 
 class GpuEngine(CoreEngine):
+    
+    class Packet(CoreEngine.Packet):
+        def __init__(self, request: GenerateRequest):
+            CoreEngine.Packet.__init__(self, request)
+
+            self.generation_start_time = None
+
+        def _is_finished(self) -> bool:
+            return self.is_finished()
+
+        @staticmethod
+        def prepare_inputs(
+            batch: List[CoreEngine.Packet],
+            **kwargs
+        ) -> Dict:
+            model_config = kwargs["model_config"]
+            pad_token_id = kwargs["pad_token_id"] 
+
+            all_input_ids = []
+            all_position_ids = []
+
+            max_seq_len = -1
+            for packet in batch:
+                cur_id_len = len(packet.request.input_ids) + len(packet.generate_ids)
+                max_seq_len = cur_id_len if cur_id_len > max_seq_len else max_seq_len
+
+            for packet in batch:
+                cur_id_len = len(packet.request.input_ids) + len(packet.generate_ids)
+                pad_len = max_seq_len - cur_id_len
+                input_ids = (
+                    packet.request.input_ids + 
+                    packet.generate_ids + 
+                    [pad_token_id] * pad_len
+                )
+                all_input_ids.append(input_ids)
+                all_position_ids.append([i for i in range(max_seq_len)])
+
+            model_inputs = {
+                "past_key_values": None, 
+                "attention_mask": None, 
+                "use_cache": None
+            }
+            model_inputs["input_ids"] = all_input_ids
+            model_inputs["position_ids"] = all_position_ids
+
+            model_name = model_config['model_name']
+            if model_name == 'chatglm2':
+                model_inputs["return_last_logit"] = False
+            return model_inputs
+
+
+
     def __init__(
         self, model_config, pad_token_id, 
         **kwarg
@@ -57,42 +107,16 @@ class GpuEngine(CoreEngine):
             return inputs
 
 
-    def prepare_inputs(self, batch: List[Packet]) -> Dict:
-        # TODO: prepare inputs based on model type
-        all_input_ids = []
-        all_position_ids = []
-
-        max_seq_len = -1
-        for packet in batch:
-            cur_id_len = len(packet.request.input_ids) + len(packet.generate_ids)
-            max_seq_len = cur_id_len if cur_id_len > max_seq_len else max_seq_len
-
-        for packet in batch:
-            cur_id_len = len(packet.request.input_ids) + len(packet.generate_ids)
-            pad_len = max_seq_len - cur_id_len
-            input_ids = (
-                packet.request.input_ids + 
-                packet.generate_ids + 
-                [self.pad_token_id] * pad_len
-            )
-            all_input_ids.append(input_ids)
-            all_position_ids.append([i for i in range(max_seq_len)])
-
-        model_inputs = {
-            "past_key_values": None, 
-            "attention_mask": None, 
-            "use_cache": None
-        }
-        model_inputs["input_ids"] = all_input_ids
-        model_inputs["position_ids"] = all_position_ids
-
-        model_name = self.model_config['model_name']
-        if model_name == 'chatglm2':
-            model_inputs["return_last_logit"] = False
+    def prepare_inputs(self, batch: List[CoreEngine.Packet]) -> Dict:
+        model_inputs = GpuEngine.Packet.prepare_inputs(
+            batch, 
+            model_config=self.model_config, 
+            pad_token_id=self.pad_token_id
+        )
         return model_inputs
 
 
-    def do_inference(self, packets: List[Packet]):
+    def do_inference(self, packets: List[CoreEngine.Packet]):
         # set device
         torch.cuda.set_device(self.local_rank)
 

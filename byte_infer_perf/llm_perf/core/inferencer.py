@@ -4,7 +4,7 @@ from typing import Any, AsyncIterable, Dict, Iterable
 
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from llm_perf.core.common import GenerateConfig, GenerateRequest, GenerateResult
+from llm_perf.core.generation import GenerateConfig, GenerateRequest, GenerateResult
 from llm_perf.core.scheduler import CoreScheduler
 from llm_perf.utils.logger import logger
 
@@ -33,7 +33,7 @@ class CoreInferencer:
         logger.info(f"import setup: {setup}")
 
         # set up scheduler
-        self.scheduler = setup.setup_scheduler(
+        self.scheduler : CoreScheduler = setup.setup_scheduler(
             model_config, 
             self.tokenizer.pad_token_id, 
             max_batch_size

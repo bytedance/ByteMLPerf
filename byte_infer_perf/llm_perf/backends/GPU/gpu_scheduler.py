@@ -5,11 +5,10 @@ from typing import List
 
 import torch
 
-import llm_perf.backends.GPU.common as comm
-from llm_perf.core.common import Packet
 from llm_perf.core.engine import CoreEngine
 from llm_perf.core.sampler import CoreSampler
 from llm_perf.core.scheduler import CoreScheduler
+from llm_perf.backends.GPU.gpu_engine import GpuEngine
 from llm_perf.utils.logger import logger
 
 
@@ -21,13 +20,16 @@ class GpuScheduler(CoreScheduler):
         **kwargs,
     ) -> None:
         super().__init__(
-            engine=engine, sampler=sampler, comm=comm, **kwargs
+            engine=engine, 
+            sampler=sampler, 
+            packet_cls=GpuEngine.Packet, 
+            **kwargs
         )
         self.max_batch_size = kwargs.get("max_batch_size")
 
     @torch.inference_mode()
     def scheduler_loop(self):
-        batch: List[Packet] = []
+        batch: List[CoreEngine.Packet] = []
         while True:
             # 1. select batch --> batch
             batch = self.select_batch(batch)
@@ -60,7 +62,7 @@ class GpuScheduler(CoreScheduler):
                     batch[i].finish()
 
             # 6. is not finished -> remain
-            remained: List[Packet] = []
+            remained: List[CoreEngine.Packet] = []
             for packet in batch:
                 if not packet.is_finished():
                     remained.append(packet)
@@ -68,7 +70,7 @@ class GpuScheduler(CoreScheduler):
 
     def select_batch(self, batch):
         batching_size: int = len(batch)
-        new_select_packets: List[Packet] = []
+        new_select_packets: List[CoreEngine.Packet] = []
 
         while not self.packet_queue.empty():
             if batching_size == self.max_batch_size:

@@ -13,13 +13,10 @@ import torch
 import torch.multiprocessing as mp
 from torch import distributed as dist
 
-import llm_perf.core.common as core_comm
-from llm_perf.core.common import (
+from llm_perf.core.generation import (
     GenerateConfig,
     GenerateRequest,
-    GenerateResult,
-    Packet,
-    PacketStatus,
+    GenerateResult
 )
 from llm_perf.core.engine import CoreEngine
 from llm_perf.core.sampler import CoreSampler
@@ -32,7 +29,7 @@ class CoreScheduler(ABC):
         self,
         engine: CoreEngine,
         sampler: CoreSampler,
-        comm=core_comm,
+        packet_cls=CoreEngine.Packet,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -40,7 +37,7 @@ class CoreScheduler(ABC):
         self.engine: CoreEngine = engine
         self.sampler: CoreSampler = sampler 
 
-        self.Packet = comm.Packet
+        self.Packet = packet_cls
         self.packet_queue: Queue[self.Packet] = Queue()
 
         self.started = False
@@ -111,7 +108,7 @@ class CoreScheduler(ABC):
     async def get_packet_results(
         self, 
         get_input_logits: bool, 
-        packet: Packet
+        packet: CoreEngine.Packet
     ) -> Union[
         AsyncIterable[GenerateResult], Tuple[AsyncIterable[GenerateResult], float, str]
     ]:
@@ -150,8 +147,7 @@ class CoreScheduler(ABC):
 
 
 
-
-    async def dump_last_logits(self, result, packet: Packet):
+    async def dump_last_logits(self, result, packet: CoreEngine.Packet):
         """Dump prompt logits
 
         Args:
