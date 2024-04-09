@@ -9,7 +9,7 @@ from llm_perf.core.scheduler import CoreScheduler
 from llm_perf.utils.logger import logger
 
 
-class CoreInferencer:
+class LLMPerfEndpoint:
     def __init__(
         self, model_config, 
         hardware_type, max_batch_size
@@ -26,7 +26,7 @@ class CoreInferencer:
         )
         logger.info(f'load tokenizer: {tokenizer_path}')
         
-        # import setup
+        # import setup according to hardware_type
         setup = importlib.import_module(
             ".setup", package=f"llm_perf.backends.{hardware_type}"
         )
@@ -43,6 +43,7 @@ class CoreInferencer:
         if not self.scheduler.started:
             self.scheduler.start()
 
+        
         self.warmup()
 
 

@@ -12,13 +12,13 @@ import torch
 import transformers
 
 from llm_perf import server_pb2, server_pb2_grpc
-from llm_perf.core.inferencer import CoreInferencer
+from llm_perf.server.endpoint import LLMPerfEndpoint
 from llm_perf.utils.logger import logger
 from llm_perf.utils.pb import deserialize_value, serialize_value
 
 
 class Inference(server_pb2_grpc.InferenceServicer):
-    def __init__(self, inferencer: CoreInferencer) -> None:
+    def __init__(self, inferencer: LLMPerfEndpoint) -> None:
         super().__init__()
         self.inferencer = inferencer
 
@@ -47,7 +47,7 @@ class Inference(server_pb2_grpc.InferenceServicer):
             )
 
 
-async def serve(args, inferencer: CoreInferencer) -> None:
+async def serve(args, inferencer: LLMPerfEndpoint) -> None:
     workers = min(os.cpu_count(), 100)
     server = grpc.aio.server(
         migration_thread_pool=futures.ThreadPoolExecutor(
