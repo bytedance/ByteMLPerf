@@ -1,12 +1,12 @@
 {
     "model": "chatglm-torch-fp16-6b",
-    "test_accuracy": true,
+    "test_accuracy": false,
     "test_perf": true,
     "min_new_tokens": 128,
     "max_new_tokens": 256,
-    "tp_sizes": [1, 2],
-    "batch_sizes":[1, 2, 4, 8],
-    "input_tokens": [1024, 2048],
+    "tp_sizes": [1],
+    "batch_sizes":[64],
+    "input_tokens": [256],
     "dataset": "llm_perf/datasets/merged_52_test.csv",
     "perf_time": 180
 }

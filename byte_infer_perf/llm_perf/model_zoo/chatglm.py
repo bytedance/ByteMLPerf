@@ -902,7 +902,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         self.layernorm_epsilon = config.layernorm_epsilon
         self.inner_hidden_size = config.inner_hidden_size
         self.hidden_size_per_attention_head = self.hidden_size // self.num_attention_heads
-        self.position_encoding_2d = config.position_encoding_2d
+        self.position_encoding_2d = False#config.position_encoding_2d
         self.pre_seq_len = config.pre_seq_len
         self.prefix_projection = config.prefix_projection
 

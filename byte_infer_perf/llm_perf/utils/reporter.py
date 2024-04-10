@@ -180,6 +180,11 @@ class Reporter:
         performance["Token Throughput"] = completion_tokens / (
             self.last_submit_time - self.start_time
         )
+
+        logger.info(
+            f"completion_tokens={completion_tokens}, use time={self.last_submit_time - self.start_time}"
+        )
+
         performance["Request Number"] = self.request
         performance["QPS"] = self.request / (self.last_submit_time - self.start_time)
 

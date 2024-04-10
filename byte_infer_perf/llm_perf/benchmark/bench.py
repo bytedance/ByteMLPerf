@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from llm_perf import server_pb2, server_pb2_grpc
 from llm_perf.utils.pb import deserialize_value, serialize_value
 
+from llm_perf.backends.ILU.benchmark import ILUbenchmark
 
 @backoff.on_exception(backoff.expo, Exception, factor=0.1, max_value=1, max_tries=3)
 def gen_stream_request(
@@ -110,7 +111,6 @@ def bench_performance(
         ):
             res = {k: deserialize_value(v) for k, v in res.outputs.items()}
             output_messages += res["choice"]["message"]
-
             if not first_token_latency:
                 first_token_latency = time.time() - st
 
@@ -134,6 +134,35 @@ def bench_performance(
     result_queue.put(None)
 
 
+def bench_performance_ILU(
+    ilu_benchmark: ILUbenchmark,
+    batch_size: int,
+    input_tokens: int,
+    result_queue: mp.Queue,
+):
+    first_token_latency =0
+    prompt_tokens = 0
+    completion_tokens = 0
+    per_token_latency = 0
+    
+    ilu_benchmark.benchmark_vllm_ftl(batch_size, input_tokens)
+    ilu_benchmark.benchmark_vllm(batch_size, input_tokens)
+    prompt_tokens, completion_tokens, first_token_latency, per_token_latency = ilu_benchmark.getresult()
+
+    result = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "first_token_latency": first_token_latency,
+        "per_token_latency": per_token_latency,
+    }
+    logger.info(f"prompt response: {result}")
+    result_queue.put(result)    
+    
+    time.sleep(1)
+    result_queue.put(None)
+
+
+
 def benchmark(
     index: int,
     workload: Dict[str, Any],
@@ -141,8 +170,11 @@ def benchmark(
     input_tokens: int,
     result_queue: mp.Queue,
     args,
+    batch_size: int,
+    backend_type: int,
+    ilu_benchmark: ILUbenchmark,
 ):
-    logger.debug(f"{report_type.name} bench_{index} start")
+    logger.info(f"{report_type.name} bench_{index} start")
 
     with grpc.insecure_channel(f"{args.host}:{args.port}") as channel:
         stub = server_pb2_grpc.InferenceStub(channel)
@@ -152,7 +184,11 @@ def benchmark(
             if report_type == ReportType.ACCURACY:
                 bench_accuracy(stub, workload, result_queue)
             elif report_type == ReportType.PERFORMANCE:
-                bench_performance(stub, index, workload, input_tokens, result_queue)
+                logger.info(f" ========= report_type == ReportType.PERFORMANCE backend_type: {backend_type}")
+                #lzh add for 0328
+                if backend_type != 'ILU':
+                    logger.info(f" ============ backend_type != 'ILU'")
+                    bench_performance(stub, index, workload, input_tokens, result_queue)
         except Exception as e:
             logger.error(f"{report_type.name} bench_{index} error: {e}")
             raise e
