@@ -22,7 +22,7 @@ To start llm_perf, there are 3 steps:
 
 You can run following command automate all steps with chatglm2 model on GPU backend
 ```shell
-python3 byte_infer_perf/llm_perf/core/perf_engine.py --task chatglm2-torch-fp16-6b --hardware_type GPU
+python3 byte_infer_perf/llm_perf/launch.py --task chatglm2-torch-fp16-6b --hardware_type GPU
 ```
 
 ## Models
