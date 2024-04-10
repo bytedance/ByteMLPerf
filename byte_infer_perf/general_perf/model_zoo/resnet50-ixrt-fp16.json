@@ -1,0 +1,19 @@
+{
+    "model": "resnet50-ixrt-fp16",
+    "model_path": "general_perf/general_perf/model_zoo/regular/open_resnet50/resnet50.pt",
+    "onnx_model_path": "general_perf/general_perf/model_zoo/regular/open_resnet50/resnet50.onnx",
+    "engine_path": "general_perf/general_perf/model_zoo/regular/open_resnet50/resnet50.engine",
+    "framework": "Pytorch",
+    "framework_version": "1.8.1",
+    "framework_iluvatar": "IXRT",
+    "framework_iluvatar_version": "tensorrt.__version__",
+    "model_format": "pt",
+    "model_precision": "FP32",
+    "inputs": "input",
+    "outputs": "softmax_tensor",
+    "input_shape":  {"input_1.1": [1, 3, 224, 224]},
+    "input_type": "FLOAT32",
+    "dataset_name": "open_imagenet",
+    "max_batch_size": 64,
+    "layout": "NCHW"
+}
