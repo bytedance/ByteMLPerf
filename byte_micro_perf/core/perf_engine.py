@@ -174,7 +174,7 @@ class PerfEngine:
         else:
             shape_list = []
             for M, N, K in self.workload["M/N/K"]:
-                shape_list.append([[M, N], [N, K]])
+                shape_list.append([[M, K], [K, N]])
 
         for dtype in self.workload["dtype"]:
             perf_reports = []
@@ -182,23 +182,31 @@ class PerfEngine:
             for input_shape in shape_list:
                 if isinstance(input_shape[0], int):
                     input_shape = [input_shape]
-                reports = self.backend.perf(input_shape, dtype)
+                try:
+                    reports = self.backend.perf(input_shape, dtype)
+                except Exception as e:
+                    print(e)
+                    reports = {}
                 perf_reports.append(reports)
             base_report["Performance"] = perf_reports
-            print(base_report)
+
             # write output to json file
-            if "Group" in base_report["Performance"][0]:
-                output_report_path = (
-                    output_dir
-                    + "/result-"
-                    + str(dtype)
-                    + "-{}".format(base_report["Performance"][0]["Group"])
-                    + ".json"
+            has_group = "Group" in base_report["Performance"][0]
+            output_report_path = (
+                f"result-{str(dtype)}"
+                + (
+                    f"-group{base_report['Performance'][0]['Group']}"
+                    if has_group
+                    else ""
                 )
-            else:
-                output_report_path = output_dir + "/result-" + str(dtype) + ".json"
-            with open(output_report_path, "w") as file:
-                json.dump(base_report, file, indent=4)
+                + ".json"
+            )
+            output_report_path = os.path.join(output_dir, output_report_path)
+            local_rank = int(os.environ.get("LOCAL_RANK", 0))
+            if local_rank == 0:
+                logging.info(base_report["Performance"])
+                with open(output_report_path, "w") as file:
+                    json.dump(base_report, file, indent=4)
 
         return True
 

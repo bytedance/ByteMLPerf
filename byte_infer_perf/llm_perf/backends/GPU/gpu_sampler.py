@@ -2,8 +2,10 @@ from typing import Any, Dict, List, Tuple, Union
 
 import torch
 
-from llm_perf.core.common import GenerateResult, Packet
+from llm_perf.core.generation import GenerateResult
+from llm_perf.core.engine import CoreEngine
 from llm_perf.core.sampler import CoreSampler
+
 from llm_perf.utils.logger import logger
 
 
@@ -11,7 +13,7 @@ class GpuSampler(CoreSampler):
     def __init__(self) -> None:
         super().__init__()
 
-    def sample(self, packets: List[Packet], logits: torch.FloatTensor) -> List[int]:
+    def sample(self, packets: List[CoreEngine.Packet], logits: torch.FloatTensor) -> List[int]:
         top_p = [p.request.generate_config.top_p for p in packets]
         if all(p == 1.0 for p in top_p):
             top_p = None
@@ -95,7 +97,7 @@ class GpuSampler(CoreSampler):
 
     def postprocess(
         self,
-        packets: List[Packet],
+        packets: List[CoreEngine.Packet],
         infer_outputs: Dict[str, torch.FloatTensor],
         next_tokens: List[int],
     ) -> List[GenerateResult]:

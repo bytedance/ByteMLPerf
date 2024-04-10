@@ -1,24 +1,12 @@
-import os
 import queue
 from multiprocessing import managers
-from typing import Any, Dict, List
 
 import torch
 
-from llm_perf.core import common
+from llm_perf.core.engine import MultiProcessMsgr
 
 
-class Packet(common.Packet):
-    def __init__(self, request: common.GenerateRequest):
-        common.Packet.__init__(self, request)
-
-        self.generation_start_time = None
-
-    def _is_finished(self) -> bool:
-        return self.is_finished()
-
-
-class GPUMultiProcessMsgr(common.MultiProcessMsgr, managers.BaseManager):
+class GPUMultiProcessMsgr(MultiProcessMsgr, managers.BaseManager):
     def __init__(self, local_rank: int, world_size: int, name: str):
         self.rank = local_rank
         self.world_size = world_size

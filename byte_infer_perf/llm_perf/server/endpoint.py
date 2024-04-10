@@ -1,22 +1,73 @@
 import asyncio
+import importlib
 from typing import Any, AsyncIterable, Dict, Iterable
 
-from transformers import PreTrainedTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from llm_perf.core.common import GenerateConfig, GenerateRequest, GenerateResult
+from llm_perf.core.generation import GenerateConfig, GenerateRequest, GenerateResult
 from llm_perf.core.scheduler import CoreScheduler
 from llm_perf.utils.logger import logger
 
 
-class CoreInferencer:
-    def __init__(self, scheduler: CoreScheduler) -> None:
+class LLMPerfEndpoint:
+    def __init__(
+        self, model_config, 
+        hardware_type, max_batch_size
+    ) -> None:
         super().__init__()
-        self.scheduler = scheduler
-        self.tokenizer: PreTrainedTokenizer = scheduler.tokenizer
-        self.add_sep_token = scheduler.add_sep_token
 
-        self.scheduler.start()
+        # load tokenizer
+        tokenizer_path = model_config["tokenizer"]["path"]
+        self.add_sep_token = model_config["tokenizer"]["add_sep_token"]
+        self.tokenizer : PreTrainedTokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path=tokenizer_path, 
+            local_files_only=True,
+            trust_remote_code=True
+        )
+        logger.info(f'load tokenizer: {tokenizer_path}')
+        
+        # import setup according to hardware_type
+        setup = importlib.import_module(
+            ".setup", package=f"llm_perf.backends.{hardware_type}"
+        )
+        logger.info(f"import setup: {setup}")
+
+        # set up scheduler
+        self.scheduler : CoreScheduler = setup.setup_scheduler(
+            model_config, 
+            self.tokenizer.pad_token_id, 
+            max_batch_size
+        )
+
+        # start scheduler and warmup
+        if not self.scheduler.started:
+            self.scheduler.start()
+
+        
         self.warmup()
+
+
+    def warmup(self):
+        prompt = "中国的首都是哪里？"
+        generate_config = {
+            "min_new_tokens": 1,
+            "max_new_tokens": 512,
+            "top_k": 1,
+            "temperature": 0.2,
+            "presence_penalty": 1.0,
+        }
+        logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
+
+        async def _steram_warmup():
+            message = ""
+            async for result in self.streaming_inference(prompt, generate_config):
+                message += result["choice"]["message"]
+            result["choice"]["message"] = message
+            return result
+
+        result = asyncio.run(_steram_warmup())
+        logger.info(f"warmup response: {result}")
+
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
@@ -24,6 +75,8 @@ class CoreInferencer:
         input_ids = self.tokenizer.encode(prompt)
         if self.add_sep_token:
             input_ids.append(self.tokenizer.sep_token_id)
+
+        # create generate config
         config = GenerateConfig(
             min_new_tokens=generate_config.get("min_new_tokens", 0),
             max_new_tokens=generate_config.get("max_new_tokens", 0),
@@ -39,9 +92,12 @@ class CoreInferencer:
         return req
 
     async def streaming_inference(
-        self, prompt: str, generate_config: Dict[str, Any]
+        self, 
+        prompt: str, 
+        generate_config: Dict[str, Any]
     ) -> AsyncIterable[Dict[str, Any]]:
         try:
+            # create GenerateRequest object
             req = await self.prepare_request(prompt, generate_config)
             prompt_tokens = len(req.input_ids)
             completion_tokens = 0
@@ -86,23 +142,4 @@ class CoreInferencer:
             logger.error(f"stream inference error: {e}")
             raise e
 
-    def warmup(self):
-        prompt = "中国的首都是哪里？"
-        generate_config = {
-            "min_new_tokens": 1,
-            "max_new_tokens": 512,
-            "top_k": 1,
-            "temperature": 0.2,
-            "presence_penalty": 1.0,
-        }
-        logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
 
-        async def _steram_warmup():
-            message = ""
-            async for result in self.streaming_inference(prompt, generate_config):
-                message += result["choice"]["message"]
-            result["choice"]["message"] = message
-            return result
-
-        result = asyncio.run(_steram_warmup())
-        logger.info(f"warmup response: {result}")

@@ -90,7 +90,7 @@ class UniqueOp(torch.nn.Module):
         super().__init__()
 
     def forward(self, input_tensors):
-        result = torch.unique(input_tensors)
+        result = torch.unique(input_tensors, return_counts=True)
         return result
 
 
@@ -121,13 +121,24 @@ class SoftmaxOp(torch.nn.Module):
         return logits
 
 
+class LayerNormOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, hidden_states):
+        logits = torch.nn.functional.layer_norm(
+            hidden_states, (hidden_states.shape[-1],)
+        )
+        return logits
+
+
 class AllReduceOp(torch.nn.Module):
     def __init__(self, group):
         super().__init__()
         self.group = group
 
     def forward(self, input_tensors):
-        dist.all_reduce(input_tensors[0], group=self.group)
+        dist.all_reduce(input_tensors, group=self.group)
         return True
 
 
@@ -195,8 +206,8 @@ class Device2HostOp(torch.nn.Module):
         super().__init__()
 
     def forward(self, input_tensors):
-        assert input_tensors[0].device.type != "cpu"
-        output_cpu = input_tensors[0].cpu()
+        assert input_tensors.device.type != "cpu"
+        output_cpu = input_tensors.cpu()
         return output_cpu
 
 
@@ -206,10 +217,10 @@ class Host2DeviceOp(torch.nn.Module):
         self.xpu_device = xpu_device
 
     def process_inputs(self, input_tensors):
-        new_inputs = input_tensors[0].cpu()
-        return [new_inputs]
+        new_inputs = input_tensors.cpu()
+        return new_inputs
 
     def forward(self, input_tensors):
-        assert input_tensors[0].device.type == "cpu"
-        output_xpu = input_tensors[0].to(self.xpu_device)
+        assert input_tensors.device.type == "cpu"
+        output_xpu = input_tensors.to(self.xpu_device)
         return output_xpu
