@@ -131,17 +131,22 @@ class Backend(ABC):
         ]
 
         # warmup
-        for _ in range(10):
+        num_warm_up = 10
+        for _ in range(num_warm_up):
             self._run_operation(self.op, inputs_list[0])
-        self.device_synchronize()
 
-        start_time = time.time()
+        # perf
+        self.device_synchronize()
+        start_time = time.perf_counter_ns()
         for i in range(self.iterations):
             result = self._run_operation(self.op, inputs_list[input_index_list[i]])
         self.device_synchronize()
-        execution_time = time.time() - start_time
+        end_time = time.perf_counter_ns()
 
-        latency = round(execution_time * 1e6 / self.iterations, 2)
+        # time in us
+        exec_time = (end_time - start_time) / 1e3
+        latency = round(exec_time / self.iterations, 2)
+
         if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
             report = dump_communication_ops_report(
                 self.op_name,

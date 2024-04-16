@@ -48,6 +48,7 @@ def dump_communication_ops_report(
 
     report = {
         "Dtype": dtype,
+        "Tensor Shapes": input_shapes, 
         "Memory Size(MB)": round(mb, 2),
         "Group": group_size,
         "Kernel bandwidth(GB/s)": round(algo_bw, 2),
@@ -99,6 +100,7 @@ def dump_computation_ops_report(
 
     report = {
         "Dtype": dtype,
+        "Tensor Shapes": input_shapes, 
         "Memory Size(MB)": round(mb, 2),
         "Kernel bandwidth(GB/s)": round(algo_bw, 2),
         "Bandwidth Utilization(%)": bandwidth_utils,
