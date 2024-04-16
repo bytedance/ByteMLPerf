@@ -1,6 +1,6 @@
 matplotlib
 pandas
-virtualenv
+virtualenv==16.7.12
 scikit-learn
 prompt_toolkit
 tqdm

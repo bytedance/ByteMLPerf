@@ -228,7 +228,7 @@ class Host2DeviceOp(torch.nn.Module):
 
     def process_inputs(self, input_tensors):
         new_inputs = input_tensors.cpu()
-        return new_inputs
+        return [new_inputs]
 
     def forward(self, input_tensors):
         assert input_tensors.device.type == "cpu"
