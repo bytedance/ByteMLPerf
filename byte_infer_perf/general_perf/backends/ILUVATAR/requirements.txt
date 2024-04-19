@@ -1,0 +1,4 @@
+transformers==4.35.2
+datasets==2.14.7
+onnx==1.15.0
+pandas==2.1.3
