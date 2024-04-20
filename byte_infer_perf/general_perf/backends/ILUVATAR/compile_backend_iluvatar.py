@@ -77,7 +77,7 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
 
         # model preprocessing
-        # self.get_onnx(configs)
+        self.get_onnx(configs)
 
         # build engine
         if model_name == 'widedeep':
@@ -118,7 +118,7 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             "framework": 
                 configs['model_info']['framework'],
             "compile_precision": 
-                configs['model_info']['model_precision'],
+                configs['model_info']['model_precision'].replace('FP32', 'FP16'),
             "input_type": 
                 configs['model_info']['input_type'].split(","),
             "max_batch_size": 

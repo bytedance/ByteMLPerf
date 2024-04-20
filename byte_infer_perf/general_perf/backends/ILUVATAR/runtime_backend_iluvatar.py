@@ -60,6 +60,8 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         self.context = None
         self.batch_size = -1
         self.workload = None
+        self.predict_fps = None
+        self.predict_time = None
 
     # Dual-core inference of Tian SoC BI-150 graphics card
     def benchmark(self, dataloader):
@@ -87,10 +89,18 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                 avg_latency = round(((performance_reports[0]['AVG Latency'] + performance_reports[1]['AVG Latency']) / 2.0), 2)
                 p99_latency = round(((performance_reports[0]['P99 Latency'] + performance_reports[1]['P99 Latency']) / 2.0), 2)
 
+                predict_qps = performance_reports[0]['predict QPS'] + performance_reports[1]['predict QPS']
+                predict_avg_latency = round(((performance_reports[0]['predict AVG Latency'] + performance_reports[1]['predict AVG Latency']) / 2.0), 2)
+                predict_p99_latency = round(((performance_reports[0]['predict P99 Latency'] + performance_reports[1]['predict P99 Latency']) / 2.0), 2)
+
                 merged_dict['BS'] = performance_reports[0]['BS']
                 merged_dict['QPS'] = qps
                 merged_dict['AVG Latency'] = avg_latency
                 merged_dict["P99 Latency"] = p99_latency
+
+                merged_dict['predict QPS'] = predict_qps
+                merged_dict['predict AVG Latency'] = predict_avg_latency
+                merged_dict["predict P99 Latency"] = predict_p99_latency
 
         return merged_dict  
 
@@ -170,8 +180,12 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                         inputs[i]["nbytes"],
                         cudart.cudaMemcpyKind.cudaMemcpyHostToDevice
             )
-
+        
+        starttime = time.time()
         context.execute_v2(allocations)
+        endtime = time.time()
+
+        self.predict_time = endtime - starttime
         
         # D2H: device to host
         for i in range(len(outputs)):
@@ -208,6 +222,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         batch_size = self.get_loaded_batch_size()
         iterations = self.workload['iterations']
         times_range = []
+        predict_range = []
         report = {}
         report["BS"] = batch_size
 
@@ -223,12 +238,19 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             self.predict(test_data)
             end_time = time.time()
             times_range.append(end_time - start_time)
+            predict_range.append(self.predict_time)
 
         times_range.sort()
         tail_latency = round(
             times_range[int(len(times_range) * 0.99)] * 1000, 2)
         avg_latency = round(sum(times_range) / iterations * 1000, 2)
         qps = int(1000.0 * self.batch_size / avg_latency)
+
+        predict_range.sort()
+        predict_tail_latency = round(
+            predict_range[int(len(predict_range) * 0.99)] * 1000, 2)
+        predict_avg_latency = round(sum(predict_range) / iterations * 1000, 2)
+        fps = int(1000.0 * batch_size / predict_avg_latency)
 
         log.info(
             'Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}'.
@@ -237,6 +259,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         report['QPS'] = qps
         report['AVG Latency'] = avg_latency
         report['P99 Latency'] = tail_latency
+
+        report['predict QPS'] = fps
+        report['predict AVG Latency'] = predict_avg_latency
+        report['predict P99 Latency'] = predict_tail_latency
 
         return report
 
@@ -249,6 +275,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         model = self.configs['model']
         model_name = self.configs['model'].split("-")[0]
         model_path = self.configs['model_path']
+        self.model_runtimes = []
 
         if model_name == 'videobert' or model_name == 'conformer':
             engine_path = model_path.split(".")[0] + "_end.engine"
@@ -282,6 +309,8 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"   
 
         engine, context = init_by_tensorrt(engine_path)
+
+        self.model_runtimes.append(engine)
 
         self.input_type = self.configs['input_type']
         
