@@ -50,15 +50,9 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
         MaxBatchSize = configs['model_info']['max_batch_size']
 
         # call the ONNX model and the compiled engine file
-        if model_name == 'videobert' or model_name == 'conformer':
+        if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
             onnx_model_path = model_path.split(".")[0] + "_end.onnx"
             engine_path = model_path.split(".")[0] + "_end.engine"
-        
-        elif model_name == 'yolov5':
-            onnx_model_path = model_path.split(".")[0] + "_sim.onnx"
-            cmd = f'onnxsim {model_path} {onnx_model_path}'
-            subprocess.call(cmd, shell=True)
-            engine_path = model_path.split(".")[0] + "_sim.engine"
 
         elif model_name == 'widedeep':
             onnx_model_path = model_path + "/" + model + "_end.onnx"
@@ -192,16 +186,34 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             savedmodel_to_onnx(model_path=model_path, output_path=onnx_model_path)
             print("***Convert pb model to onnx model success!***")
 
-        # Convert ONNX model to plugin operator model
+        # Convert ONNX model to plugin operator model: Support fusion of dynamic and static graphs
         """
-            ***********待处理问题记录************
+            *********************待处理问题记录: 后续会更新进展************************
             conformer 模型不能利用optimizer.py脚本转换, 因为attention比较特殊, 利用处理好的onnx模型进行测试;
             roformer  模型目前没有实现通过加载固定shape的onnx, 生成不同的batch的engine实现动态shape推理;
             widedeep  模型目前对原始的onnx暂时不支持直接动态shape推理, 对模型做了一系列处理, 并且不需要进行optimizer.py脚本处理, 直接加载处理好的onnx模型;
         """        
         if model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or \
-            model_name == 'videobert' or model_name == 'swin':
+            model_name == 'videobert':
             
             cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path}'
             subprocess.call(cmd, shell=True)
             print("***Convert onnx model to plugin operator model success!***")
+
+        elif model_name == 'swin':
+            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type swint'
+            subprocess.call(cmd, shell=True)
+            print("***Convert onnx model to plugin operator model success!***")
+
+        elif model_name == 'yolov5':
+            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type yolo'
+            subprocess.call(cmd, shell=True)
+            print("***Convert onnx model to plugin operator model success!***")
+
+        elif model_name == 'roformer':
+            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type roformer'
+            subprocess.call(cmd, shell=True)
+            print("***Convert onnx model to plugin operator model success!***")
+        
+
+

@@ -211,6 +211,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         output_name = output_tensor_map.split(",")
 
         for i in range(len(output_name)):
+            if model_name == 'yolov5':
+                result[output_name[0]] = outputs_list[0]
+                break
+
             result[output_name[i]] = outputs_list[i]
         
         if model_name == 'videobert':
@@ -277,11 +281,8 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         model_path = self.configs['model_path']
         self.model_runtimes = []
 
-        if model_name == 'videobert' or model_name == 'conformer':
+        if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
             engine_path = model_path.split(".")[0] + "_end.engine"
-
-        elif model_name == 'yolov5':
-            engine_path = model_path.split(".")[0] + "_sim.engine"
 
         elif model_name == 'widedeep':
             engine_path = model_path + "/" + model + "_end.engine"
