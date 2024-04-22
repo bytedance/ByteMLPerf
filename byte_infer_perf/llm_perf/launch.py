@@ -22,7 +22,7 @@ from typing import Any, Dict, Iterable, List
 
 
 # ${prj_root}/
-BYTE_MLPERF_ROOT = os.path.byte_infer_perfdirname(os.path.dirname(os.path.abspath(__file__)))
+BYTE_MLPERF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(BYTE_MLPERF_ROOT)
 sys.path.insert(0, BYTE_MLPERF_ROOT)
 
