@@ -21,7 +21,7 @@ import tensorrt
 from general_perf.backends.ILUVATAR.common import load_ixrt_plugin
 load_ixrt_plugin()
 
-from general_perf.backends.ILUVATAR.common import build_engine
+from general_perf.backends.ILUVATAR.common import build_engine, build_igie_engine
 from general_perf.backends.ILUVATAR.optimizer.passes import *
 from general_perf.tools.torch_to_onnx import torch_to_onnx
 from general_perf.tools.saved_to_onnx import savedmodel_to_onnx
@@ -75,10 +75,9 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
 
         # build engine
         if model_name == 'widedeep':
-            for bs in configs['workload']['batch_sizes']:
-                onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_sim.onnx"
-                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_sim_" + str(bs) + ".engine"    
-                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=bs)
+            onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape.onnx"
+            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"    
+            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
         
         # elif model_name == 'roformer':
         #     # onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-bs32.onnx"
@@ -98,6 +97,18 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end.onnx"
             engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"    
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+
+        elif model_name == 'gpt2':
+            for bs in configs['workload']['batch_sizes']:
+                onnx_model_path = os.path.dirname(model_path) + "/" + model + ".onnx"
+                engine_path = os.path.dirname(model_path) + "/" + model + "_bs" + str(bs) + ".so" 
+
+                for key, val in configs['model_info']['input_shape'].items():
+                    input_dict = {}
+                    val = val = [val[0] * bs] + val[1:] 
+                    input_dict[key] = val
+                    
+                build_igie_engine(model_name=model_name, model_path=onnx_model_path, input_dict=input_dict, model_framework='onnx', precision='fp16', engine_path=engine_path)
 
         else:
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
@@ -214,6 +225,6 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type roformer'
             subprocess.call(cmd, shell=True)
             print("***Convert onnx model to plugin operator model success!***")
-        
 
-
+        else:
+            pass

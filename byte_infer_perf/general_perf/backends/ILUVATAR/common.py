@@ -1,8 +1,7 @@
+import os
 import random
 import torch
-import time
 import ctypes
-import argparse
 import numpy as np
 from os.path import join, dirname, exists
 
@@ -11,7 +10,9 @@ from tensorrt import Dims
 import pycuda.driver as cuda
 from cuda import cuda,cudart
 import threading
-import time
+
+import tvm
+from general_perf.backends.ILUVATAR.utils.import_model import import_model_to_igie
 
 
 def setup_seed(seed):
@@ -74,11 +75,11 @@ def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize):
     
     elif model_name == 'widedeep':
         profile.set_shape(
-            "new_numeric_placeholder:0", Dims([MaxBatchSize, 13]), Dims([MaxBatchSize, 13]), Dims([MaxBatchSize, 13]))
+            "new_numeric_placeholder:0", Dims([1, 13]), Dims([16, 13]), Dims([MaxBatchSize, 13]))
         profile.set_shape(
-            "new_categorical_placeholder:0", Dims([MaxBatchSize * 26, 2]), Dims([MaxBatchSize * 26, 2]), Dims([MaxBatchSize * 26, 2]))
+            "new_categorical_placeholder:0", Dims([1 * 26, 2]), Dims([16 * 26, 2]), Dims([MaxBatchSize * 26, 2]))
         profile.set_shape(
-            "import/head/predictions/zeros_like:0", Dims([MaxBatchSize, 1]), Dims([MaxBatchSize, 1]), Dims([MaxBatchSize, 1]))
+            "import/head/predictions/zeros_like:0", Dims([1, 1]), Dims([16, 1]), Dims([MaxBatchSize, 1]))
         
     elif model_name == 'conformer':
         profile.set_shape(
@@ -164,6 +165,16 @@ def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize):
     print("***Build dynamic shape engine success!***")
 
 
+def build_igie_engine(model_name, model_path, input_dict, model_framework, precision, engine_path):
+    if not os.path.exists(engine_path):
+        target = tvm.target.iluvatar(model="MR", options="-libs=cudnn,cublas,ixinfer")
+        mod, params = import_model_to_igie(model_path, input_dict, model_framework)
+        lib = tvm.relay.build(mod, target=target, params=params, precision=precision, verbose=False)
+        lib.export_library(engine_path)
+    else:
+        pass
+
+
 def init_by_tensorrt(engine_path):
     datatype = tensorrt.DataType.FLOAT
     host_mem = tensorrt.IHostMemory
@@ -235,6 +246,7 @@ class Task:
         checkCudaErrors(cudart.cudaSetDevice(device_id))
         load_fun(bs)
         self.lock = lock
+        
 
     def run(self):
         checkCudaErrors(cudart.cudaSetDevice(self.device_id))
@@ -271,3 +283,4 @@ def checkCudaErrors(result):
         return result[1]
     else:
         return result[1:]
+

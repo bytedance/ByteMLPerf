@@ -20,8 +20,10 @@ import numpy as np
 from tqdm import tqdm
 import threading
 
+import tvm
 from general_perf.backends import runtime_backend
 from general_perf.backends.ILUVATAR.common import init_by_tensorrt, setup_io_bindings
+from general_perf.backends.ILUVATAR.utils import get_target
 from general_perf.backends.ILUVATAR.common import Task, TaskThread, _cudaGetErrorEnum, checkCudaErrors
 from tensorrt import Dims
 from cuda import cuda, cudart
@@ -67,42 +69,65 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
     def benchmark(self, dataloader):
         performance_reports = []
         merged_dict = {}
+        model_name = self.configs["model"].split("-")[0]
         
         workers = []
         lock = threading.Lock()
-        for i in range(2):
-            device_id = i
-            task = Task(self.batch_size, dataloader, device_id, self.load, self.benchmark_interact, performance_reports, lock)
+        if model_name != 'gpt2':
+            for i in range(2):
+                device_id = i
+                task = Task(self.batch_size, dataloader, device_id, self.load, self.benchmark_interact, performance_reports, lock)
 
-            work = TaskThread(task.run, [])
-            workers.append(work)
-            work.start()
-            work.join()
+                work = TaskThread(task.run, [])
+                workers.append(work)
+                work.start()
+                work.join()
+                
+            del self.engine
+            del self.context
             
-        del self.engine
-        del self.context
+        else:
+            # ****to do******
+            for i in range(1):
+                device_id = i
+                task = Task(self.batch_size, dataloader, device_id, self.load, self.benchmark_interact, performance_reports, lock)
 
-        if len(performance_reports[0]) == len(performance_reports[1]):
-            if performance_reports[0].keys() == performance_reports[1].keys():
+                work = TaskThread(task.run, [])
+                workers.append(work)
+                work.start()
+                work.join()
 
-                qps = performance_reports[0]['QPS'] + performance_reports[1]['QPS']
-                avg_latency = round(((performance_reports[0]['AVG Latency'] + performance_reports[1]['AVG Latency']) / 2.0), 2)
-                p99_latency = round(((performance_reports[0]['P99 Latency'] + performance_reports[1]['P99 Latency']) / 2.0), 2)
+        if model_name != 'gpt2':
+            if len(performance_reports[0]) == len(performance_reports[1]):
+                if performance_reports[0].keys() == performance_reports[1].keys():
 
-                predict_qps = performance_reports[0]['predict QPS'] + performance_reports[1]['predict QPS']
-                predict_avg_latency = round(((performance_reports[0]['predict AVG Latency'] + performance_reports[1]['predict AVG Latency']) / 2.0), 2)
-                predict_p99_latency = round(((performance_reports[0]['predict P99 Latency'] + performance_reports[1]['predict P99 Latency']) / 2.0), 2)
+                    qps = performance_reports[0]['QPS'] + performance_reports[1]['QPS']
+                    avg_latency = round(((performance_reports[0]['AVG Latency'] + performance_reports[1]['AVG Latency']) / 2.0), 2)
+                    p99_latency = round(((performance_reports[0]['P99 Latency'] + performance_reports[1]['P99 Latency']) / 2.0), 2)
 
-                merged_dict['BS'] = performance_reports[0]['BS']
-                merged_dict['QPS'] = qps
-                merged_dict['AVG Latency'] = avg_latency
-                merged_dict["P99 Latency"] = p99_latency
+                    predict_qps = performance_reports[0]['predict QPS'] + performance_reports[1]['predict QPS']
+                    predict_avg_latency = round(((performance_reports[0]['predict AVG Latency'] + performance_reports[1]['predict AVG Latency']) / 2.0), 2)
+                    predict_p99_latency = round(((performance_reports[0]['predict P99 Latency'] + performance_reports[1]['predict P99 Latency']) / 2.0), 2)
 
-                merged_dict['predict QPS'] = predict_qps
-                merged_dict['predict AVG Latency'] = predict_avg_latency
-                merged_dict["predict P99 Latency"] = predict_p99_latency
+                    merged_dict['BS'] = performance_reports[0]['BS']
+                    merged_dict['QPS'] = qps
+                    merged_dict['AVG Latency'] = avg_latency
+                    merged_dict["P99 Latency"] = p99_latency
 
-        return merged_dict  
+                    merged_dict['predict QPS'] = predict_qps
+                    merged_dict['predict AVG Latency'] = predict_avg_latency
+                    merged_dict["predict P99 Latency"] = predict_p99_latency
+                    
+            return merged_dict
+        
+        else:
+            merged_dict['BS'] = performance_reports[0]['BS']
+            merged_dict['QPS'] = performance_reports[0]['QPS']
+            merged_dict['AVG Latency'] = performance_reports[0]['AVG Latency']
+            merged_dict["P99 Latency"] = performance_reports[0]["P99 Latency"]
+
+            return merged_dict
+
 
     def predict(self, feeds):
         # The deberta model is currently unable to undergo accuracy testing temporarily
@@ -110,121 +135,133 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         i = 0
 
         model_name = self.configs["model"].split("-")[0]
-        if model_name == 'deberta':
-            keys = list(feeds.keys())
-            input_ids = torch.tensor(feeds[keys[0]], dtype=pt_dtype_map[self.input_type[0]])
-            attention_mask = torch.tensor(feeds[keys[1]], dtype=pt_dtype_map[self.input_type[1]])
-            input_tensors = [input_ids, attention_mask]
+        if model_name != 'gpt2':
+            if model_name == 'deberta':
+                keys = list(feeds.keys())
+                input_ids = torch.tensor(feeds[keys[0]], dtype=pt_dtype_map[self.input_type[0]])
+                attention_mask = torch.tensor(feeds[keys[1]], dtype=pt_dtype_map[self.input_type[1]])
+                input_tensors = [input_ids, attention_mask]
 
-        else:
-            for key, _ in feeds.items():
-                tmp_tensor = torch.tensor(feeds[key],
-                                    dtype=pt_dtype_map[self.input_type[i]])
-                input_tensors.append(tmp_tensor)
-                i += 1
+            else:
+                for key, _ in feeds.items():
+                    tmp_tensor = torch.tensor(feeds[key],
+                                        dtype=pt_dtype_map[self.input_type[i]])
+                    input_tensors.append(tmp_tensor)
+                    i += 1
 
-        # ixrt inference
-        engine = self.engine
-        assert engine
-        context = self.context
-        assert context
+            # ixrt inference
+            engine = self.engine
+            assert engine
+            context = self.context
+            assert context
 
-        # set dynamic shape
-        input_tensor_map = self.configs["segments"][0]["input_tensor_map"]
-        input_shape = input_tensor_map.values()
+            # set dynamic shape
+            input_tensor_map = self.configs["segments"][0]["input_tensor_map"]
+            input_shape = input_tensor_map.values()
 
-        i = 0
-        for input_name, _ in input_tensor_map.items():
-            if model_name == 'widedeep':
-                input_tensors.append(np.zeros((self.batch_size, 1), dtype=np.float32))
-                input_names = [
-                    "new_categorical_placeholder:0",
-                    "new_numeric_placeholder:0",
-                    "import/head/predictions/zeros_like:0"
-                ]
-                for input_name in input_names:
-                    if input_name == 'new_categorical_placeholder:0':
-                        input_shape = input_tensors[0].shape
-                    if input_name == 'new_numeric_placeholder:0':
-                        input_shape = input_tensors[1].shape
-                    if input_name == 'import/head/predictions/zeros_like:0':
-                        input_shape = input_tensors[2].shape
-                
+            i = 0
+            for input_name, _ in input_tensor_map.items():
+                if model_name == 'widedeep':
+                    input_tensors.append(np.zeros((self.batch_size, 1), dtype=np.float32))
+                    input_names = [
+                        "new_categorical_placeholder:0",
+                        "new_numeric_placeholder:0",
+                        "import/head/predictions/zeros_like:0"
+                    ]
+                    for input_name in input_names:
+                        if input_name == 'new_categorical_placeholder:0':
+                            input_shape = input_tensors[0].shape
+                        if input_name == 'new_numeric_placeholder:0':
+                            input_shape = input_tensors[1].shape
+                        if input_name == 'import/head/predictions/zeros_like:0':
+                            input_shape = input_tensors[2].shape
+                    
+                        input_idx = engine.get_binding_index(input_name)
+                        context.set_binding_shape(input_idx, Dims(input_shape))
+                else:
+                    input_shape = input_tensors[i].shape
                     input_idx = engine.get_binding_index(input_name)
                     context.set_binding_shape(input_idx, Dims(input_shape))
-            else:
-                input_shape = input_tensors[i].shape
-                input_idx = engine.get_binding_index(input_name)
-                context.set_binding_shape(input_idx, Dims(input_shape))
-                i += 1
-        
-        # Setup I/O bindings
-        inputs, outputs, allocations = setup_io_bindings(engine, context)
+                    i += 1
+            
+            # Setup I/O bindings
+            inputs, outputs, allocations = setup_io_bindings(engine, context)
 
-        # Prepare the output data
-        outputs_list = []
-        for i in range(len(outputs)):
-            output = np.zeros(outputs[i]["shape"], outputs[i]["dtype"])
-            outputs_list.append(output)
+            # Prepare the output data
+            outputs_list = []
+            for i in range(len(outputs)):
+                output = np.zeros(outputs[i]["shape"], outputs[i]["dtype"])
+                outputs_list.append(output)
 
-        data_batch_list = []
-        for i in range(len(input_tensors)):
-            data_batch = np.ascontiguousarray(input_tensors[i])
-            data_batch_list.append(data_batch)
+            data_batch_list = []
+            for i in range(len(input_tensors)):
+                data_batch = np.ascontiguousarray(input_tensors[i])
+                data_batch_list.append(data_batch)
 
-        # H2D: host to device
-        for i in range(len(inputs)):
-            (err, ) = cudart.cudaMemcpy(
-                        inputs[i]["allocation"],
-                        data_batch_list[i],
-                        inputs[i]["nbytes"],
-                        cudart.cudaMemcpyKind.cudaMemcpyHostToDevice
-            )
-        
-        starttime = time.time()
-        context.execute_v2(allocations)
-        endtime = time.time()
+            # H2D: host to device
+            for i in range(len(inputs)):
+                (err, ) = cudart.cudaMemcpy(
+                            inputs[i]["allocation"],
+                            data_batch_list[i],
+                            inputs[i]["nbytes"],
+                            cudart.cudaMemcpyKind.cudaMemcpyHostToDevice
+                )
+            
+            starttime = time.time()
+            context.execute_v2(allocations)
+            endtime = time.time()
 
-        self.predict_time = endtime - starttime
-        
-        # D2H: device to host
-        for i in range(len(outputs)):
-            (err, )= cudart.cudaMemcpy(outputs_list[i], 
-                        outputs[i]["allocation"], 
-                        outputs[i]["nbytes"], 
-                        cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost
-            )
-           
-        # Free Gpu Memory
-        # cuda-python
-        for i in range(len(inputs)):
-            err, = cudart.cudaFree(inputs[i]["allocation"])
-            assert err == cudart.cudaError_t.cudaSuccess
+            self.predict_time = endtime - starttime
+            
+            # D2H: device to host
+            for i in range(len(outputs)):
+                (err, )= cudart.cudaMemcpy(outputs_list[i], 
+                            outputs[i]["allocation"], 
+                            outputs[i]["nbytes"], 
+                            cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost
+                )
+            
+            # Free Gpu Memory
+            # cuda-python
+            for i in range(len(inputs)):
+                err, = cudart.cudaFree(inputs[i]["allocation"])
+                assert err == cudart.cudaError_t.cudaSuccess
 
-        for i in range(len(outputs)):
-            err, = cudart.cudaFree(outputs[i]["allocation"])
-            assert err == cudart.cudaError_t.cudaSuccess
-        
-        result = {}
+            for i in range(len(outputs)):
+                err, = cudart.cudaFree(outputs[i]["allocation"])
+                assert err == cudart.cudaError_t.cudaSuccess
+            
+            result = {}
 
-        output_tensor_map = self.configs["segments"][0]["output_tensor_map"]
-        output_name = output_tensor_map.split(",")
+            output_tensor_map = self.configs["segments"][0]["output_tensor_map"]
+            output_name = output_tensor_map.split(",")
 
-        for i in range(len(output_name)):
-            if model_name == 'yolov5':
-                result[output_name[0]] = outputs_list[0]
-                break
+            for i in range(len(output_name)):
+                if model_name == 'yolov5':
+                    result[output_name[0]] = outputs_list[0]
+                    break
 
-            result[output_name[i]] = outputs_list[i]
-        
+                result[output_name[i]] = outputs_list[i]
+
+        else:
+            result = None
+            self.predict_igie(feeds)
+            
         if model_name == 'videobert':
             return outputs_list
         else:
             return result
     
+    def predict_igie(self, dataloader):
+        self.module_igie.set_input("input_ids", tvm.nd.array(dataloader["input_ids"].astype('int64'), self.device))
+        self.module_igie.run()
+        output = None   # self.module_igie.get_output(0).numpy()
+        return output
+    
     def benchmark_interact(self, dataloader):
         batch_size = self.get_loaded_batch_size()
         iterations = self.workload['iterations']
+        model_name = self.configs["model"].split("-")[0]
         times_range = []
         predict_range = []
         report = {}
@@ -250,11 +287,14 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         avg_latency = round(sum(times_range) / iterations * 1000, 2)
         qps = int(1000.0 * self.batch_size / avg_latency)
 
-        predict_range.sort()
-        predict_tail_latency = round(
-            predict_range[int(len(predict_range) * 0.99)] * 1000, 2)
-        predict_avg_latency = round(sum(predict_range) / iterations * 1000, 2)
-        fps = int(1000.0 * batch_size / predict_avg_latency)
+        if model_name != 'gpt2':
+            predict_range.sort()
+            predict_tail_latency = round(
+                predict_range[int(len(predict_range) * 0.99)] * 1000, 2)
+            predict_avg_latency = round(sum(predict_range) / iterations * 1000, 2)
+            fps = int(1000.0 * batch_size / predict_avg_latency)
+        else:
+            pass
 
         log.info(
             'Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}'.
@@ -264,9 +304,12 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         report['AVG Latency'] = avg_latency
         report['P99 Latency'] = tail_latency
 
-        report['predict QPS'] = fps
-        report['predict AVG Latency'] = predict_avg_latency
-        report['predict P99 Latency'] = predict_tail_latency
+        if model_name != 'gpt2':
+            report['predict QPS'] = fps
+            report['predict AVG Latency'] = predict_avg_latency
+            report['predict P99 Latency'] = predict_tail_latency
+        else:
+            pass
 
         return report
 
@@ -281,44 +324,55 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         model_path = self.configs['model_path']
         self.model_runtimes = []
 
-        if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
-            engine_path = model_path.split(".")[0] + "_end.engine"
+        if model_name != 'gpt2':
+            if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
+                engine_path = model_path.split(".")[0] + "_end.engine"
 
-        elif model_name == 'widedeep':
-            engine_path = model_path + "/" + model + "_end.engine"
-        
-        elif model_name == 'roformer':
-            engine_path = model_path + "/" + model + ".engine"
-        
-        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
-            engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
+            elif model_name == 'widedeep':
+                engine_path = model_path + "/" + model + "_end.engine"
+            
+            elif model_name == 'roformer':
+                engine_path = model_path + "/" + model + ".engine"
+            
+            elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
+                engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
 
+            else:
+                engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
+            
+            # **************to do*************
+            if model_name == 'widedeep':      
+                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"
+
+            if model_name == 'conformer':
+                engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
+            
+            # if model_name == 'roformer':
+            #     engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(batch_size) + ".engine" 
+            
+            if model_name == 'deberta':
+                engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"   
+
+            engine, context = init_by_tensorrt(engine_path)
+
+            self.model_runtimes.append(engine)
+
+            self.input_type = self.configs['input_type']
+            
+            self.batch_size = batch_size
+            self.model_runtimes = []
+            self.engine = engine
+            self.context = context
+        
         else:
-            engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
-        
-        # **************to do*************
-        if model_name == 'widedeep':      
-            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_sim_" + str(batch_size) + ".engine"
+            _, device = get_target('iluvatar_with_all_libs')
+            engine_path = os.path.dirname(model_path) + "/" + model + "_bs" + str(batch_size) + ".so" 
+            lib = tvm.runtime.load_module(engine_path)
+            module_igie = tvm.contrib.graph_executor.GraphModule(lib["default"](device))
 
-        if model_name == 'conformer':
-            engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
-        
-        # if model_name == 'roformer':
-        #     engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(batch_size) + ".engine" 
-        
-        if model_name == 'deberta':
-            engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"   
-
-        engine, context = init_by_tensorrt(engine_path)
-
-        self.model_runtimes.append(engine)
-
-        self.input_type = self.configs['input_type']
-        
-        self.batch_size = batch_size
-        self.model_runtimes = []
-        self.engine = engine
-        self.context = context
+            self.module_igie = module_igie
+            self.device = device
+            self.batch_size = batch_size
 
     def _get_fake_samples(self, batch_size, shape, input_type):
         data = {}
