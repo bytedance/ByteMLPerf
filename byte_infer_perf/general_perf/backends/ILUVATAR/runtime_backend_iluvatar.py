@@ -64,6 +64,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         self.workload = None
         self.predict_fps = None
         self.predict_time = None
+        self.task = None
 
     # Dual-core inference of Tian SoC BI-150 graphics card
     def benchmark(self, dataloader):
@@ -73,61 +74,41 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         
         workers = []
         lock = threading.Lock()
-        if model_name != 'gpt2':
-            for i in range(2):
-                device_id = i
-                task = Task(self.batch_size, dataloader, device_id, self.load, self.benchmark_interact, performance_reports, lock)
+        for i in range(2):
+            device_id = i
+            self.task = Task(self.batch_size, dataloader, device_id, self.load, self.benchmark_interact, performance_reports, lock, framework=model_name)
 
-                work = TaskThread(task.run, [])
-                workers.append(work)
-                work.start()
-                work.join()
-                
+            work = TaskThread(self.task.run, [])
+            workers.append(work)
+            work.start()
+            work.join()
+        
+        if model_name != 'gpt2':
             del self.engine
             del self.context
             
-        else:
-            # ****to do******
-            for i in range(1):
-                device_id = i
-                task = Task(self.batch_size, dataloader, device_id, self.load, self.benchmark_interact, performance_reports, lock)
+        if len(performance_reports[0]) == len(performance_reports[1]):
+            if performance_reports[0].keys() == performance_reports[1].keys():
 
-                work = TaskThread(task.run, [])
-                workers.append(work)
-                work.start()
-                work.join()
+                qps = performance_reports[0]['QPS'] + performance_reports[1]['QPS']
+                avg_latency = round(((performance_reports[0]['AVG Latency'] + performance_reports[1]['AVG Latency']) / 2.0), 2)
+                p99_latency = round(((performance_reports[0]['P99 Latency'] + performance_reports[1]['P99 Latency']) / 2.0), 2)
 
-        if model_name != 'gpt2':
-            if len(performance_reports[0]) == len(performance_reports[1]):
-                if performance_reports[0].keys() == performance_reports[1].keys():
+                merged_dict['BS'] = performance_reports[0]['BS']
+                merged_dict['QPS'] = qps
+                merged_dict['AVG Latency'] = avg_latency
+                merged_dict["P99 Latency"] = p99_latency
 
-                    qps = performance_reports[0]['QPS'] + performance_reports[1]['QPS']
-                    avg_latency = round(((performance_reports[0]['AVG Latency'] + performance_reports[1]['AVG Latency']) / 2.0), 2)
-                    p99_latency = round(((performance_reports[0]['P99 Latency'] + performance_reports[1]['P99 Latency']) / 2.0), 2)
-
+                if model_name != 'gpt2':
                     predict_qps = performance_reports[0]['predict QPS'] + performance_reports[1]['predict QPS']
                     predict_avg_latency = round(((performance_reports[0]['predict AVG Latency'] + performance_reports[1]['predict AVG Latency']) / 2.0), 2)
                     predict_p99_latency = round(((performance_reports[0]['predict P99 Latency'] + performance_reports[1]['predict P99 Latency']) / 2.0), 2)
 
-                    merged_dict['BS'] = performance_reports[0]['BS']
-                    merged_dict['QPS'] = qps
-                    merged_dict['AVG Latency'] = avg_latency
-                    merged_dict["P99 Latency"] = p99_latency
-
                     merged_dict['predict QPS'] = predict_qps
                     merged_dict['predict AVG Latency'] = predict_avg_latency
                     merged_dict["predict P99 Latency"] = predict_p99_latency
-                    
-            return merged_dict
-        
-        else:
-            merged_dict['BS'] = performance_reports[0]['BS']
-            merged_dict['QPS'] = performance_reports[0]['QPS']
-            merged_dict['AVG Latency'] = performance_reports[0]['AVG Latency']
-            merged_dict["P99 Latency"] = performance_reports[0]["P99 Latency"]
-
-            return merged_dict
-
+                
+        return merged_dict
 
     def predict(self, feeds):
         # The deberta model is currently unable to undergo accuracy testing temporarily
@@ -253,9 +234,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             return result
     
     def predict_igie(self, dataloader):
-        self.module_igie.set_input("input_ids", tvm.nd.array(dataloader["input_ids"].astype('int64'), self.device))
-        self.module_igie.run()
-        output = None   # self.module_igie.get_output(0).numpy()
+        self.task.module.set_input("input_ids", tvm.nd.array(dataloader["input_ids"].astype('int64'), self.device))
+        self.task.module.run()
+        output = self.task.module.get_output(0)
+
         return output
     
     def benchmark_interact(self, dataloader):
@@ -266,6 +248,9 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         predict_range = []
         report = {}
         report["BS"] = batch_size
+
+        if model_name == 'gpt2':
+            self.load_igie(batch_size)
 
         test_data = self._get_fake_samples(batch_size=batch_size,
                         shape=self.configs['segments'][0]['input_tensor_map'],
@@ -293,8 +278,6 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                 predict_range[int(len(predict_range) * 0.99)] * 1000, 2)
             predict_avg_latency = round(sum(predict_range) / iterations * 1000, 2)
             fps = int(1000.0 * batch_size / predict_avg_latency)
-        else:
-            pass
 
         log.info(
             'Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}'.
@@ -308,8 +291,6 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             report['predict QPS'] = fps
             report['predict AVG Latency'] = predict_avg_latency
             report['predict P99 Latency'] = predict_tail_latency
-        else:
-            pass
 
         return report
 
@@ -322,57 +303,61 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         model = self.configs['model']
         model_name = self.configs['model'].split("-")[0]
         model_path = self.configs['model_path']
-        self.model_runtimes = []
-
-        if model_name != 'gpt2':
-            if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
-                engine_path = model_path.split(".")[0] + "_end.engine"
-
-            elif model_name == 'widedeep':
-                engine_path = model_path + "/" + model + "_end.engine"
-            
-            elif model_name == 'roformer':
-                engine_path = model_path + "/" + model + ".engine"
-            
-            elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
-                engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
-
-            else:
-                engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
-            
-            # **************to do*************
-            if model_name == 'widedeep':      
-                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"
-
-            if model_name == 'conformer':
-                engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
-            
-            # if model_name == 'roformer':
-            #     engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(batch_size) + ".engine" 
-            
-            if model_name == 'deberta':
-                engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"   
-
-            engine, context = init_by_tensorrt(engine_path)
-
-            self.model_runtimes.append(engine)
-
-            self.input_type = self.configs['input_type']
-            
-            self.batch_size = batch_size
-            self.model_runtimes = []
-            self.engine = engine
-            self.context = context
         
-        else:
-            _, device = get_target('iluvatar_with_all_libs')
-            engine_path = os.path.dirname(model_path) + "/" + model + "_bs" + str(batch_size) + ".so" 
-            lib = tvm.runtime.load_module(engine_path)
-            module_igie = tvm.contrib.graph_executor.GraphModule(lib["default"](device))
-
-            self.module_igie = module_igie
-            self.device = device
+        if model_name == 'gpt2':
             self.batch_size = batch_size
+            return
+        
+        if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
+            engine_path = model_path.split(".")[0] + "_end.engine"
+
+        elif model_name == 'widedeep':
+            engine_path = model_path + "/" + model + "_end.engine"
+        
+        elif model_name == 'roformer':
+            engine_path = model_path + "/" + model + ".engine"
+        
+        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
+            engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
+
+        else:
+            engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
+        
+        # **************to do*************
+        if model_name == 'widedeep':      
+            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"
+
+        if model_name == 'conformer':
+            engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
+        
+        # if model_name == 'roformer':
+        #     engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(batch_size) + ".engine" 
+        
+        if model_name == 'deberta':
+            engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"   
+
+        engine, context = init_by_tensorrt(engine_path)
+
+        self.model_runtimes.append(engine)
+
+        self.input_type = self.configs['input_type']
+        
+        self.batch_size = batch_size
+        self.engine = engine
+        self.context = context         
+    
+    def load_igie(self, batch_size):
+        model = self.configs['model']
+        model_path = self.configs['model_path']
+
+        target, _ = get_target('iluvatar_with_all_libs')
+        device = tvm.device(target.kind.name, self.task.device_id)
+        engine_path = os.path.dirname(model_path) + "/" + model + "_bs" + str(batch_size) + ".so"
+        lib = tvm.runtime.load_module(engine_path)
+        self.task.module = tvm.contrib.graph_executor.GraphModule(lib["default"](device))
+
+        self.device = device
+        self.batch_size = batch_size
 
     def _get_fake_samples(self, batch_size, shape, input_type):
         data = {}

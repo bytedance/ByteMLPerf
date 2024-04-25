@@ -238,14 +238,17 @@ def setup_io_bindings(engine, context):
 
 # multi cores inference codes
 class Task:
-    def __init__(self, bs, dataset, device_id, load_fun, benchmark_fun, performance_reports, lock) -> None:
+    def __init__(self, bs, dataset, device_id, load_fun, benchmark_fun, performance_reports, lock, framework) -> None:
         self.dataset = dataset
         self.benchmark_fun = benchmark_fun
         self.device_id = device_id
         self.performance_reports = performance_reports
         checkCudaErrors(cudart.cudaSetDevice(device_id))
-        load_fun(bs)
+        if framework != 'gpt2':
+            load_fun(bs)
+
         self.lock = lock
+        self.module = None
         
 
     def run(self):
