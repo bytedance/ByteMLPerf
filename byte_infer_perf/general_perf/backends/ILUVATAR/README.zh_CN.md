@@ -27,46 +27,142 @@
         2、predict QPS、predict AVG Latency、predict P99 Latency：这部分指标把上面一步计算H2D、D2H的耗时剔除出去了，因此可以看做纯推理耗时，这个耗时可以与利用
            ixerexec命令跑出来的结果做一定的对比，但是不一定完全对齐，因为走整个框架代码肯定会导致一部分性能损失
 
+    数据集、模型准备：
+        cd ByteMLPerf/byte_infer_perf/general_perf
+
+        bash general_perf/prepare_model_and_dataset.sh bert-torch-fp32 open_squad
+        bash general_perf/prepare_model_and_dataset.sh resnet50-torch-fp32 open_imagenet
+        bash general_perf/prepare_model_and_dataset.sh widedeep-tf-fp32 open_criteo_kaggle
+        bash general_perf/prepare_model_and_dataset.sh albert-torch-fp32
+        bash general_perf/prepare_model_and_dataset.sh roformer-tf-fp32 open_cail2019
+        bash general_perf/prepare_model_and_dataset.sh videobert-onnx-fp32 open_cifar
+        bash general_perf/prepare_model_and_dataset.sh yolov5-onnx-fp32 
+        bash general_perf/prepare_model_and_dataset.sh conformer-encoder-onnx-fp32
+        bash general_perf/prepare_model_and_dataset.sh roberta-torch-fp32
+        bash general_perf/prepare_model_and_dataset.sh deberta-torch-fp32 
+        bash general_perf/prepare_model_and_dataset.sh swin-large-torch-fp32
+        bash general_perf/prepare_model_and_dataset.sh gpt2-torch-fp32 
+
+        上面的模型与数据集下载完毕后会生成在：general_perf/general_perf，需要把该目录在的model_zoo下面的regular、popular、sota移到general_perf/model_zoo下面
+        如果还缺少什么模型、数据集可以在prepare_model_and_dataset.sh里面执行类似上面的操作即可；
+
+
+    测试开始：
 
     cd ByteMLPerf/byte_infer_perf
 
     1、bert模型：
+        测试过程中如果缺少：dev-v1.1.json、vocab.txt，按照下面的操作进行下载
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/open_squad ; get dev-v1.1.json; get vocab.txt
+                 exit
+
+        移动：mv dev-v1.1.json vocab.txt general_perf/datasets/open_squad/;
+
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task bert-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/bert-torch-fp32/
 
     2、albert模型：
+        测试过程中如果从huggingface网址不能下载文件，可以按照下面的操作进行下载
+        
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/ ; get albert.rar
+                 exit
+
+        mkdir -p madlag/albert-base-v2-squad;
+        解压：unrar x albert.rar madlag/albert-base-v2-squad;
+
+        接着修改代码：ByteMLPerf/byte_infer_perf/general_perf/datasets/open_squad/data_loader.py
+        AutoTokenizer.from_pretrained("madlag/albert-base-v2-squad") => AutoTokenizer.from_pretrained("/ByteMLPerf/byte_infer_perf/madlag/albert-base-v2-squad")  (注意绝对路径根据实际情况修改，需要在ByteMLPerf前面在加一个当前目录最上层的路径，下同)
+
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task albert-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/albert-torch-fp32/
 
     3、debert模型：
-           给定的pt模型转成onnx后输入只有2个，因此这里特殊处理了一下；加载处理好的onnx模型：deberta-base-squad-sim_end.onnx
-           将其放到：general_perf/model_zoo/popular/open_deberta/ 目录下；
+        测试过程中如果从huggingface网址不能下载文件，可以按照下面的操作进行下载
 
-           下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
-                    cd files/yudefu/ ; get deberta-base-squad-sim_end.onnx
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/ ; get deberta.rar
+                 exit
+
+        mkdir -p Palak/microsoft_deberta-base_squad;
+        解压：unrar x deberta.rar Palak/microsoft_deberta-base_squad;
+
+        接着修改代码：ByteMLPerf/byte_infer_perf/general_perf/datasets/open_squad/data_loader.py
+        AutoTokenizer.from_pretrained("Palak/microsoft_deberta-base_squad") => AutoTokenizer.from_pretrained("/ByteMLPerf/byte_infer_perf/Palak/microsoft_deberta-base_squad")
+
+        给定的pt模型转成onnx后输入只有2个，因此这里特殊处理了一下；加载处理好的onnx模型：deberta-base-squad-sim_end.onnx
+        将其放到：general_perf/model_zoo/popular/open_deberta/ 目录下；
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/ ; get deberta-base-squad-sim_end.onnx
+                 exit
+        
+        移动：mv deberta-base-squad-sim_end.onnx general_perf/model_zoo/popular/open_deberta/
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task deberta-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/deberta-torch-fp32/
 
     4、roberta模型：
+        测试过程中如果从huggingface网址不能下载文件，可以按照下面的操作进行下载
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/ ; get roberta.rar
+                 exit
+
+        mkdir -p csarron/roberta-base-squad-v1;
+        解压：unrar x roberta.rar csarron/roberta-base-squad-v1;
+
+        接着修改代码：ByteMLPerf/byte_infer_perf/general_perf/datasets/open_squad/data_loader.py
+        AutoTokenizer.from_pretrained("csarron/roberta-base-squad-v1") => AutoTokenizer.from_pretrained("/ByteMLPerf/byte_infer_perf/csarron/roberta-base-squad-v1")
+
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task roberta-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/roberta-torch-fp32/
 
     5、videobert模型：
+        测试过程中如果在 open_cifar 数据集中缺少某些文件，可以按照下面的操作进行下载
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/open_cifar ; get cifar-100-python.tar.gz
+                 exit
+
+        解压：tar -zxvf cifar-100-python.tar.gz； mv cifar-100-python general_perf/datasets/open_cifar
+
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task videobert-onnx-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/videobert-onnx-fp32
     
     6、widedeep模型：
-           该模型经过了特殊的处理，需要采用处理好的onnx模型：widedeep_dynamicshape.onnx；
-           将其放到：general_perf/model_zoo/regular/open_wide_deep_saved_model/ 
+        测试过程中如果在 open_criteo_kaggle 数据集中缺少：eval.csv、categorical.npy、label.npy、numeric.npy，可以按照下面的操作进行下载
+        （根据缺少的文件进行下载即可，不需要的可以不下载，下同）
 
-           下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
-           cd files/yudefu/ ; get widedeep_dynamicshape.onnx
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/open_criteo_kaggle ; get eval.csv； get categorical.npy；get label.npy； get numeric.npy
+                 exit
+
+        移动：mv eval.csv categorical.npy label.npy numeric.npy general_perf/datasets/open_criteo_kaggle;
+
+        该模型经过了特殊的处理，需要采用处理好的onnx模型：widedeep_dynamicshape.onnx；
+        将其放到：general_perf/model_zoo/regular/open_wide_deep_saved_model/ 
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/ ; get widedeep_dynamicshape.onnx
+                 exit
+        
+        移动：mv widedeep_dynamicshape.onnx general_perf/model_zoo/regular/open_wide_deep_saved_model/ 
         
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task widedeep-tf-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/widedeep-tf-fp32
 
     7、swin-transformer模型：
+        测试过程中如果缺少：open_imagenet下面相关的文件或者数据集，按照下面的操作进行下载
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/open_imagenet ; get ILSVRC2012_img_val.tar.gz; get val_map.txt
+                 exit
+        
+        解压：tar -zxvf ILSVRC2012_img_val.tar.gz；mv ILSVRC2012_img_val val_map.txt general_perf/datasets/open_imagenet
+
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task swin-large-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/swin-large-torch-fp32
 
@@ -79,23 +175,35 @@
         生成的测试报告位置：general_perf/reports/ILUVATAR/yolov5-onnx-fp32
 
     10、conformer模型：
-            该onnx模型的transpose算子实现逻辑需要特殊处理；采用处理好的onnx模型：conformer_encoder_optimizer_end.onnx
-            将其放到：general_perf/model_zoo/popular/open_conformer/ 
+        该onnx模型的transpose算子实现逻辑需要特殊处理；采用处理好的onnx模型：conformer_encoder_optimizer_end.onnx
+        将其放到：general_perf/model_zoo/popular/open_conformer/ 
 
-            下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
-            cd files/yudefu/ ; get conformer_encoder_optimizer_end.onnx
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/ ; get conformer_encoder_optimizer_end.onnx
+                 exit
+        
+        移动：mv conformer_encoder_optimizer_end.onnx general_perf/model_zoo/popular/open_conformer/ 
         
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task conformer-encoder-onnx-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/conformer-encoder-onnx-fp32
 
     11、roformer模型：
-            该模型暂时没有解决，等待后续解决了再提供测试说明
+        该模型暂时没有解决，等待后续解决了再提供测试说明
+
+        测试过程中如果缺少：open_cail2019下面相关的文件或者数据集，按照下面的操作进行下载
+
+        下载方式：sftp -P 29889 user01@58.247.142.52  密码：5$gS%659
+                 cd files/yudefu/open_cail2019 ; get batch_segment_ids.npy； get batch_token_ids.npy； 
+                    get label.py； get test.json；get vocab.txt
+                  exit
+
+        移动：mv batch_segment_ids.npy batch_token_ids.npy label.py test.json vocab.txt general_perf/datasets/open_cail2019
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task roformer-tf-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/roformer-tf-fp32
 
     12、gpt2模型：
-            在进行测试时，请把workloads下面的gpt2-torch-fp32.json里面的精度、数值对比测试改成false
+        在进行测试时，请把workloads下面的gpt2-torch-fp32.json里面的精度、数值对比测试改成false
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task gpt2-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/gpt2-torch-fp32
