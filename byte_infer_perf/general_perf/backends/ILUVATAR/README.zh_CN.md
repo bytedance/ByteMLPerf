@@ -46,7 +46,7 @@
         生成的测试报告在：general_perf/reports/ILUVATAR/videobert-onnx-fp32
     
     6、widedeep模型：
-        ***该模型经过了特殊的处理，需要采用的onnx模型：widedeep_dynamicshape_sim.onnx；将其放到：general_perf/model_zoo/regular/open_wide_deep_saved_model/ 
+        ***该模型经过了特殊的处理，需要采用的onnx模型：widedeep_dynamicshape.onnx；将其放到：general_perf/model_zoo/regular/open_wide_deep_saved_model/ 
         ***
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task widedeep-tf-fp32
         生成的测试报告在：general_perf/reports/ILUVATAR/widedeep-tf-fp32
@@ -74,6 +74,11 @@
         ***********该模型暂时没有解决，等待后续解决了再修改代码，再进行测试***********
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task roformer-tf-fp32
         生成的测试报告在：general_perf/reports/ILUVATAR/roformer-tf-fp32
+
+    12、gpt2模型：
+        *******在进行测试时，请把workloads下面的gpt2-torch-fp32.json里面的精度、数值对比测试改成false
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task gpt2-torch-fp32
+        生成的测试报告在：general_perf/reports/ILUVATAR/gpt2-torch-fp32
 """
 
 """
