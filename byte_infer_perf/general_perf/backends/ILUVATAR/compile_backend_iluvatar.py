@@ -71,7 +71,8 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
 
         # model preprocessing
-        self.get_onnx(configs)
+        if model_name != 'deberta':
+            self.get_onnx(configs)
 
         # build engine
         if model_name == 'widedeep':

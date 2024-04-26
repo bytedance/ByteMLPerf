@@ -32,7 +32,6 @@
            ***给定的pt模型转成onnx后输入只有2个，因此这里特殊处理了一下；目前不能直接使用optimizer脚本优化后的onnx直接进行推理，我们把这个模型优化流程给出了，但是实际上使用了处理好的onnx：
               deberta-base-squad-sim_end.onnx，将其放到：general_perf/model_zoo/popular/open_deberta/ 目录下；
            ***
-           其次，需要修改model_zoo下面的general_perf/model_zoo/deberta-torch-fp32.json里面输入的个数，去掉token_type_ids.1相关的配置
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task deberta-torch-fp32
         生成的测试报告在：general_perf/reports/ILUVATAR/deberta-torch-fp32/

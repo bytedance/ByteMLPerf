@@ -159,6 +159,21 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                     
                         input_idx = engine.get_binding_index(input_name)
                         context.set_binding_shape(input_idx, Dims(input_shape))
+
+                elif model_name == 'deberta':
+                    input_names = [
+                        "input_ids.1",
+                        "attention_mask.1",
+                    ]
+                    for input_name in input_names:
+                        if input_name == 'input_ids.1':
+                            input_shape = input_tensors[0].shape
+                        if input_name == 'attention_mask.1':
+                            input_shape = input_tensors[1].shape
+                    
+                        input_idx = engine.get_binding_index(input_name)
+                        context.set_binding_shape(input_idx, Dims(input_shape))
+
                 else:
                     input_shape = input_tensors[i].shape
                     input_idx = engine.get_binding_index(input_name)
@@ -225,11 +240,14 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                 result[output_name[i]] = outputs_list[i]
 
         else:
-            result = None
             self.predict_igie(feeds)
             
         if model_name == 'videobert':
             return outputs_list
+        
+        elif model_name == 'gpt2':
+            return None
+        
         else:
             return result
     
