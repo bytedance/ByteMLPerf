@@ -20,7 +20,6 @@ from typing import Any, Dict, List
 
 from backends.utils import dump_communication_ops_report, dump_computation_ops_report
 
-
 class Backend(ABC):
     def __init__(self, workload_dict: Dict[str, Any], vendor_path: str):
         self.op_name = workload_dict["operator"]
@@ -36,6 +35,7 @@ class Backend(ABC):
         self.hw_info_dict = None
         self.memory_limit = None
         self.bandwidth_limit = None
+        self.get_backend_properties()
 
     @abstractmethod
     def get_device_name(self):
@@ -123,29 +123,34 @@ class Backend(ABC):
         pass
 
     def perf(self, input_shapes: List[List[int]], dtype):
-        self.get_backend_properties()
+        error = ""
 
         inputs_list, data_cnt = self.build_tensor(input_shapes, dtype)
-        input_index_list = [
-            random.randint(0, data_cnt - 1) for _ in range(self.iterations)
-        ]
 
-        # warmup
-        num_warm_up = 10
-        for _ in range(num_warm_up):
-            self._run_operation(self.op, inputs_list[0])
+        if data_cnt > 0:
+            input_index_list = [
+                random.randint(0, data_cnt - 1) for _ in range(self.iterations)
+            ]
 
-        # perf
-        self.device_synchronize()
-        start_time = time.perf_counter_ns()
-        for i in range(self.iterations):
-            result = self._run_operation(self.op, inputs_list[input_index_list[i]])
-        self.device_synchronize()
-        end_time = time.perf_counter_ns()
+            # warmup
+            num_warm_up = 10
+            for _ in range(num_warm_up):
+                self._run_operation(self.op, inputs_list[0])
 
-        # time in us
-        exec_time = (end_time - start_time) / 1e3
-        latency = round(exec_time / self.iterations, 2)
+            # perf
+            self.device_synchronize()
+            start_time = time.perf_counter_ns()
+            for i in range(self.iterations):
+                result = self._run_operation(self.op, inputs_list[input_index_list[i]])
+            self.device_synchronize()
+            end_time = time.perf_counter_ns()
+
+            # time in us
+            exec_time = (end_time - start_time) / 1e3
+            latency = round(exec_time / self.iterations, 2)
+        else:
+            latency = 0
+            error = "OOM"
 
         if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
             report = dump_communication_ops_report(
@@ -155,9 +160,10 @@ class Backend(ABC):
                 self.group.size(),
                 self.bandwidth_limit,
                 latency,
+                error
             )
         else:
             report = dump_computation_ops_report(
-                self.op_name, dtype, input_shapes, self.bandwidth_limit, latency
+                self.op_name, dtype, input_shapes, self.bandwidth_limit, latency, error
             )
         return report

@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 from typing import Any, Dict, List
+import traceback
 
 import torch
 import torch.multiprocessing as mp
@@ -185,7 +186,8 @@ class PerfEngine:
                 try:
                     reports = self.backend.perf(input_shape, dtype)
                 except Exception as e:
-                    print(e)
+                    traceback.print_exc()
+                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {input_shape}, dtype: {dtype}, error msg: {e}")
                     reports = {}
                 perf_reports.append(reports)
             base_report["Performance"] = perf_reports
@@ -204,10 +206,14 @@ class PerfEngine:
             output_report_path = os.path.join(output_dir, output_report_path)
             local_rank = int(os.environ.get("LOCAL_RANK", 0))
             if local_rank == 0:
-                logging.info(base_report["Performance"])
+                # logging.info(base_report["Performance"])
                 with open(output_report_path, "w") as file:
                     json.dump(base_report, file, indent=4)
-
+        log.info(
+            "******************************************* End to test op: {}. *******************************************".format(
+                workload["operator"]
+            )
+        )
         return True
 
     def get_cpu_name(self):

@@ -136,7 +136,7 @@ class BackendGPU(Backend):
                 for input_tensor in input_tensors_list
             ]
 
-        return input_tensors_list, max(data_cnt, 1)
+        return input_tensors_list, data_cnt
 
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)
