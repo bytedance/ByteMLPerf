@@ -50,6 +50,13 @@ Example:
     "Performance": [
         {
             "Dtype": "float32",
+            "Tensor Shapes": [
+                [
+                    2,
+                    512,
+                    512
+                ]
+            ],
             "Memory Size(MB)": 4.0,
             "Kernel bandwidth(GB/s)": 271.83,
             "Bandwidth Utilization(%)": 0.17,

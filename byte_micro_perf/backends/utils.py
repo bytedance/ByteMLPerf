@@ -26,6 +26,7 @@ def dump_communication_ops_report(
     group_size: List[int],
     bandwidth_limit: float,
     latency: float,
+    error: str = ""
 ):
     size = math.prod(input_shapes[0])
     torch_type = getattr(torch, dtype)
@@ -34,28 +35,40 @@ def dump_communication_ops_report(
     else:
         dtype_size = torch.finfo(torch_type).bits // 8
     mb = dtype_size * size / 1024 / 1024
-    algo_bw = dtype_size * size / latency / 1e3
-    bus_bw = algo_bw * (group_size - 1) / group_size
+    if error == "":
+        algo_bw = dtype_size * size / latency / 1e3
+        bus_bw = algo_bw * (group_size - 1) / group_size
 
-    if op_name == "broadcast":
-        bus_bw = algo_bw
-    if op_name == "allreduce":
-        bus_bw *= 2
+        if op_name == "broadcast":
+            bus_bw = algo_bw
+        if op_name == "allreduce":
+            bus_bw *= 2
 
-    bandwidth_utils = None
-    if bandwidth_limit is not None:
-        bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
-
-    report = {
-        "Dtype": dtype,
-        "Tensor Shapes": input_shapes, 
-        "Memory Size(MB)": round(mb, 2),
-        "Group": group_size,
-        "Kernel bandwidth(GB/s)": round(algo_bw, 2),
-        "Bus bandwidth(GB/s)": round(bus_bw, 2),
-        "Bandwidth Utilization(%)": bandwidth_utils,
-        "Avg latency(us)": round(latency, 2),
-    }
+        bandwidth_utils = None
+        if bandwidth_limit is not None:
+            bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
+        report = {
+            "Dtype": dtype,
+            "Tensor Shapes": input_shapes,
+            "Memory Size(MB)": round(mb, 2),
+            "Group": group_size,
+            "Kernel bandwidth(GB/s)": round(algo_bw, 2),
+            "Bus bandwidth(GB/s)": round(bus_bw, 2),
+            "Bandwidth Utilization(%)": bandwidth_utils,
+            "Avg latency(us)": round(latency, 2),
+        }
+    else:
+        report = {
+            "Dtype": dtype,
+            "Tensor Shapes": input_shapes,
+            "Memory Size(MB)": round(mb, 2),
+            "Group": group_size,
+            "Kernel bandwidth(GB/s)": 0,
+            "Bus bandwidth(GB/s)": 0,
+            "Bandwidth Utilization(%)": None,
+            "Avg latency(us)": 0,
+            "Error": error,
+        }
     return report
 
 
@@ -65,6 +78,7 @@ def dump_computation_ops_report(
     input_shapes: List[List[int]],
     bandwidth_limit: float,
     latency: float,
+    error: str = ""
 ):
     if op_name == "add":
         # c = a + b
@@ -79,7 +93,7 @@ def dump_computation_ops_report(
         K = input_shapes[0][1]
         N = input_shapes[1][1]
         size = M * K + K * N + M * N
-    elif op_name == "unique" or op_name == "device2host" or "host2device":
+    elif op_name in ["unique", "device2host", "host2device"]:
         size = sum([math.prod(shape) for shape in input_shapes])
     else:
         # out = func(in)
@@ -92,18 +106,28 @@ def dump_computation_ops_report(
     else:
         dtype_size = torch.finfo(torch_type).bits // 8
     mb = dtype_size * size / 1024 / 1024
-    algo_bw = dtype_size * size / latency / 1e3
+    if error == "":
+        algo_bw = dtype_size * size / latency / 1e3
 
-    bandwidth_utils = None
-    if bandwidth_limit is not None:
-        bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
-
-    report = {
-        "Dtype": dtype,
-        "Tensor Shapes": input_shapes, 
-        "Memory Size(MB)": round(mb, 2),
-        "Kernel bandwidth(GB/s)": round(algo_bw, 2),
-        "Bandwidth Utilization(%)": bandwidth_utils,
-        "Avg latency(us)": round(latency, 2),
-    }
+        bandwidth_utils = None
+        if bandwidth_limit is not None:
+            bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
+        report = {
+            "Dtype": dtype,
+            "Tensor Shapes": input_shapes,
+            "Memory Size(MB)": round(mb, 2),
+            "Kernel bandwidth(GB/s)": round(algo_bw, 2),
+            "Bandwidth Utilization(%)": bandwidth_utils,
+            "Avg latency(us)": round(latency, 2),
+        }
+    else:
+        report = {
+            "Dtype": dtype,
+            "Tensor Shapes": input_shapes,
+            "Memory Size(MB)": round(mb, 2),
+            "Kernel bandwidth(GB/s)": 0,
+            "Bandwidth Utilization(%)": None,
+            "Avg latency(us)": 0,
+            "Error": error,
+        }
     return report
