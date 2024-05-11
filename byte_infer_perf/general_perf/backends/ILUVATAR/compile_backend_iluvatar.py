@@ -110,7 +110,10 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
                     input_dict[key] = val
                     
                 build_igie_engine(model_name=model_name, model_path=onnx_model_path, input_dict=input_dict, model_framework='onnx', precision='fp16', engine_path=engine_path)
-
+        
+        elif model == 'vae-decoder-onnx-fp32' or model == 'vae-encoder-onnx-fp32' or model == 'clip-onnx-fp32':
+            pass
+        
         else:
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
 

@@ -37,6 +37,7 @@ pt_dtype_map = {
     "FLOAT32": torch.float32,
     "FLOAT16": torch.float16,
     "INT8": torch.int8,
+    "INT32":torch.int32,
     "LONG": torch.long,
     "INT64": torch.int64,
     "BOOL": torch.bool
@@ -66,6 +67,12 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         self.predict_time = None
         self.task = None
 
+    def isSDmodel(self, model_name):
+        result = False
+        if model_name == 'vae-decoder-onnx-fp32' or model_name == 'vae-encoder-onnx-fp32' or model_name == 'clip-onnx-fp32':
+            result = True
+        return result
+
     # Dual-core inference of Tian SoC BI-150 graphics card
     def benchmark(self, dataloader):
         performance_reports = []
@@ -84,8 +91,9 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             work.join()
         
         if model_name != 'gpt2':
-            del self.engine
-            del self.context
+            if not self.isSDmodel(self.configs["model"]):
+                del self.engine
+                del self.context
             
         if len(performance_reports[0]) == len(performance_reports[1]):
             if performance_reports[0].keys() == performance_reports[1].keys():
@@ -116,7 +124,15 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         i = 0
 
         model_name = self.configs["model"].split("-")[0]
-        if model_name != 'gpt2':
+        if self.isSDmodel(self.configs["model"]):
+            for key, _ in feeds.items():
+                tmp_tensor = torch.tensor(feeds[key],
+                                    dtype=pt_dtype_map[self.input_type[i]])
+                input_tensors.append(tmp_tensor)
+                i += 1
+            self.predict_sd(input_tensors)
+            return
+        elif model_name != 'gpt2':
             if model_name == 'deberta':
                 keys = list(feeds.keys())
                 input_ids = torch.tensor(feeds[keys[0]], dtype=pt_dtype_map[self.input_type[0]])
@@ -238,7 +254,6 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                     break
 
                 result[output_name[i]] = outputs_list[i]
-
         else:
             self.predict_igie(feeds)
             
@@ -269,7 +284,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
 
         if model_name == 'gpt2':
             self.load_igie(batch_size)
+        elif self.isSDmodel(self.configs["model"]):
+            self.load_sd(batch_size)   
 
+         
         test_data = self._get_fake_samples(batch_size=batch_size,
                         shape=self.configs['segments'][0]['input_tensor_map'],
                         input_type=self.configs['input_type'])
@@ -300,6 +318,11 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         log.info(
             'Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}'.
             format(self.batch_size, qps, avg_latency, tail_latency))
+        
+        log.info(
+            'Batch size is {}, fps: {}, predict_avg_latency:{}, predict_tail_latency:{}'.
+            format(self.batch_size, fps, predict_avg_latency, tail_latency))
+
 
         report['QPS'] = qps
         report['AVG Latency'] = avg_latency
@@ -324,6 +347,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         
         if model_name == 'gpt2':
             self.batch_size = batch_size
+            return
+        elif self.isSDmodel(model):
+            self.batch_size = batch_size
+            #self.load_sd(batch_size)
             return
         
         if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
@@ -364,6 +391,36 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         self.engine = engine
         self.context = context         
     
+
+    def load_sd(self, batch_size):
+        model_path = self.configs['model_path']
+
+        import onnx
+        from onnx2torch import convert
+        
+        device = "cpu"
+        if torch.cuda.is_available():
+            device = "cuda"
+
+        self.model_sd = convert(model_path).to(device)
+
+        self.input_type = self.configs['input_type']
+        self.batch_size = batch_size
+        pass
+
+    def predict_sd(self, dataloader):
+        self.model_sd = self.model_sd.eval()
+        dataloader = dataloader[0].to('cuda')
+        torch.cuda.synchronize()
+        starttime = time.time()
+        out = self.model_sd(dataloader)
+        torch.cuda.synchronize()
+        endtime = time.time()
+
+        self.predict_time = endtime - starttime
+
+        return out
+
     def load_igie(self, batch_size):
         model = self.configs['model']
         model_path = self.configs['model_path']

@@ -225,3 +225,46 @@
 
         3. 在byte_infer_perf/llm_perf/reports/ILU目录下查看得到模型精度和性能数据的json文件
 """
+
+"""
+    ***************************Stable Diffusion模型操作流程********************
+    环境准备：官方的onnx2torch有bug存在，所以需要安装天数智芯适配版本的onnx2torch，采用pytorch推理框架
+
+    操作过程：
+        1、cd ByteMLPerf/byte_infer_perf/general_perf/backends/ILUVATAR/onnx2torch
+        2、执行：python3 setup.py install
+        3、cd -
+
+        数据集、模型准备：
+        cd ByteMLPerf/byte_infer_perf/general_perf
+
+        bash general_perf/prepare_model_and_dataset.sh vae-encoder-onnx-fp32
+
+        上面的模型与数据集下载完毕后会生成在：general_perf/general_perf，需要把该目录在的model_zoo下面的regular、popular、sota移到general_perf/model_zoo下面
+        如果还缺少什么模型、数据集可以在prepare_model_and_dataset.sh里面执行类似上面的操作即可；
+
+    测试开始：
+
+    cd ByteMLPerf/byte_infer_perf
+
+    1、vae-decoder模型:
+        注意事项：由于天数智芯的显卡基本上都是32G显存, 因此需要修改workloads下面的模型启动配置
+            "batch_sizes":[4,8], "test_numeric": false, 
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task vae-decoder-onnx-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/vae-decoder-onnx-fp32
+
+    2、vae-encoder模型：
+        注意事项：由于天数智芯的显卡基本上都是32G显存, 因此需要修改workloads下面的模型启动配置
+            "batch_sizes":[4,8], "test_numeric": false, 
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task vae-encoder-onnx-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/vae-encoder-onnx-fp32
+
+    2、clip模型：
+        注意事项：为了实现性能测试, 因此需要修改workloads下面的模型启动配置
+            "test_numeric": false, 
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task clip-onnx-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/clip-onnx-fp32
+"""
