@@ -9,8 +9,9 @@
         /usr/local/lib/python3.10/site-packages/vllm/engine/async_llm_engine.py 内部函数async def add_request 下面的logger.info输出日志
 
     数据集模型准备：
-        bash prepare_model.sh chatglm2-torch-fp16-6b 注意这里会把chatglm、chatglm2、llama2的数据集、模型都下载下来，我们只需要关注chatglm2、llama2模型，
-	在模型这两个模型放到modelzoo/sota 目录下
+        bash prepare_model.sh chatglm2-torch-fp16-6b 
+	bash prepare_model.sh chinese-llama2-torch-fp16-13b
+	将这两个模型放到modelzoo/sota 目录下
 
     测试开始：
 
