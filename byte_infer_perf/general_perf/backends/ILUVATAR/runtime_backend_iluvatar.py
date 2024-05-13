@@ -219,8 +219,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                             cudart.cudaMemcpyKind.cudaMemcpyHostToDevice
                 )
             
+            cudart.cudaDeviceSynchronize()
             starttime = time.time()
             context.execute_v2(allocations)
+            cudart.cudaDeviceSynchronize()
             endtime = time.time()
 
             self.predict_time = endtime - starttime
