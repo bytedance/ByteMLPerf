@@ -268,3 +268,85 @@
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task clip-onnx-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/clip-onnx-fp32
 """
+
+
+"""
+    ***************************大模型操作流程-VLLM框架********************
+    说明：
+        此部分代码未侵入框架代码，由于vllm框架未实现精度测试，因此精度测试可以沿用GPU的backends；其次，vllm的tp定义目前与框架定义的tp含义不一样，
+        因此chatglm2、llama2模型的workloads配置里面的tp=2暂时不考虑，待后续商定好解决方案在继续
+
+    环境准备：
+        需要提前下载天数智芯适配的vllm安装包到测试环境下，为了方便看输出日志，省掉不必要的信息，安装完毕后，请注释掉：
+        /usr/local/lib/python3.10/site-packages/vllm/engine/async_llm_engine.py 内部函数async def add_request 下面的logger.info输出日志
+
+    测试开始：
+
+    cd ByteMLPerf/byte_infer_perf
+        
+    1、chatglm2模型：
+        执行：python3 llm_perf/launch.py --task chatglm2-torch-fp16-6b --hardware_type ILUVATAR 
+        生成的测试报告位置：llm_perf/reports/ILUVATAR/chatglm2-torch-fp16-6b
+    
+    2、llama2模型：
+        执行：python3 llm_perf/launch.py --task chinese-llama2-torch-fp16-13b --hardware_type ILUVATAR
+        生成的测试报告位置：llm_perf/reports/ILUVATAR/chinese-llama2-torch-fp16-13b
+"""
+
+
+"""
+    **************************部分小模型的int8精度推理测试************************
+    说明：
+        字节目前想验证部分小模型的int8精度推理的性能，因此需要基于ixrt（tensorrt）推理引擎进行适配支持
+        目前需要验证的小模型包括：resnet50、yolov5、widedeep、bert
+    
+    环境准备：不需要特别准备，之前如果测试过小模型的性能，相关的环境已经存在了；
+
+    测试开始：
+
+    cd ByteMLPerf/byte_infer_perf
+
+    1、bert模型：
+        模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型
+
+        下载方式：
+            sftp -P 29889 user01@58.247.142.52  密码：5$gS%659（内网连接：sftp -P 29889 user01@10.160.20.61）
+            cd yudefu  get quantized_Resnet50.onnx  exit退出
+            mv quantized_Resnet50.onnx general_perf/model_zoo/regular/open_resnet50
+
+        代码更改：
+            1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
+            build_config.set_flag(tensorrt.BuilderFlag.INT8)
+
+            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 第118行添加以下的代码：
+            onnx_model_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50.onnx"
+            engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine" 
+
+            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py load函数部分添加以下的代码（大概在370行）：
+            engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine" 
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task resnet50-torch-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/resnet50-torch-fp32
+
+    2、yolov5模型：
+        模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型
+
+        下载方式：
+            sftp -P 29889 user01@58.247.142.52  密码：5$gS%659（内网连接：sftp -P 29889 user01@10.160.20.61）
+            cd yudefu  get quantized_yolov5s.onnx  exit退出
+            mv quantized_yolov5s.onnx general_perf/model_zoo/popular/open_yolov5/
+
+        代码更改：
+            1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
+            build_config.set_flag(tensorrt.BuilderFlag.INT8)
+
+            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 第118行添加以下的代码：
+            onnx_model_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s.onnx"
+            engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine" 
+
+            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py load函数部分添加以下的代码（大概在359行）：
+            engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine" 
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task yolov5-onnx-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/yolov5-onnx-fp32
+"""
