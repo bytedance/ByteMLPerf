@@ -1,0 +1,22 @@
+{
+  "operator": "batch_gemm", 
+  "iterations": 100, 
+  "M/N/K": [
+    [
+      1024,
+      1024,
+      1024
+    ]
+  ], 
+  "batch_size": [
+    2, 
+    8, 
+    32
+  ], 
+  "dtype": [
+    "float32", 
+    "bfloat16", 
+    "half", 
+    "int8"
+  ]
+}

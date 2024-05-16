@@ -27,10 +27,12 @@ class Backend(ABC):
         self.warmup = int(0.1 * workload_dict["iterations"])
         self.vendor_path = vendor_path
         self.op = None
+
         # communication params
         self.rank = None
         self.world_size = None
         self.group = None
+
         # hardware info
         self.hw_info_dict = None
         self.memory_limit = None
@@ -65,9 +67,45 @@ class Backend(ABC):
     def setup_2d_group(self):
         pass
 
+
+
+    # gemm ops
     def gemm(self):
         pass
 
+    def batch_gemm(self):
+        pass
+
+    def group_gemm(self):
+        pass
+
+
+    # device/host ops
+    def host2device(self):
+        pass
+
+    def device2host(self):
+        pass
+
+
+    # communication ops
+    def allreduce(self):
+        pass
+
+    def allgather(self):
+        pass
+
+    def reducescatter(self):
+        pass
+
+    def alltoall(self):
+        pass
+
+    def broadcast(self):
+        pass
+
+
+    # other compute ops
     def add(self):
         pass
 
@@ -101,57 +139,53 @@ class Backend(ABC):
     def layernorm(self):
         pass
 
-    def allreduce(self):
-        pass
 
-    def allgather(self):
-        pass
 
-    def reducescatter(self):
-        pass
 
-    def alltoall(self):
-        pass
 
-    def broadcast(self):
-        pass
 
-    def host2device(self):
-        pass
 
-    def device2host(self):
-        pass
 
+
+    # perf specify input_shape for 
     def perf(self, input_shapes: List[List[int]], dtype):
         error = ""
 
-        inputs_list, data_cnt = self.build_tensor(input_shapes, dtype)
+        # create input tensors based on input_shapes and dtype
+        tensor_list, tensor_cnt, tensor_size_perc_cnt = self.build_tensor(
+            input_shapes, dtype
+        )
 
-        if data_cnt > 0:
+        if tensor_cnt > 0:
+            # random select input tensors
             input_index_list = [
-                random.randint(0, data_cnt - 1) for _ in range(self.iterations)
+                random.randint(0, tensor_cnt - 1) for _ in range(self.iterations)
             ]
 
             # warmup
             num_warm_up = 10
             for _ in range(num_warm_up):
-                self._run_operation(self.op, inputs_list[0])
+                self._run_operation(self.op, tensor_list[0])
 
             # perf
             self.device_synchronize()
             start_time = time.perf_counter_ns()
             for i in range(self.iterations):
-                result = self._run_operation(self.op, inputs_list[input_index_list[i]])
+                result = self._run_operation(
+                    self.op, 
+                    tensor_list[input_index_list[i]]
+                )
             self.device_synchronize()
             end_time = time.perf_counter_ns()
 
             # time in us
-            exec_time = (end_time - start_time) / 1e3
-            latency = round(exec_time / self.iterations, 2)
+            total_exec_time = (end_time - start_time) / 1e3
+            latency = round(total_exec_time / self.iterations, 2)
         else:
             latency = 0
             error = "OOM"
 
+        
         if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
             report = dump_communication_ops_report(
                 self.op_name,
@@ -164,6 +198,12 @@ class Backend(ABC):
             )
         else:
             report = dump_computation_ops_report(
-                self.op_name, dtype, input_shapes, self.bandwidth_limit, latency, error
+                self.op_name, 
+                dtype, 
+                input_shapes, 
+                self.bandwidth_limit, 
+                latency, 
+                error
             )
         return report
+

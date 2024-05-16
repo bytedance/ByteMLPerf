@@ -19,9 +19,21 @@ import numpy as np
 import torch
 
 
+def get_dtype_bytes(torch_type):
+    dtype_size = 0
+    if torch_type in [torch.int32, torch.int8]:
+        dtype_size = torch.iinfo(torch_type).bits // 8
+    elif torch_type in [torch.float32, torch.float16, torch.bfloat16]:
+        dtype_size = torch.finfo(torch_type).bits // 8
+    else:
+        # not supported yet
+        pass
+    return dtype_size
+
+
 def dump_communication_ops_report(
     op_name: str,
-    dtype: str,
+    dtype: torch.dtype,
     input_shapes: List[List[int]],
     group_size: List[int],
     bandwidth_limit: float,
@@ -29,16 +41,19 @@ def dump_communication_ops_report(
     error: str = ""
 ):
     size = math.prod(input_shapes[0])
-    torch_type = getattr(torch, dtype)
-    if torch_type == torch.int32:
-        dtype_size = torch.iinfo(torch_type).bits // 8
-    else:
-        dtype_size = torch.finfo(torch_type).bits // 8
+    dtype_size = get_dtype_bytes(dtype)
     mb = dtype_size * size / 1024 / 1024
     if error == "":
         algo_bw = dtype_size * size / latency / 1e3
-        bus_bw = algo_bw * (group_size - 1) / group_size
 
+        """
+        allreduce:      2 * (group_size - 1) * (tensor_size / group_size)
+        allgather:      1 * (group_size - 1) * (tensor_size / group_size)
+        reducescatter:  1 * (group_size - 1) * (tensor_size / group_size)
+        alltoall:       1 * (group_size - 1) * (tensor_size / group_size)
+        broadcast:      tensor_size
+        """
+        bus_bw = algo_bw * (group_size - 1) / group_size
         if op_name == "broadcast":
             bus_bw = algo_bw
         if op_name == "allreduce":
@@ -74,7 +89,7 @@ def dump_communication_ops_report(
 
 def dump_computation_ops_report(
     op_name: str,
-    dtype: str,
+    dtype: torch.dtype,
     input_shapes: List[List[int]],
     bandwidth_limit: float,
     latency: float,
@@ -93,6 +108,22 @@ def dump_computation_ops_report(
         K = input_shapes[0][1]
         N = input_shapes[1][1]
         size = M * K + K * N + M * N
+    elif op_name == "batch_gemm":
+        # c = batch_gemm(a, b)
+        bs = input_shapes[0][0]
+        M = input_shapes[0][1]
+        K = input_shapes[0][2]
+        N = input_shapes[1][2]
+        size = bs * (M * K + K * N + M * N)
+    elif op_name == "group_gemm":
+        # c_list = group_gemm(a_list, b_list)
+        size_list = []
+        for problem_shape in input_shapes:
+            M = problem_shape[0][0]
+            K = problem_shape[0][1]
+            N = problem_shape[1][1]
+            size_list.append(M * K + K * N + M * N)
+        size = sum(size_list)
     elif op_name in ["unique", "device2host", "host2device"]:
         size = sum([math.prod(shape) for shape in input_shapes])
     else:
@@ -100,11 +131,7 @@ def dump_computation_ops_report(
         # MAC_total = MAC_in + MAC_out
         size = sum([math.prod(shape) for shape in input_shapes]) * 2
 
-    torch_type = getattr(torch, dtype)
-    if torch_type == torch.int32:
-        dtype_size = torch.iinfo(torch_type).bits // 8
-    else:
-        dtype_size = torch.finfo(torch_type).bits // 8
+    dtype_size = get_dtype_bytes(dtype)
     mb = dtype_size * size / 1024 / 1024
     if error == "":
         algo_bw = dtype_size * size / latency / 1e3

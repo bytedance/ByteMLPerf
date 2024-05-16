@@ -22,8 +22,13 @@ from typing import Any, Dict, List
 import torch
 import torch.distributed as dist
 import torch.distributed.distributed_c10d as dist_c10d
+
 from backends.backend import Backend
 from backends.module_store import *
+from backends.utils import get_dtype_bytes
+
+from .custom_ops import GPUGemmOp, GPUBatchGemmOp, GPUGroupGemmOp
+
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("PerfEngine")
@@ -50,9 +55,51 @@ class BackendGPU(Backend):
                 )
             )
 
-    def gemm(self):
-        self.op = GemmOp()
 
+    # gemm ops
+    def gemm(self):
+        self.op = GPUGemmOp()
+
+    def batch_gemm(self):
+        self.op = BatchGemmOp()
+
+    def group_gemm(self):
+        self.op = GPUGroupGemmOp()
+
+
+    # device/host ops
+    def host2device(self):
+        self.op = Host2DeviceOp(torch.device("cuda"))
+
+    def device2host(self):
+        self.op = Device2HostOp()
+
+
+
+    # communication ops
+    def allreduce(self):
+        self.setup_2d_group()
+        self.op = AllReduceOp(self.group)
+
+    def allgather(self):
+        self.setup_2d_group()
+        self.op = AllGatherOp(self.group)
+
+    def reducescatter(self):
+        self.setup_2d_group()
+        self.op = ReduceScatterOp(self.group)
+
+    def alltoall(self):
+        self.setup_2d_group()
+        self.op = AllToAllOp(self.group)
+
+    def broadcast(self):
+        self.setup_2d_group()
+        self.op = BroadcastOp(self.group)
+
+
+
+    # other compute ops
     def add(self):
         self.op = AddOp()
 
@@ -86,57 +133,50 @@ class BackendGPU(Backend):
     def layernorm(self):
         self.op = LayerNormOp()
 
-    def allreduce(self):
-        self.setup_2d_group()
-        self.op = AllReduceOp(self.group)
 
-    def allgather(self):
-        self.setup_2d_group()
-        self.op = AllGatherOp(self.group)
 
-    def reducescatter(self):
-        self.setup_2d_group()
-        self.op = ReduceScatterOp(self.group)
 
-    def alltoall(self):
-        self.setup_2d_group()
-        self.op = AllToAllOp(self.group)
 
-    def broadcast(self):
-        self.setup_2d_group()
-        self.op = BroadcastOp(self.group)
+    # create input tensors
+    def build_tensor(self, input_shapes, torch_dtype):
 
-    def host2device(self):
-        self.op = Host2DeviceOp(torch.device("cuda"))
-
-    def device2host(self):
-        self.op = Device2HostOp()
-
-    def build_tensor(self, input_shapes, dtype):
-        torch_type = getattr(torch, dtype)
-        if torch_type == torch.int32:
-            dtype_size = torch.iinfo(torch_type).bits // 8
+        # compute size of input and output tensors
+        if hasattr(self.op, "compute_size"):
+            bytes_per_cnt = self.op.compute_size(input_shapes, torch_dtype)
+        # default: input_tensors_size == output_tensor_size, all tensors have same dtype
         else:
-            dtype_size = torch.finfo(torch_type).bits // 8
-        size = sum([math.prod(shape) for shape in input_shapes])
-        data_amount = size * 2 * dtype_size
-        data_cnt = (self.memory_limit - 4) * 1024**3 // data_amount
-        data_cnt = min(data_cnt, self.iterations)
-        input_tensors_list = []
-        for _ in range(data_cnt):
-            input_tensors = [
-                torch.randn(shape).type(torch_type).to(torch.device("cuda"))
-                for shape in input_shapes
-            ]
-            input_tensors_list.append(input_tensors)
+            dtype_size = get_dtype_bytes(torch_dtype)
+            element_num = 2 * sum([math.prod(shape) for shape in input_shapes])
+            bytes_per_cnt = dtype_size * element_num
 
+        # compute max avail tensors for compute
+        avail_bytes = (self.memory_limit - 4) * 1024**3
+        avail_cnts = avail_bytes // bytes_per_cnt
+        max_data_cnt = min(self.iterations, avail_cnts)
+
+
+        # create input tensors for each op
+        input_tensors_list = []
+        for _ in range(max_data_cnt):
+            # create input tensors
+            if hasattr(self.op, "custom_create_tensors"):
+                input_tensors = self.op.custom_create_tensors(input_shapes, torch_dtype)
+                input_tensors_list.append(input_tensors)
+            # default: all input tensors have same dtype
+            else:
+                input_tensors = [
+                    torch.randint(0, 3, size=shape).type(torch_dtype).to(torch.device("cuda"))
+                    for shape in input_shapes
+                ]
+                input_tensors_list.append(input_tensors)
         if hasattr(self.op, "process_inputs"):
             input_tensors_list = [
                 self.op.process_inputs(*(input_tensor))
                 for input_tensor in input_tensors_list
             ]
+        return input_tensors_list, max_data_cnt, bytes_per_cnt
 
-        return input_tensors_list, data_cnt
+
 
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)
@@ -150,6 +190,14 @@ class BackendGPU(Backend):
         """
         initialize distributed process groups and relevant ENVs
         """
+        # check device_count
+        device_count = torch.cuda.device_count()
+        if world_size > device_count:
+            world_size = device_count
+        if rank >= world_size:
+            return False
+
+        # set envs
         os.environ["MASTER_ADDR"] = "127.0.0.1"
         os.environ["MASTER_PORT"] = "49373"
         os.environ["LOCAL_RANK"] = str(rank)
@@ -157,6 +205,7 @@ class BackendGPU(Backend):
         os.environ["WORLD_SIZE"] = str(world_size)
 
         torch.cuda.set_device(rank)
+
         # Call the init process
         timeout_seconds = int(os.environ.get("MEGATRON_NCCL_TIMEOUT_SECOND", 30))
         torch.distributed.init_process_group(
@@ -168,6 +217,7 @@ class BackendGPU(Backend):
         )
         self.setup_2d_group()
         log.warning("DIST: rank {}, world_size {}".format(rank, world_size))
+        return True
 
     def setup_2d_group(self):
         self.rank = dist.get_rank()

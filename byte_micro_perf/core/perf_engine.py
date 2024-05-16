@@ -20,8 +20,11 @@ import math
 import os
 import subprocess
 import sys
-from typing import Any, Dict, List
+import pathlib
 import traceback
+import random
+from typing import Any, Dict, List
+
 
 import torch
 import torch.multiprocessing as mp
@@ -106,8 +109,14 @@ class PerfEngine:
 
         """
         initialize_func = getattr(self.backend, "initialize_ccl")
-        initialize_func(rank, world_size)
+
+        # world_size may excced available device count
+        ret = initialize_func(rank, world_size)
+        if ret is not None and not ret:
+            return
+
         status = self.start_perf(self.workload)
+        return status
 
     def init_backend(self, hardware_type: str) -> Backend:
         """
@@ -150,9 +159,7 @@ class PerfEngine:
         )
 
         # Initalize Output Dir and Reports
-        output_dir = os.path.abspath(
-            "reports/" + self.backend_type + "/" + workload["operator"]
-        )
+        output_dir = pathlib.Path("reports").joinpath(self.backend_type).joinpath(workload["operator"])
         os.makedirs(output_dir, exist_ok=True)
 
         op_name = workload["operator"]
@@ -169,22 +176,60 @@ class PerfEngine:
         else:
             raise ValueError(f"Unknown operation: {op_name.lower()}")
 
-        perf_reports = []
+        # get input shape info
+        shape_list = []
+
+        # normal ops
         if "input_shape_list" in self.workload:
             shape_list = self.workload["input_shape_list"]
-        else:
-            shape_list = []
-            for M, N, K in self.workload["M/N/K"]:
-                shape_list.append([[M, K], [K, N]])
+        # gemm or batch_gemm
+        elif "M/N/K" in self.workload:
+            if "batch_size" in self.workload:
+                for batch_size in self.workload["batch_size"]:
+                    for M, K, N in self.workload["M/N/K"]:
+                        shape_list.append([
+                            [batch_size, M, K], 
+                            [batch_size, K, N]
+                        ])
+            else:
+                for M, K, N in self.workload["M/N/K"]:
+                    shape_list.append([[M, K], [K, N]])
+        # group_gemm
+        elif "MNK_choices" in self.workload:
+            seed = workload["seed"]
+            MNK_list = self.workload["MNK_choices"]
+            problems_list = workload["problems"]
 
-        for dtype in self.workload["dtype"]:
+            random.seed(seed)
+            for problems in problems_list:
+                cur_inputs = []
+                for _ in range(problems):
+                    M, N, K = [random.choice(MNK_list) for _ in range(3)]
+                    cur_shapes = [[M, K], [K, N]]
+                    cur_inputs.append(cur_shapes)
+            shape_list.append(cur_inputs)
+
+        # dtype list
+        dtype_list = self.workload["dtype"]
+
+        for dtype in dtype_list:
+            torch_dtype = getattr(torch, dtype)
+
             perf_reports = []
             base_report["Performance"] = {}
+
             for input_shape in shape_list:
+                """
+                input_shape could be:
+                  List[int]: single shape. cos
+                  List[List[int]]: multiple inputs. add
+                  List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+                """
+
                 if isinstance(input_shape[0], int):
                     input_shape = [input_shape]
                 try:
-                    reports = self.backend.perf(input_shape, dtype)
+                    reports = self.backend.perf(input_shape, torch_dtype)
                 except Exception as e:
                     traceback.print_exc()
                     log.error(f"Execute op: {op_name.lower()} failed, input_shape: {input_shape}, dtype: {dtype}, error msg: {e}")

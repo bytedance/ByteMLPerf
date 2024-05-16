@@ -1,0 +1,20 @@
+{
+  "operator": "group_gemm", 
+  "iterations": 20, 
+  "MNK_choices": [
+    128, 
+    256, 
+    512, 
+    1024
+  ], 
+  "seed": 2024, 
+  "problems": [
+    20
+  ], 
+  "dtype": [ 
+    "float32", 
+    "bfloat16", 
+    "half", 
+    "int8"
+  ]
+}
