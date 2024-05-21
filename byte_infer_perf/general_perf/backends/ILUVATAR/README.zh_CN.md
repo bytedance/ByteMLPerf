@@ -299,6 +299,9 @@
     说明：
         字节目前想验证部分小模型的int8精度推理的性能，因此需要基于ixrt（tensorrt）推理引擎进行适配支持
         目前需要验证的小模型包括：resnet50、yolov5、widedeep、bert
+
+        注意如果在测试bert的int8推理时，报错，可能是sdk、ixrt版本问题导致；需要升级；
+        生成的报告，并没有更改里面的精度标识，这里只是给出一个测试case，因此并没有将这部分代码加到代码中
     
     环境准备：不需要特别准备，之前如果测试过小模型的性能，相关的环境已经存在了；
 
@@ -306,7 +309,7 @@
 
     cd ByteMLPerf/byte_infer_perf
 
-    1、bert模型：
+    1、resnet50 模型：
         模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型
 
         下载方式：
@@ -318,17 +321,19 @@
             1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
             build_config.set_flag(tensorrt.BuilderFlag.INT8)
 
-            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 第118行添加以下的代码：
+            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 函数compile 最后一个else 添加以下的代码：
             onnx_model_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50.onnx"
             engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine" 
+            （在 build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize) 前面加上面两行）
 
-            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py load函数部分添加以下的代码（大概在370行）：
+            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py 函数load 最后一个else 添加以下的代码：
             engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine" 
+            （注释掉 engine_path = os.path.dirname(model_path) + "/" + model + ".engine"）
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task resnet50-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/resnet50-torch-fp32
 
-    2、yolov5模型：
+    2、yolov5 模型：
         模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型
 
         下载方式：
@@ -340,13 +345,52 @@
             1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
             build_config.set_flag(tensorrt.BuilderFlag.INT8)
 
-            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 第118行添加以下的代码：
+            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 函数compile 最后一个else 添加以下的代码：
             onnx_model_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s.onnx"
             engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine" 
+           （在 build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize) 前面加上面两行）
 
-            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py load函数部分添加以下的代码（大概在359行）：
+            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py 函数load 添加以下的代码：
             engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine" 
+           （在 if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5': 下面添加；
+             注释掉：engine_path = model_path.split(".")[0] + "_end.engine"）
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task yolov5-onnx-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/yolov5-onnx-fp32
+
+    3、bert 模型：
+        模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型；该模型直接拿生成好的engine进行推理
+
+        下载方式：
+            sftp -P 29889 user01@58.247.142.52  密码：5$gS%659（内网连接：sftp -P 29889 user01@10.160.20.61）
+            cd yudefu  get bert_zijie_int8_b196.engine  exit退出
+            mv quantized_yolov5s.onnx general_perf/model_zoo/regular/open_bert/
+
+        代码更改：
+            1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
+            build_config.set_flag(tensorrt.BuilderFlag.INT8)
+
+            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 函数compile 最后一个else 做以下操作：
+            注释掉 build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+            因为这里直接加载已经生成的engine，不需要进行compile生成；这里可以加一个输出：
+                print("\n****bert-int8推理直接采用加载生成好的engine, 不需要进行编译！****") 看程序走到哪里
+
+            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py 函数load 添加以下的代码：
+            engine_path = "general_perf/model_zoo/regular/open_bert/bert_zijie_int8_b196.engine"
+           （在 elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
+             注释掉：engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine"）
+
+             第二个还需要修改函数 predict_dump 以下四行代码：
+             input_shape = input_tensors[i].shape
+             input_idx = engine.get_binding_index(input_name)
+             context.set_binding_shape(input_idx, Dims(input_shape))
+             i += 1
+             更改为：
+             input_shape = input_tensors[i].shape
+             for binding in range(3):
+                 context.set_binding_shape(binding, Dims(input_shape))
+            i += 1
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task bert-torch-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/bert-torch-fp32
 """

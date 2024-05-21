@@ -80,15 +80,6 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"    
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
         
-        # elif model_name == 'roformer':
-        #     # onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-bs32.onnx"
-        #     # engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(32) + ".engine"
-        #     # build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=32)
-        #     for bs in configs['workload']['batch_sizes']:
-        #         onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-bs32_bak.onnx"
-        #         engine_paths = "general_perf/general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(bs) + ".engine" 
-        #         build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_paths, MaxBatchSize=bs)
-        
         elif model_name == 'conformer':
             onnx_model_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end.onnx"
             engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
@@ -96,7 +87,7 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
 
         elif model_name == 'deberta':
             onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end.onnx"
-            engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"    
+            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end" + ".engine"    
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
 
         elif model_name == 'gpt2':

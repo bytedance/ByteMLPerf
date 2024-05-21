@@ -24,9 +24,10 @@ import tvm
 from general_perf.backends import runtime_backend
 from general_perf.backends.ILUVATAR.common import init_by_tensorrt, setup_io_bindings
 from general_perf.backends.ILUVATAR.utils import get_target
-from general_perf.backends.ILUVATAR.common import Task, TaskThread, _cudaGetErrorEnum, checkCudaErrors
+from general_perf.backends.ILUVATAR.common import Task, TaskThread
 from tensorrt import Dims
 from cuda import cuda, cudart
+import numa
 
 from general_perf.backends.ILUVATAR.common import load_ixrt_plugin
 load_ixrt_plugin()
@@ -66,6 +67,11 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         self.predict_fps = None
         self.predict_time = None
         self.task = None
+        self.inputs = None
+        self.outputs = None
+        self.allocations = None
+        numa.memory.set_local_alloc()
+        numa.schedule.run_on_nodes(0)
 
     def isSDmodel(self, model_name):
         result = False
@@ -117,6 +123,159 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                     merged_dict["predict P99 Latency"] = predict_p99_latency
                 
         return merged_dict
+    
+    def init_allocs(self):
+        if self.inputs is not None:
+            for i in range(len(self.inputs)):
+                err, = cudart.cudaFree(self.inputs[i]["allocation"])
+                assert err == cudart.cudaError_t.cudaSuccess
+
+            for i in range(len(self.outputs)):
+                err, = cudart.cudaFree(self.outputs[i]["allocation"])
+                assert err == cudart.cudaError_t.cudaSuccess
+            self.inputs = None
+
+    def get_allocs(self):
+        if self.inputs is None:
+            self.inputs, self.outputs, self.allocations = setup_io_bindings(self.engine, self.context)
+        return self.inputs, self.outputs, self.allocations
+
+    def predict_dump(self, feeds):
+        input_tensors = []
+        i = 0
+
+        model_name = self.configs["model"].split("-")[0]
+    
+        if model_name != 'gpt2':
+            if model_name == 'deberta':
+                keys = list(feeds.keys())
+                input_ids = feeds[keys[0]]
+                attention_mask = feeds[keys[1]]
+                input_tensors = [input_ids, attention_mask]
+
+            else:
+                for key, _ in feeds.items():
+                    input_tensors.append(feeds[key])
+                    i += 1
+
+            # ixrt inference
+            engine = self.engine
+            assert engine
+            context = self.context
+            assert context
+
+            # set dynamic shape
+            input_tensor_map = self.configs["segments"][0]["input_tensor_map"]
+            input_shape = input_tensor_map.values()
+
+            i = 0
+            for input_name, _ in input_tensor_map.items():
+                if model_name == 'widedeep':
+                    input_tensors.append(np.zeros((self.batch_size, 1), dtype=np.float32))
+                    input_names = [
+                        "new_categorical_placeholder:0",
+                        "new_numeric_placeholder:0",
+                        "import/head/predictions/zeros_like:0"
+                    ]
+                    for input_name in input_names:
+                        if input_name == 'new_categorical_placeholder:0':
+                            input_shape = input_tensors[0].shape
+                        if input_name == 'new_numeric_placeholder:0':
+                            input_shape = input_tensors[1].shape
+                        if input_name == 'import/head/predictions/zeros_like:0':
+                            input_shape = input_tensors[2].shape
+                    
+                        input_idx = engine.get_binding_index(input_name)
+                        context.set_binding_shape(input_idx, Dims(input_shape))
+
+                elif model_name == 'deberta':
+                    input_names = [
+                        "input_ids.1",
+                        "attention_mask.1",
+                    ]
+                    for input_name in input_names:
+                        if input_name == 'input_ids.1':
+                            input_shape = input_tensors[0].shape
+                        if input_name == 'attention_mask.1':
+                            input_shape = input_tensors[1].shape
+                    
+                        input_idx = engine.get_binding_index(input_name)
+                        context.set_binding_shape(input_idx, Dims(input_shape))
+
+                else:
+                    input_shape = input_tensors[i].shape
+                    input_idx = engine.get_binding_index(input_name)
+                    context.set_binding_shape(input_idx, Dims(input_shape))
+                    i += 1
+            
+            # Setup I/O bindings
+            inputs, outputs, allocations = self.get_allocs()
+
+            # Prepare the output data
+            outputs_list = []
+            for i in range(len(outputs)):
+                output = np.zeros(outputs[i]["shape"], outputs[i]["dtype"])
+                outputs_list.append(output)
+
+            data_batch_list = []
+            for i in range(len(input_tensors)):
+                data_batch = np.ascontiguousarray(input_tensors[i])
+                data_batch_list.append(data_batch)
+
+        return input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list
+
+    def predict_timing(self, input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list):
+        model_name = self.configs["model"].split("-")[0]
+
+        # H2D: host to device
+        for i in range(len(inputs)):
+            (err, ) = cudart.cudaHostRegister(data_batch_list[i], inputs[i]["nbytes"], 2)
+
+        for i in range(len(inputs)):
+            (err, ) = cudart.cudaMemcpy(
+                        inputs[i]["allocation"],
+                        data_batch_list[i],
+                        inputs[i]["nbytes"],
+                        cudart.cudaMemcpyKind.cudaMemcpyHostToDevice
+            )
+
+        for i in range(len(inputs)):
+            (err, ) = cudart.cudaHostUnregister(data_batch_list[i])
+
+        starttime = time.time()
+        context.execute_v2(allocations)
+        endtime = time.time()
+
+        self.predict_time = endtime - starttime
+        
+        # D2H: device to host
+        for i in range(len(outputs)):
+            (err, )= cudart.cudaMemcpy(outputs_list[i], 
+                        outputs[i]["allocation"], 
+                        outputs[i]["nbytes"], 
+                        cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost
+            )
+        
+        result = {}
+
+        output_tensor_map = self.configs["segments"][0]["output_tensor_map"]
+        output_name = output_tensor_map.split(",")
+
+        for i in range(len(output_name)):
+            if model_name == 'yolov5':
+                result[output_name[0]] = outputs_list[0]
+                break
+
+            result[output_name[i]] = outputs_list[i]
+        
+        if model_name == 'videobert':
+            return outputs_list
+        
+        elif model_name == 'gpt2':
+            return None
+        
+        else:
+            return result
 
     def predict(self, feeds):
         # The deberta model is currently unable to undergo accuracy testing temporarily
@@ -130,8 +289,10 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                                     dtype=pt_dtype_map[self.input_type[i]])
                 input_tensors.append(tmp_tensor)
                 i += 1
+
             self.predict_sd(input_tensors)
             return
+        
         elif model_name != 'gpt2':
             if model_name == 'deberta':
                 keys = list(feeds.keys())
@@ -197,7 +358,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                     i += 1
             
             # Setup I/O bindings
-            inputs, outputs, allocations = setup_io_bindings(engine, context)
+            inputs, outputs, allocations = self.get_allocs()
 
             # Prepare the output data
             outputs_list = []
@@ -212,6 +373,9 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
 
             # H2D: host to device
             for i in range(len(inputs)):
+                (err, ) = cudart.cudaHostRegister(data_batch_list[i], inputs[i]["nbytes"], 2)
+
+            for i in range(len(inputs)):
                 (err, ) = cudart.cudaMemcpy(
                             inputs[i]["allocation"],
                             data_batch_list[i],
@@ -219,10 +383,11 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                             cudart.cudaMemcpyKind.cudaMemcpyHostToDevice
                 )
             
-            cudart.cudaDeviceSynchronize()
+            for i in range(len(inputs)):
+                (err, ) = cudart.cudaHostUnregister(data_batch_list[i])
+
             starttime = time.time()
             context.execute_v2(allocations)
-            cudart.cudaDeviceSynchronize()
             endtime = time.time()
 
             self.predict_time = endtime - starttime
@@ -237,13 +402,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             
             # Free Gpu Memory
             # cuda-python
-            for i in range(len(inputs)):
-                err, = cudart.cudaFree(inputs[i]["allocation"])
-                assert err == cudart.cudaError_t.cudaSuccess
-
-            for i in range(len(outputs)):
-                err, = cudart.cudaFree(outputs[i]["allocation"])
-                assert err == cudart.cudaError_t.cudaSuccess
+            self.init_allocs()
             
             result = {}
 
@@ -288,22 +447,29 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             self.load_igie(batch_size)
         elif self.isSDmodel(self.configs["model"]):
             self.load_sd(batch_size)   
-
-         
+    
         test_data = self._get_fake_samples(batch_size=batch_size,
                         shape=self.configs['segments'][0]['input_tensor_map'],
                         input_type=self.configs['input_type'])
+        
+        # Free Gpu Memory
+        # cuda-python
+        self.init_allocs()
 
         for _ in range(30):
             self.predict(test_data)
 
         for _ in range(iterations):
-            start_time = time.time()
-            self.predict(test_data)
-            end_time = time.time()
-            times_range.append(end_time - start_time)
-            predict_range.append(self.predict_time)
+            input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list = self.predict_dump(test_data)
 
+            start_time = time.time()
+            self.predict_timing(input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list)
+            end_time = time.time()
+
+            times_range.append(end_time - start_time)
+            predict_range.append(self.predict_time)           
+
+            
         times_range.sort()
         tail_latency = round(
             times_range[int(len(times_range) * 0.99)] * 1000, 2)
@@ -321,9 +487,9 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             'Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}'.
             format(self.batch_size, qps, avg_latency, tail_latency))
         
-        log.info(
-            'Batch size is {}, fps: {}, predict_avg_latency:{}, predict_tail_latency:{}'.
-            format(self.batch_size, fps, predict_avg_latency, tail_latency))
+        # log.info(
+        #     'Batch size is {}, fps: {}, predict_avg_latency:{}, predict_tail_latency:{}'.
+        #     format(self.batch_size, fps, predict_avg_latency, tail_latency))
 
 
         report['QPS'] = qps
@@ -350,6 +516,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         if model_name == 'gpt2':
             self.batch_size = batch_size
             return
+        
         elif self.isSDmodel(model):
             self.batch_size = batch_size
             #self.load_sd(batch_size)
@@ -377,11 +544,8 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         if model_name == 'conformer':
             engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
         
-        # if model_name == 'roformer':
-        #     engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen-sim-modified-" + str(batch_size) + ".engine" 
-        
         if model_name == 'deberta':
-            engine_path = "general_perf/model_zoo/popular/open_conformer/deberta-base-squad-sim_end" + ".engine"   
+            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end" + ".engine"   
 
         engine, context = init_by_tensorrt(engine_path)
 
