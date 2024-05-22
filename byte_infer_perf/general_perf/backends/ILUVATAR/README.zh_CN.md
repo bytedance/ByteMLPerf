@@ -364,7 +364,7 @@
         下载方式：
             sftp -P 29889 user01@58.247.142.52  密码：5$gS%659（内网连接：sftp -P 29889 user01@10.160.20.61）
             cd yudefu  get bert_zijie_int8_b196.engine  exit退出
-            mv quantized_yolov5s.onnx general_perf/model_zoo/regular/open_bert/
+            mv bert_zijie_int8_b196.engine general_perf/model_zoo/regular/open_bert/
 
         代码更改：
             1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
@@ -390,6 +390,12 @@
              for binding in range(3):
                  context.set_binding_shape(binding, Dims(input_shape))
             i += 1
+
+            第三需要更改的地方：将函数predict_timing 里面的 result[output_name[i]] = outputs_list[i] 改成：result[output_name[i]] = outputs_list[0]
+
+            精度测试时还需要更改下面的地方：函数predict 里面的 result[output_name[i]] = outputs_list[i] 改成：
+                result[output_name[0]] = outputs_list[0][:,:,0]
+                result[output_name[1]] = outputs_list[0][:,:,1]
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task bert-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/bert-torch-fp32
