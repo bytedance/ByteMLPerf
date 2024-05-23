@@ -89,9 +89,9 @@ def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize):
         
     elif model_name == 'roformer':
         profile.set_shape(
-            "input_segment:0", Dims([1, 1024]), Dims([16, 1024]), Dims([MaxBatchSize, 1024]))
+            "input_segment0", Dims([1, 1024]), Dims([16, 1024]), Dims([MaxBatchSize, 1024]))
         profile.set_shape(
-            "input_token:0", Dims([1, 1024]), Dims([16, 1024]), Dims([MaxBatchSize, 1024]))
+            "input_token0", Dims([1, 1024]), Dims([16, 1024]), Dims([MaxBatchSize, 1024]))
         
     elif model_name == 'swin':
         profile.set_shape(
@@ -148,7 +148,7 @@ def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize):
         
         elif model_name == 'roformer':
             input_tensor = network.get_input(i)
-            input_tensor.shape = Dims([32, 1024])
+            input_tensor.shape = Dims([-1, 1024])
 
         elif model_name == 'swin':
             input_tensor = network.get_input(i)
@@ -286,4 +286,3 @@ def checkCudaErrors(result):
         return result[1]
     else:
         return result[1:]
-

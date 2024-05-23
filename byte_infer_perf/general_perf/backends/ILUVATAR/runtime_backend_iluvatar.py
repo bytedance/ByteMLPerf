@@ -525,27 +525,24 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
             engine_path = model_path.split(".")[0] + "_end.engine"
 
-        elif model_name == 'widedeep':
+        elif model_name == 'widedeep' or model_name == 'roformer':
             engine_path = model_path + "/" + model + "_end.engine"
-        
-        elif model_name == 'roformer':
-            engine_path = model_path + "/" + model + ".engine"
-        
-        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
+                
+        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin' \
+             or model_name == 'resnet50':
             engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
 
         else:
             engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
         
-        # **************to do*************
         if model_name == 'widedeep':      
-            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"
+            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_new" + ".engine"
 
-        if model_name == 'conformer':
-            engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
+        if model_name == 'roformer':
+            engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end" + ".engine"     
         
         if model_name == 'deberta':
-            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end" + ".engine"   
+            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end" + ".engine"
 
         engine, context = init_by_tensorrt(engine_path)
 

@@ -54,15 +54,12 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             onnx_model_path = model_path.split(".")[0] + "_end.onnx"
             engine_path = model_path.split(".")[0] + "_end.engine"
 
-        elif model_name == 'widedeep':
+        elif model_name == 'widedeep' or model_name == 'roformer':
             onnx_model_path = model_path + "/" + model + "_end.onnx"
             engine_path = model_path + "/" + model + "_end.engine"
-        
-        elif model_name == 'roformer':
-            onnx_model_path = model_path + "/" + model + ".onnx"
-            engine_path = model_path + "/" + model + ".engine"
 
-        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
+        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin' \
+             or model_name == 'resnet50':
             onnx_model_path = os.path.dirname(model_path) + "/" + model + "_end.onnx"
             engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine"
         
@@ -71,23 +68,22 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
 
         # model preprocessing
-        if model_name != 'deberta':
-            self.get_onnx(configs)
+        self.get_onnx(configs)
 
         # build engine
         if model_name == 'widedeep':
-            onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape.onnx"
-            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"    
-            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
-        
-        elif model_name == 'conformer':
-            onnx_model_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end.onnx"
-            engine_path = "general_perf/model_zoo/popular/open_conformer/conformer_encoder_optimizer_end" + ".engine"    
+            onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_new.onnx"
+            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_new" + ".engine"    
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
 
         elif model_name == 'deberta':
-            onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end.onnx"
-            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-base-squad-sim_end" + ".engine"    
+            onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end.onnx"
+            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end" + ".engine"    
+            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+
+        elif model_name == 'roformer':
+            onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end.onnx"
+            engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end" + ".engine"    
             build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
 
         elif model_name == 'gpt2':
@@ -193,15 +189,15 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             print("***Convert pb model to onnx model success!***")
 
         # Convert ONNX model to plugin operator model: Support fusion of dynamic and static graphs
-        """
-            *********************待处理问题记录: 后续会更新进展************************
-            conformer 模型不能利用optimizer.py脚本转换, 因为attention比较特殊, 利用处理好的onnx模型进行测试;
-            roformer  模型目前没有实现通过加载固定shape的onnx, 生成不同的batch的engine实现动态shape推理;
-            widedeep  模型目前对原始的onnx暂时不支持直接动态shape推理, 对模型做了一系列处理, 并且不需要进行optimizer.py脚本处理, 直接加载处理好的onnx模型;
-        """        
-        if model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or \
-            model_name == 'videobert':
+        if model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or \
+            model_name == 'videobert' or model_name == 'resnet50' or model_name == 'widedeep':
             
+            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path}'
+            subprocess.call(cmd, shell=True)
+            print("***Convert onnx model to plugin operator model success!***")
+
+        elif model_name == 'deberta':
+            onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast.onnx"
             cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path}'
             subprocess.call(cmd, shell=True)
             print("***Convert onnx model to plugin operator model success!***")
@@ -217,7 +213,13 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             print("***Convert onnx model to plugin operator model success!***")
 
         elif model_name == 'roformer':
-            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type roformer'
+            onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen.onnx"
+            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type roformer --input_shapes input_segment0:bsx1024,input_token0:bsx1024'
+            subprocess.call(cmd, shell=True)
+            print("***Convert onnx model to plugin operator model success!***")
+
+        elif model_name == 'conformer':
+            cmd = f'python3 general_perf/backends/ILUVATAR/optimizer/optimizer.py --onnx {onnx_model_path} --model_type conformer --hidden_size 512 --num_heads 8'
             subprocess.call(cmd, shell=True)
             print("***Convert onnx model to plugin operator model success!***")
 
