@@ -12,9 +12,11 @@ from passes.fuse_series_bias_add import FusionSerialBiasAdd
 from passes.fusion_albert_attention import FusionAlbertAttention
 from passes.fusion_attention import AttentionMask, FusionAttention
 from passes.fusion_biasgelu import FusionBiasGelu
+from passes.fusion_conformer_attention import FusionConformerAttention
+from passes.fusion_conformer_xsoftmax import FusionConformerXSoftmax
 from passes.fusion_customfc import (
+    FusionConformerCustomFCActivation,
     FusionCustomFC,
-    FusionCustomFCActivation,
     FusionCustomFCGPT2,
 )
 from passes.fusion_disentangled_attention import FusionDisentangledAttention
@@ -39,17 +41,16 @@ from passes.fusion_skiplayernorm import (
     FusionBiasSkipLayerNormalization,
     FusionSkipLayerNormalization,
 )
+from passes.fusion_splitQKV import FusionSplitQKV
 from passes.fusion_swinl_attention import FusionSwinLAttention
 from passes.fusion_utils import FusionUtils
-from passes.fusion_videobert_attention import FusionVideoBertAttention
 from passes.fusion_vit_attention import FusionVITAttention
-from passes.fusion_xsoftmax import FusionXSoftmax
 from passes.onnx_model import OnnxModel
 
 logger = getLogger(__name__)
 
 
-class BertOptimizationOptions(FusionOptions):
+class ConformerOptimizationOptions(FusionOptions):
     """This class is deprecated"""
 
     def __init__(self, model_type):
@@ -59,7 +60,7 @@ class BertOptimizationOptions(FusionOptions):
         super().__init__(model_type)
 
 
-class BertOnnxModel(OnnxModel):
+class conformerOnnxModel(OnnxModel):
     def __init__(self, model: ModelProto, num_heads: int = 0, hidden_size: int = 0):
         """Initialize BERT ONNX Model.
 
@@ -86,14 +87,7 @@ class BertOnnxModel(OnnxModel):
         self.utils = FusionUtils(self)
 
     def fuse_attention(self):
-        self.attention_fusion.apply()
-        FusionAlbertAttention(
-            self, self.hidden_size, self.num_heads, self.attention_mask
-        ).apply()
-        FusionVideoBertAttention(self).apply()
-        FusionVITAttention(self).apply()
-        FusionSwinLAttention(self).apply()
-        FusionGptAttentionNoPast(self).apply()
+        FusionConformerAttention(self, self.hidden_size, self.num_heads).apply()
         # Only relevant in models with Q-DQ nodes
         self.qordered_attention_fusion.apply()
 
@@ -106,8 +100,8 @@ class BertOnnxModel(OnnxModel):
         fusion = FusionCustomFC(self)
         fusion.apply()
 
-    def fuse_custom_fc_activation(self):
-        fusion = FusionCustomFCActivation(self)
+    def fuse_custom_fc_conformer_activation(self):
+        fusion = FusionConformerCustomFCActivation(self)
         fusion.apply()
 
     def fuse_custom_fc_gpt2_classify(self):
@@ -132,7 +126,7 @@ class BertOnnxModel(OnnxModel):
         fusion.apply()
 
     def fuse_custom_xsoftmax(self):
-        fusion = FusionXSoftmax(self)
+        fusion = FusionConformerXSoftmax(self)
         fusion.apply()
 
     def fuse_disentangled_attention(self):
@@ -172,6 +166,10 @@ class BertOnnxModel(OnnxModel):
 
     def fuse_skip_layer_norm(self):
         fusion = FusionSkipLayerNormalization(self)
+        fusion.apply()
+
+    def fuse_split_qkv(self):
+        fusion = FusionSplitQKV(self, self.hidden_size, self.num_heads)
         fusion.apply()
 
     # Only relevant in models with Q-DQ nodes
@@ -475,19 +473,15 @@ class BertOnnxModel(OnnxModel):
         if options.enable_vit:
             self.fuse_custom_fc()
 
-        if (options is None) or options.enable_attention:
-            if options is not None:
-                self.attention_mask.set_mask_format(options.attention_mask_format)
-            self.fuse_attention()
+        self.fuse_custom_fc()
+        self.fuse_custom_xsoftmax()
+
+        self.fuse_attention()
+
+        self.fuse_split_qkv()
 
         if (options is None) or options.enable_skip_layer_norm:
             self.fuse_skip_layer_norm()
-
-        self.fuse_custom_fc()
-
-        self.fuse_custom_xsoftmax()
-
-        self.fuse_disentangled_attention()
 
         # Perform the MatMul fusion after the Attention fusion as we do not
         # want to fuse the MatMuls inside the Attention subgraphs
@@ -517,9 +511,8 @@ class BertOnnxModel(OnnxModel):
         if options is not None and options.enable_gelu_approximation:
             self.gelu_approximation()
 
-        self.fuse_custom_fc_activation()
-
         self.remove_unused_constant()
+        self.fuse_custom_fc_conformer_activation()
 
         # Use symbolic batch dimension in input and output.
         if add_dynamic_axes:
@@ -580,3 +573,4 @@ class BertOnnxModel(OnnxModel):
             logger.warning("Attention not fused")
 
         return is_perfect
+

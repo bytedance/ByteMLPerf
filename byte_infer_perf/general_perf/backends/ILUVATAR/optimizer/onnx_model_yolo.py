@@ -80,7 +80,7 @@ class YoloOnnxModel(OnnxModel):
         fusion.apply()
 
     def fuse_layer_norm(self):
-        fusion = FusionLayerNormalization(self)
+        fusion = FusionLayerNormalization(self, 0)
         fusion.apply()
 
         fusion = FusionLayerNormalizationTF(self)

@@ -30,6 +30,7 @@ class FusionOptions:
         self.enable_swint_opt = False
         self.enable_format_roformer = False
         self.enable_gpt2_classify = False
+        self.enable_vit = False
         self.attention_mask_format = AttentionMaskFormat.AttentionMask
 
         if model_type == "gpt2":
@@ -39,6 +40,8 @@ class FusionOptions:
             self.enable_swint_opt = True
         elif model_type == "roformer":
             self.enable_format_roformer = True
+        elif model_type == "vit":
+            self.enable_vit = True
 
     def use_raw_attention_mask(self, use_raw_mask=True):
         if use_raw_mask:

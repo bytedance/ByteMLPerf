@@ -6,6 +6,8 @@ from typing import Dict, Optional
 import onnx
 from onnx import ModelProto, helper, load_model
 from onnx_model_bert import BertOnnxModel
+from onnx_model_roformer import RoformerOnnxModel
+from onnx_model_conformer import conformerOnnxModel
 from onnx_model_t5 import T5OnnxModel
 from onnx_model_yolo import YoloOnnxModel
 from onnxsim import simplify
@@ -16,10 +18,12 @@ logger = logging.getLogger(__name__)
 MODEL_TYPES = {
     "bert": (BertOnnxModel, None, "pytorch", 1),
     "swint": (BertOnnxModel, None, "pytorch", 1),
-    "roformer": (BertOnnxModel, None, "tf2onnx", 1),
+    "roformer": (RoformerOnnxModel, None, "tf2onnx", 1),
     "gpt2": (BertOnnxModel, None, "pytorch", 1),
     "t5": (T5OnnxModel, None, "tf2onnx", 1),
     "yolo": (YoloOnnxModel, None, "pytorch", 1),
+    "vit": (BertOnnxModel, None, "pytorch", 1),
+    "conformer": (conformerOnnxModel, None, "pytorch", 1),
 }
 
 
@@ -105,8 +109,11 @@ def optimize_to_ixrt(args):
                 input_tensor.type.tensor_type.shape.dim.extend(dim_list)
 
     try:
+        auto_merge = False
+        if args.model_type in ["roformer"]:
+            auto_merge = True
         static_model = SymbolicShapeInference.infer_shapes(
-            simplified_model, 2**31 - 1, False, False, 3
+            simplified_model, 2**31 - 1, auto_merge, False, 3
         )
         static_sim_model, check = simplify(static_model)
         if args.dump_onnx:
@@ -164,7 +171,7 @@ def args_parser():
         "--model_type",
         type=str,
         default="bert",
-        choices=["bert", "swint", "roformer", "t5", "yolo", "gpt2"],
+        choices=["bert", "swint", "roformer", "t5", "yolo", "gpt2", "vit", "conformer"],
         help="Which kind of model to optimize",
     )
     parser.add_argument(

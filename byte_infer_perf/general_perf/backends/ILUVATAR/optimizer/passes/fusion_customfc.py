@@ -37,7 +37,15 @@ class FusionCustomFCGPT2(Fusion):
         w = NumpyHelper.to_array(matmul_weight)
         b = NumpyHelper.to_array(matmul_bias)
 
-        trans_matmul_weight = w.transpose(1, 0)
+        transB = 0
+        for attr in matmul.attribute:
+            if attr.name == "transB":
+                transB = attr.i
+                break
+
+        trans_matmul_weight = w
+        if transB == 0:
+            trans_matmul_weight = w.transpose(1, 0)
         if matmul_weight.name not in self.model.initializer_visited.keys():
             self.model.initializer_visited[matmul_weight.name] = True
             if matmul_weight.data_type == 10:
@@ -75,6 +83,96 @@ class FusionCustomFCGPT2(Fusion):
         self.node_name_to_graph_name[fused_node.name] = self.this_graph_name
         self.nodes_to_add.append(fused_node)
         self.nodes_to_remove.extend([matmul, node, reshape_before_matmul])
+
+
+class FusionCustomFcRoformer(Fusion):
+    def __init__(self, model: OnnxModel):
+        super().__init__(model, "CustomFCPluginDynamic_IxRT", ["Add"], "roformer fc")
+
+        # For model Roformer.
+
+    def fuse(self, node, input_name_to_nodes, output_name_to_node):
+        if len(node.input) != 2:
+            return False
+
+        fc_paths = {
+            "path1": (["Reshape", "MatMul", "Reshape"], [0, 0, 0]),
+            "path2": (["Reshape", "MatMul", "Reshape"], [1, 0, 0]),
+        }
+
+        nodes, paths = self.match_parent_path_from_dict(node, fc_paths)
+        if nodes is None:
+            return False
+
+        reshape_after_matmul = nodes[0]
+        matmul = nodes[1]
+        reshape_before_matmul = nodes[2]
+
+        reshape_before_shape = None
+        reshape_after_shape = None
+        for value_info in self.model.graph().value_info:
+            if value_info.name == reshape_before_matmul.input[0]:
+                reshape_before_shape = len(value_info.type.tensor_type.shape.dim)
+                break
+        for value_info in self.model.graph().value_info:
+            if value_info.name == reshape_after_matmul.output[0]:
+                reshape_after_shape = len(value_info.type.tensor_type.shape.dim)
+                break
+        if reshape_before_shape != reshape_after_shape:
+            return False
+
+        weight = self.model.get_initializer(matmul.input[1])
+        bias = self.model.get_initializer(node.input[1]) or self.model.get_initializer(
+            node.input[0]
+        )
+
+        if weight is None or bias is None:
+            return False
+
+        w = NumpyHelper.to_array(weight)
+        w_in_size = w.shape[0]
+        weight_dim = np.prod(w.shape[1:])
+
+        b = NumpyHelper.to_array(bias)
+        bias_dim = np.prod(b.shape)
+        trans_matmul_weight = w.transpose(1, 0)
+        weight.CopyFrom(onnx.numpy_helper.from_array(trans_matmul_weight, weight.name))
+        # Sometimes weights and bias are stored in fp16
+        if weight.data_type == 10:
+            weight.CopyFrom(
+                numpy_helper.from_array(
+                    trans_matmul_weight.astype(np.float16), weight.name
+                )
+            )
+        bias_arr = onnx.numpy_helper.to_array(bias).flatten()
+        bias.CopyFrom(onnx.numpy_helper.from_array(bias_arr, bias.name))
+        if bias.data_type == 10:
+            bias.CopyFrom(
+                numpy_helper.from_array(
+                    NumpyHelper.to_array(bias).astype(np.float16), bias.name
+                )
+            )
+
+        fused_node = helper.make_node(
+            "CustomFCPluginDynamic_IxRT",
+            inputs=[reshape_before_matmul.input[0]],
+            outputs=node.output,
+            name=self.model.create_node_name("CustomFC", "MatMul_AddBias_"),
+        )
+        fused_node.domain = "com.iluvatar"
+        fused_node.attribute.extend([helper.make_attribute("out_dims", b.shape[0])])
+        fused_node.attribute.extend([helper.make_attribute("type_id", 2)])
+        fused_node.attribute.extend([helper.make_attribute("W", weight)])
+        fused_node.attribute.extend([helper.make_attribute("B", bias)])
+        fused_node.attribute.extend([helper.make_attribute("plugin_namespace", "")])
+        fused_node.attribute.extend([helper.make_attribute("plugin_version", "1")])
+        fused_node.attribute.extend([helper.make_attribute("act_type", -1)])
+        self.node_name_to_graph_name[fused_node.name] = self.this_graph_name
+        self.nodes_to_add.append(fused_node)
+
+        self.nodes_to_remove.extend([node])
+        self.nodes_to_remove.extend(nodes)
+        return True
 
 
 class FusionCustomFC(Fusion):
@@ -145,77 +243,6 @@ class FusionCustomFC(Fusion):
         self.nodes_to_remove.extend([matmul, node])
         return True
 
-    # For model Roformer.
-    def fuse_2(self, node, input_name_to_nodes, output_name_to_node):
-        if len(node.input) != 2:
-            return False
-
-        fc_paths = {
-            "path1": (["Reshape", "MatMul"], [0, 0]),
-            "path2": (["Reshape", "MatMul"], [1, 0]),
-        }
-
-        nodes, paths = self.match_parent_path_from_dict(node, fc_paths)
-        if nodes is None:
-            return False
-
-        reshape_after_matmul = nodes[0]
-        matmul = nodes[1]
-
-        weight = self.model.get_initializer(matmul.input[1])
-        bias = self.model.get_initializer(node.input[1]) or self.model.get_initializer(
-            node.input[0]
-        )
-
-        if weight is None or bias is None:
-            return False
-
-        w = NumpyHelper.to_array(weight)
-        w_in_size = w.shape[0]
-        weight_dim = np.prod(w.shape[1:])
-
-        b = NumpyHelper.to_array(bias)
-        bias_dim = np.prod(b.shape)
-        weight_arr = (
-            onnx.numpy_helper.to_array(weight).flatten().reshape(w_in_size, weight_dim)
-        )
-        weight.CopyFrom(onnx.numpy_helper.from_array(weight_arr, weight.name))
-        # Sometimes weights and bias are stored in fp16
-        if weight.data_type == 10:
-            weight.CopyFrom(
-                numpy_helper.from_array(
-                    NumpyHelper.to_array(weight).astype(np.float16), weight.name
-                )
-            )
-        bias_arr = onnx.numpy_helper.to_array(bias).flatten()
-        bias.CopyFrom(onnx.numpy_helper.from_array(bias_arr, bias.name))
-        if bias.data_type == 10:
-            bias.CopyFrom(
-                numpy_helper.from_array(
-                    NumpyHelper.to_array(bias).astype(np.float16), bias.name
-                )
-            )
-
-        fused_node = helper.make_node(
-            "CustomFCPluginDynamic_IxRT",
-            inputs=[matmul.input[0]],
-            outputs=node.output,
-            name=self.model.create_node_name("CustomFC", "MatMul_AddBias_"),
-        )
-        fused_node.domain = "com.iluvatar"
-        fused_node.attribute.extend([helper.make_attribute("out_dims", 1)])
-        fused_node.attribute.extend([helper.make_attribute("type_id", 1)])
-        fused_node.attribute.extend([helper.make_attribute("W", weight)])
-        fused_node.attribute.extend([helper.make_attribute("B", bias)])
-        fused_node.attribute.extend([helper.make_attribute("plugin_namespace", "")])
-        fused_node.attribute.extend([helper.make_attribute("plugin_version", 1)])
-        fused_node.attribute.extend([helper.make_attribute("act_type", -1)])
-        self.node_name_to_graph_name[fused_node.name] = self.this_graph_name
-        self.nodes_to_add.append(fused_node)
-
-        self.nodes_to_remove.extend([node, nodes[0], nodes[1]])
-        return True
-
 
 class FusionCustomFCActivation(Fusion):
     def __init__(self, model: OnnxModel):
@@ -277,3 +304,41 @@ class FusionCustomFCActivation(Fusion):
             self.nodes_to_add.append(fc_node)
             self.nodes_to_remove.extend([node, fc_node])
             self.node_name_to_graph_name[fc_node.name] = self.this_graph_name
+
+
+class FusionConformerCustomFCActivation(Fusion):
+    def __init__(self, model: OnnxModel):
+        super().__init__(
+            model,
+            "CustomFCPluginDynamic_IxRT",
+            ["Mul"],
+            "with activation",
+        )
+
+    def fuse(self, node, input_name_to_nodes, output_name_to_node):
+
+        # return_indice = []
+        nodes = self.model.match_parent_path(
+            node,
+            ["Sigmoid", "CustomFCPluginDynamic_IxRT"],
+            [
+                None,
+                0,
+            ],
+            # return_indice=return_indice,
+        )
+        if nodes is None:
+            return
+        (sigmoid_node, custom_fc_node) = nodes
+        # if output_name_to_node[node.input[1 - return_indice[0]]] != custom_fc_node:
+        #     return
+        activation_type = 20
+        for attr in custom_fc_node.attribute:
+            if attr.name == "act_type":
+                attr.i = activation_type
+                break
+        custom_fc_node.attribute.extend([helper.make_attribute("swish_alpha", 1.0)])
+        custom_fc_node.output[0] = node.output[0]
+        self.nodes_to_add.append(custom_fc_node)
+        self.nodes_to_remove.extend([node, sigmoid_node, custom_fc_node])
+        self.node_name_to_graph_name[custom_fc_node.name] = self.this_graph_name

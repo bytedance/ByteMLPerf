@@ -15,7 +15,7 @@ from passes.fusion_biasgelu import FusionBiasGelu
 from passes.fusion_customfc import (
     FusionCustomFC,
     FusionCustomFCActivation,
-    FusionCustomFCGPT2,
+    FusionCustomFcRoformer,
 )
 from passes.fusion_disentangled_attention import FusionDisentangledAttention
 from passes.fusion_embedlayer import FusionEmbedLayerNormalization
@@ -26,14 +26,19 @@ from passes.fusion_format_roformer import (
 )
 from passes.fusion_gelu import FusionGelu
 from passes.fusion_gelu_approximation import FusionGeluApproximation
-from passes.fusion_gpt_attention_no_past import FusionGptAttentionNoPast
-from passes.fusion_layernorm import FusionLayerNormalization, FusionLayerNormalizationTF
+from passes.fusion_layernorm import (
+    FusionLayerNormalization,
+    FusionLayerNormalizationKeras,
+    FusionLayerNormalizationTF,
+)
 from passes.fusion_options import FusionOptions
 from passes.fusion_qordered_attention import FusionQOrderedAttention
 from passes.fusion_qordered_gelu import FusionQOrderedGelu
 from passes.fusion_qordered_layernorm import FusionQOrderedLayerNormalization
 from passes.fusion_qordered_matmul import FusionQOrderedMatMul
 from passes.fusion_reshape import FusionReshape
+from passes.fusion_roformer_attention import FusionRoformerCrossAttention
+from passes.fusion_rope import FusionRoPE
 from passes.fusion_shape import FusionShape
 from passes.fusion_skiplayernorm import (
     FusionBiasSkipLayerNormalization,
@@ -49,17 +54,7 @@ from passes.onnx_model import OnnxModel
 logger = getLogger(__name__)
 
 
-class BertOptimizationOptions(FusionOptions):
-    """This class is deprecated"""
-
-    def __init__(self, model_type):
-        logger.warning(
-            f"BertOptimizationOptions is depreciated. Please use FusionOptions instead."
-        )
-        super().__init__(model_type)
-
-
-class BertOnnxModel(OnnxModel):
+class RoformerOnnxModel(OnnxModel):
     def __init__(self, model: ModelProto, num_heads: int = 0, hidden_size: int = 0):
         """Initialize BERT ONNX Model.
 
@@ -86,19 +81,10 @@ class BertOnnxModel(OnnxModel):
         self.utils = FusionUtils(self)
 
     def fuse_attention(self):
-        self.attention_fusion.apply()
-        FusionAlbertAttention(
-            self, self.hidden_size, self.num_heads, self.attention_mask
-        ).apply()
-        FusionVideoBertAttention(self).apply()
-        FusionVITAttention(self).apply()
-        FusionSwinLAttention(self).apply()
-        FusionGptAttentionNoPast(self).apply()
-        # Only relevant in models with Q-DQ nodes
-        self.qordered_attention_fusion.apply()
+        FusionRoformerCrossAttention(self).apply()
 
     def fuse_format_roformer(self):
-        FusionRemoveUselessElementwise(self).apply()
+        # FusionRemoveUselessElementwise(self).apply()
         fusion = FusionFormatInvalidMask(self)
         fusion.apply()
 
@@ -110,8 +96,12 @@ class BertOnnxModel(OnnxModel):
         fusion = FusionCustomFCActivation(self)
         fusion.apply()
 
-    def fuse_custom_fc_gpt2_classify(self):
-        fusion = FusionCustomFCGPT2(self)
+    def fuse_custom_fc_roformer(self):
+        fusion = FusionCustomFcRoformer(self)
+        fusion.apply()
+
+    def fuse_rope(self):
+        fusion = FusionRoPE(self)
         fusion.apply()
 
     def fuse_swinT_serial_bias_add(self):
@@ -129,14 +119,6 @@ class BertOnnxModel(OnnxModel):
 
     def fuse_bias_gelu(self, is_fastgelu):
         fusion = FusionBiasGelu(self, is_fastgelu)
-        fusion.apply()
-
-    def fuse_custom_xsoftmax(self):
-        fusion = FusionXSoftmax(self)
-        fusion.apply()
-
-    def fuse_disentangled_attention(self):
-        fusion = FusionDisentangledAttention(self)
         fusion.apply()
 
     def gelu_approximation(self):
@@ -160,14 +142,7 @@ class BertOnnxModel(OnnxModel):
         fusion.apply()
 
     def fuse_layer_norm(self):
-        fusion = FusionLayerNormalization(self, self.hidden_size)
-        fusion.apply()
-
-        fusion = FusionLayerNormalizationTF(self)
-        fusion.apply()
-
-        # Only relevant in models with Q-DQ nodes
-        fusion = FusionQOrderedLayerNormalization(self)
+        fusion = FusionLayerNormalizationKeras(self)
         fusion.apply()
 
     def fuse_skip_layer_norm(self):
@@ -462,42 +437,24 @@ class BertOnnxModel(OnnxModel):
         if (options is None) or options.enable_skip_layer_norm:
             self.fuse_skip_layer_norm()
 
-        if options.enable_swint_opt:
-            self.fuse_custom_fc()
-            self.fuse_swinT_serial_bias_add()
-
         if options.enable_format_roformer:
             self.fuse_format_roformer()
 
-        if options.enable_gpt2_classify or options.enable_vit:
-            self.fuse_custom_fc_gpt2_classify()
-
-        if options.enable_vit:
-            self.fuse_custom_fc()
-
-        if (options is None) or options.enable_attention:
-            if options is not None:
-                self.attention_mask.set_mask_format(options.attention_mask_format)
-            self.fuse_attention()
+        self.fuse_custom_fc_roformer()
 
         if (options is None) or options.enable_skip_layer_norm:
             self.fuse_skip_layer_norm()
 
         self.fuse_custom_fc()
 
-        self.fuse_custom_xsoftmax()
+        if (options is None) or options.enable_attention:
+            if options is not None:
+                self.attention_mask.set_mask_format(options.attention_mask_format)
+            self.fuse_attention()
 
-        self.fuse_disentangled_attention()
-
-        # Perform the MatMul fusion after the Attention fusion as we do not
-        # want to fuse the MatMuls inside the Attention subgraphs
-        if (options is None) or options.enable_qordered_matmul:
-            self.fuse_qordered_mamtul()
+        self.fuse_rope()
 
         self.fuse_shape()
-
-        if (options is None) or options.enable_embed_layer_norm:
-            self.fuse_embed_layer()
 
         # Remove reshape nodes that having same shape of input and output based on symbolic shape inference.
         self.utils.remove_useless_reshape_nodes()
@@ -580,3 +537,4 @@ class BertOnnxModel(OnnxModel):
             logger.warning("Attention not fused")
 
         return is_perfect
+
