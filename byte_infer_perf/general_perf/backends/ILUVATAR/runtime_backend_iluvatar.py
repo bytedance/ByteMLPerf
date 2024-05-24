@@ -226,7 +226,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
 
     def predict_timing(self, input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list):
         model_name = self.configs["model"].split("-")[0]
-
+        
         # H2D: host to device
         for i in range(len(inputs)):
             (err, ) = cudart.cudaHostRegister(data_batch_list[i], inputs[i]["nbytes"], 2)
@@ -522,27 +522,41 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             #self.load_sd(batch_size)
             return
         
-        if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
-            engine_path = model_path.split(".")[0] + "_end.engine"
+        if self.configs['compile_precision'] == 'FP16':
+            if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
+                engine_path = model_path.split(".")[0] + "_end.engine"
 
-        elif model_name == 'widedeep' or model_name == 'roformer':
-            engine_path = model_path + "/" + model + "_end.engine"
-                
-        elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin' \
-             or model_name == 'resnet50':
-            engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
+            elif model_name == 'widedeep' or model_name == 'roformer':
+                engine_path = model_path + "/" + model + "_end.engine"
+                    
+            elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin' \
+                or model_name == 'resnet50':
+                engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine" 
 
-        else:
-            engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
-        
-        if model_name == 'widedeep':      
-            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_new" + ".engine"
+            else:
+                engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
+            
+            if model_name == 'widedeep':      
+                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"
 
-        if model_name == 'roformer':
-            engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end" + ".engine"     
-        
-        if model_name == 'deberta':
-            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end" + ".engine"
+            if model_name == 'roformer':
+                engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end" + ".engine"     
+            
+            if model_name == 'deberta':
+                engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end" + ".engine"
+
+        if self.configs['compile_precision'] == 'INT8':
+            if model_name == 'widedeep':
+                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/quantized_widedeep_staticshape" + ".engine"    
+            
+            if model_name == 'resnet50':
+                engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine"
+
+            if model_name == 'yolov5':
+                engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine"    
+
+            if model_name == 'bert':
+                engine_path = "general_perf/model_zoo/regular/open_bert/bert_zijie_int8_b196.engine"
 
         engine, context = init_by_tensorrt(engine_path)
 

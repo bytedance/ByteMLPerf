@@ -71,38 +71,60 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
         self.get_onnx(configs)
 
         # build engine
-        if model_name == 'widedeep':
-            onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_new.onnx"
-            engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape_new" + ".engine"    
-            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+        if configs['model_info']['model_precision'].replace('FP32', 'FP16') == 'FP16':
+            precision_flag = "FP16"
+            if model_name == 'widedeep':
+                onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape.onnx"
+                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/widedeep_dynamicshape" + ".engine"    
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='FP16')
 
-        elif model_name == 'deberta':
-            onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end.onnx"
-            engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end" + ".engine"    
-            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+            elif model_name == 'deberta':
+                onnx_model_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end.onnx"
+                engine_path = "general_perf/model_zoo/popular/open_deberta/deberta-sim-drop-clip-drop-invaild-cast_end" + ".engine"    
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='FP16')
 
-        elif model_name == 'roformer':
-            onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end.onnx"
-            engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end" + ".engine"    
-            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+            elif model_name == 'roformer':
+                onnx_model_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end.onnx"
+                engine_path = "general_perf/model_zoo/popular/open_roformer/roformer-frozen_end" + ".engine"    
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='FP16')
 
-        elif model_name == 'gpt2':
-            for bs in configs['workload']['batch_sizes']:
-                onnx_model_path = os.path.dirname(model_path) + "/" + model + ".onnx"
-                engine_path = os.path.dirname(model_path) + "/" + model + "_bs" + str(bs) + ".so" 
+            elif model_name == 'gpt2':
+                for bs in configs['workload']['batch_sizes']:
+                    onnx_model_path = os.path.dirname(model_path) + "/" + model + ".onnx"
+                    engine_path = os.path.dirname(model_path) + "/" + model + "_bs" + str(bs) + ".so" 
 
-                for key, val in configs['model_info']['input_shape'].items():
-                    input_dict = {}
-                    val = val = [val[0] * bs] + val[1:] 
-                    input_dict[key] = val
-                    
-                build_igie_engine(model_name=model_name, model_path=onnx_model_path, input_dict=input_dict, model_framework='onnx', precision='fp16', engine_path=engine_path)
-        
-        elif model == 'vae-decoder-onnx-fp32' or model == 'vae-encoder-onnx-fp32' or model == 'clip-onnx-fp32':
-            pass
-        
-        else:
-            build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
+                    for key, val in configs['model_info']['input_shape'].items():
+                        input_dict = {}
+                        val = val = [val[0] * bs] + val[1:] 
+                        input_dict[key] = val
+                        
+                    build_igie_engine(model_name=model_name, model_path=onnx_model_path, input_dict=input_dict, model_framework='onnx', precision='fp16', engine_path=engine_path)
+            
+            elif model == 'vae-decoder-onnx-fp32' or model == 'vae-encoder-onnx-fp32' or model == 'clip-onnx-fp32':
+                pass
+            
+            else:
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='FP16')
+            
+        if configs['model_info']['model_precision'] == 'INT8':
+            precision_flag = "INT8"
+            if model_name == 'widedeep':
+                onnx_model_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/quantized_widedeep_staticshape.onnx"
+                engine_path = "general_perf/model_zoo/regular/open_wide_deep_saved_model/quantized_widedeep_staticshape" + ".engine"    
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='INT8')
+            
+            if model_name == 'resnet50':
+                onnx_model_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50.onnx"
+                engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine"    
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='INT8')
+
+            if model_name == 'yolov5':
+                onnx_model_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s.onnx"
+                engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine"    
+                build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize, BuildFlag='INT8')
+
+            if model_name == 'bert':
+                print(f"\n==========****bert模型的int8精度推理采用直接加载engine文件, 因此不需要build engine! ****===========")
 
         result = {
             "model": 
@@ -114,7 +136,7 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             "framework": 
                 configs['model_info']['framework'],
             "compile_precision": 
-                configs['model_info']['model_precision'].replace('FP32', 'FP16'),
+                precision_flag,
             "input_type": 
                 configs['model_info']['input_type'].split(","),
             "max_batch_size": 

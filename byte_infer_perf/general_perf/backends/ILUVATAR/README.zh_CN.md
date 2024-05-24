@@ -267,23 +267,27 @@
             exit
             mv quantized_Resnet50.onnx general_perf/model_zoo/regular/open_resnet50
 
-        代码更改：
-            1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
-            build_config.set_flag(tensorrt.BuilderFlag.INT8)
-
-            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 函数compile 最后一个else 添加以下的代码：
-            onnx_model_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50.onnx"
-            engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine" 
-            （在 build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize) 前面加上面两行）
-
-            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py 函数load 最后一个else 添加以下的代码：
-            engine_path = "general_perf/model_zoo/regular/open_resnet50/quantized_Resnet50" + ".engine" 
-            （注释掉 engine_path = os.path.dirname(model_path) + "/" + model + ".engine"）
+        手动更改配置文件：general_perf/model_zoo/resnet50-torch-fp32.json 中的 model_precision 精度为 INT8
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task resnet50-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/resnet50-torch-fp32
 
-    2、yolov5 模型：
+    2、widedeep 模型：
+        模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型
+
+        下载方式：
+            sftp -P 29889 user01@58.247.142.52  密码：5$gS%659（内网连接：sftp -P 29889 user01@10.160.20.61）
+            cd yudefu/bytedance_perf  
+            get quantized_widedeep_staticshape.onnx 
+            exit
+            mv quantized_widedeep_staticshape.onnx general_perf/model_zoo/regular/open_wide_deep_saved_model/
+
+        手动更改配置文件：general_perf/model_zoo/widedeep-tf-fp32.json 中的 model_precision 精度为 INT8
+
+        执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task widedeep-tf-fp32
+        生成的测试报告位置：general_perf/reports/ILUVATAR/widedeep-tf-fp32
+
+    3、yolov5 模型：
         模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型
 
         下载方式：
@@ -293,24 +297,12 @@
             exit
             mv quantized_yolov5s.onnx general_perf/model_zoo/popular/open_yolov5/
 
-        代码更改：
-            1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
-            build_config.set_flag(tensorrt.BuilderFlag.INT8)
-
-            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 函数compile 最后一个else 添加以下的代码：
-            onnx_model_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s.onnx"
-            engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine" 
-           （在 build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize) 前面加上面两行）
-
-            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py 函数load 添加以下的代码：
-            engine_path = "general_perf/model_zoo/popular/open_yolov5/quantized_yolov5s" + ".engine" 
-           （在 if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5': 下面添加；
-             注释掉：engine_path = model_path.split(".")[0] + "_end.engine"）
+        手动更改配置文件：general_perf/model_zoo/yolov5-onnx-fp32.json 中的 model_precision 精度为 INT8
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task yolov5-onnx-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/yolov5-onnx-fp32
 
-    3、bert 模型：
+    4、bert 模型：
         模型准备：在进行int8精度推理时，需要提供经过量化后的onnx模型，这里直接给出量化好的模型；该模型直接拿生成好的engine进行推理
 
         下载方式：
@@ -320,36 +312,7 @@
             exit
             mv bert_zijie_int8_b196.engine general_perf/model_zoo/regular/open_bert/
 
-        代码更改：
-            1）general_perf/backends/ILUVATAR/common.py 将build_config.set_flag(tensorrt.BuilderFlag.FP16) 更改为：
-            build_config.set_flag(tensorrt.BuilderFlag.INT8)
-
-            2）general_perf/backends/ILUVATAR/compile_backend_iluvatar.py 函数compile 最后一个else 做以下操作：
-            注释掉 build_engine(model_name=model_name, onnx_model_path=onnx_model_path, engine_path=engine_path, MaxBatchSize=MaxBatchSize)
-            因为这里直接加载已经生成的engine，不需要进行compile生成；这里可以加一个输出：
-                print("\n****bert-int8推理直接采用加载生成好的engine, 不需要进行编译！****") 看程序走到哪里
-
-            3）general_perf/backends/ILUVATAR/runtime_backend_iluvatar.py 函数load 添加以下的代码：
-            engine_path = "general_perf/model_zoo/regular/open_bert/bert_zijie_int8_b196.engine"
-           （在 elif model_name == 'bert' or model_name == 'albert' or model_name == 'roberta' or model_name == 'deberta' or model_name == 'swin':
-             注释掉：engine_path = os.path.dirname(model_path) + "/" + model + "_end.engine"）
-
-             第二个还需要修改函数 predict_dump 以下四行代码：
-             input_shape = input_tensors[i].shape
-             input_idx = engine.get_binding_index(input_name)
-             context.set_binding_shape(input_idx, Dims(input_shape))
-             i += 1
-             更改为：
-             input_shape = input_tensors[i].shape
-             for binding in range(3):
-                 context.set_binding_shape(binding, Dims(input_shape))
-            i += 1
-
-            第三需要更改的地方：将函数predict_timing 里面的 result[output_name[i]] = outputs_list[i] 改成：result[output_name[i]] = outputs_list[0]
-
-            精度测试时还需要更改下面的地方：函数predict 里面的 result[output_name[i]] = outputs_list[i] 改成：
-                result[output_name[0]] = outputs_list[0][:,:,0]
-                result[output_name[1]] = outputs_list[0][:,:,1]
+        手动更改配置文件：general_perf/model_zoo/bert-torch-fp32.json 中的 model_precision 精度为 INT8
 
         执行：python3 general_perf/core/perf_engine.py --hardware_type ILUVATAR --task bert-torch-fp32
         生成的测试报告位置：general_perf/reports/ILUVATAR/bert-torch-fp32

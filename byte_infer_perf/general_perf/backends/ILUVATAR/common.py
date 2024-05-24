@@ -36,7 +36,7 @@ def load_ixrt_plugin(logger=tensorrt.Logger(tensorrt.Logger.INFO), namespace="",
     print(f"Loaded plugin from {dynamic_path}")
 
 
-def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize):
+def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize, BuildFlag):
     IXRT_LOGGER = tensorrt.Logger(tensorrt.Logger.WARNING)
     builder = tensorrt.Builder(IXRT_LOGGER)
     EXPLICIT_BATCH = 1 << (int)(tensorrt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
@@ -104,7 +104,12 @@ def build_engine(model_name, onnx_model_path, engine_path, MaxBatchSize):
 
     parser = tensorrt.OnnxParser(network, IXRT_LOGGER)
     parser.parse_from_file(onnx_model_path)
-    build_config.set_flag(tensorrt.BuilderFlag.FP16)
+    
+    if BuildFlag == 'FP16':
+        build_config.set_flag(tensorrt.BuilderFlag.FP16)
+    
+    if BuildFlag == 'INT8':
+        build_config.set_flag(tensorrt.BuilderFlag.INT8)
 
     # set dynamic shape
     num_inputs = network.num_inputs
