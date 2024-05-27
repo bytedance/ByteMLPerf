@@ -285,8 +285,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         model_name = self.configs["model"].split("-")[0]
         if self.isSDmodel(self.configs["model"]):
             for key, _ in feeds.items():
-                tmp_tensor = torch.tensor(feeds[key],
-                                    dtype=pt_dtype_map[self.input_type[i]])
+                tmp_tensor = np.array(feeds[key], dtype=INPUT_TYPE[self.input_type[i]])
                 input_tensors.append(tmp_tensor)
                 i += 1
 
@@ -296,14 +295,13 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         elif model_name != 'gpt2':
             if model_name == 'deberta':
                 keys = list(feeds.keys())
-                input_ids = torch.tensor(feeds[keys[0]], dtype=pt_dtype_map[self.input_type[0]])
-                attention_mask = torch.tensor(feeds[keys[1]], dtype=pt_dtype_map[self.input_type[1]])
+                input_ids = np.array(feeds[keys[0]], dtype=INPUT_TYPE[self.input_type[i]])
+                attention_mask = np.array(feeds[keys[1]], dtype=INPUT_TYPE[self.input_type[i]])
                 input_tensors = [input_ids, attention_mask]
 
             else:
                 for key, _ in feeds.items():
-                    tmp_tensor = torch.tensor(feeds[key],
-                                        dtype=pt_dtype_map[self.input_type[i]])
+                    tmp_tensor = np.array(feeds[key], dtype=INPUT_TYPE[self.input_type[i]])
                     input_tensors.append(tmp_tensor)
                     i += 1
 
@@ -566,8 +564,8 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         
         self.batch_size = batch_size
         self.engine = engine
-        self.context = context         
-    
+        self.context = context
+
 
     def load_sd(self, batch_size):
         model_path = self.configs['model_path']
