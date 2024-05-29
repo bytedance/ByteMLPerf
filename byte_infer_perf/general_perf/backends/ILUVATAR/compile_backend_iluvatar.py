@@ -16,12 +16,9 @@ import os
 import logging
 import subprocess
 
-import tensorrt
-
 from general_perf.backends.ILUVATAR.common import load_ixrt_plugin
-load_ixrt_plugin()
 
-from general_perf.backends.ILUVATAR.common import build_engine, build_igie_engine
+from general_perf.backends.ILUVATAR.common import build_engine
 from general_perf.backends.ILUVATAR.optimizer.passes import *
 from general_perf.tools.torch_to_onnx import torch_to_onnx
 from general_perf.tools.saved_to_onnx import savedmodel_to_onnx
@@ -49,6 +46,22 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
         model_path = configs['model_info']['model_path']
         MaxBatchSize = configs['model_info']['max_batch_size']
 
+        precision = configs['model_info']['model_precision'].replace('FP32', 'FP16')
+
+        if precision == 'FP16':
+            if model_name == 'resnet50' or model_name == 'bert' or model_name == 'albert' or model == 'deberta' or model_name == 'yolov5':
+                import tensorrt_legacy as tensorrt
+            else:
+                import tensorrt
+        
+        if precision == 'INT8':
+            import tensorrt
+
+        load_ixrt_plugin(model=model_name, precision=precision)
+
+        if model_name == 'gpt2':
+            from general_perf.backends.ILUVATAR.common import build_igie_engine
+
         # call the ONNX model and the compiled engine file
         if model_name == 'videobert' or model_name == 'conformer' or model_name == 'yolov5':
             onnx_model_path = model_path.split(".")[0] + "_end.onnx"
@@ -68,7 +81,7 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
 
         # model preprocessing
-        self.get_onnx(configs)
+        # self.get_onnx(configs)
 
         # build engine
         if configs['model_info']['model_precision'].replace('FP32', 'FP16') == 'FP16':

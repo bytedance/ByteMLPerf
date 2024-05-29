@@ -19,20 +19,19 @@ import logging
 import numpy as np
 from tqdm import tqdm
 import threading
+import importlib
 
-import tvm
 from general_perf.backends import runtime_backend
 from general_perf.backends.ILUVATAR.common import init_by_tensorrt, setup_io_bindings
-from general_perf.backends.ILUVATAR.utils import get_target
 from general_perf.backends.ILUVATAR.common import Task, TaskThread
-from tensorrt import Dims
 from cuda import cuda, cudart
 import numa
 
 from general_perf.backends.ILUVATAR.common import load_ixrt_plugin
-load_ixrt_plugin()
 
 log = logging.getLogger("RuntimeBackendILUVATAR")
+
+Dims = None
 
 pt_dtype_map = {
     "FLOAT32": torch.float32,
@@ -285,7 +284,8 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         model_name = self.configs["model"].split("-")[0]
         if self.isSDmodel(self.configs["model"]):
             for key, _ in feeds.items():
-                tmp_tensor = np.array(feeds[key], dtype=INPUT_TYPE[self.input_type[i]])
+                tmp_tensor = torch.tensor(feeds[key],
+                                        dtype=pt_dtype_map[self.input_type[i]])
                 input_tensors.append(tmp_tensor)
                 i += 1
 
@@ -300,8 +300,12 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
                 input_tensors = [input_ids, attention_mask]
 
             else:
+                trans_index = [0, 1, 2]
+                if model_name == 'bert' and self.configs['compile_precision'] == 'INT8':
+                    trans_index = [0, 2, 1]
+
                 for key, _ in feeds.items():
-                    tmp_tensor = np.array(feeds[key], dtype=INPUT_TYPE[self.input_type[i]])
+                    tmp_tensor = np.array(feeds[key], dtype=INPUT_TYPE[self.input_type[trans_index[i]]])
                     input_tensors.append(tmp_tensor)
                     i += 1
 
@@ -426,6 +430,7 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             return result
     
     def predict_igie(self, dataloader):
+        tvm = importlib.import_module("tvm")
         self.task.module.set_input("input_ids", tvm.nd.array(dataloader["input_ids"].astype('int64'), self.device))
         self.task.module.run()
         output = self.task.module.get_output(0)
@@ -458,16 +463,21 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             self.predict(test_data)
 
         for _ in range(iterations):
-            input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list = self.predict_dump(test_data)
+            if model_name != 'gpt2' and model_name != 'vae' and model_name != 'clip':
+                input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list = self.predict_dump(test_data)
 
-            start_time = time.time()
-            self.predict_timing(input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list)
-            end_time = time.time()
+                start_time = time.time()
+                self.predict_timing(input_tensors, inputs, outputs, data_batch_list, allocations, context, outputs_list)
+                end_time = time.time()
+            
+            else:
+                start_time = time.time()
+                self.predict(test_data)
+                end_time = time.time()
 
             times_range.append(end_time - start_time)
             predict_range.append(self.predict_time)           
 
-            
         times_range.sort()
         tail_latency = round(
             times_range[int(len(times_range) * 0.99)] * 1000, 2)
@@ -506,11 +516,29 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
         return self.batch_size
 
     def load(self, batch_size) -> None:
+        global Dims
+
         # load engine
         model = self.configs['model']
         model_name = self.configs['model'].split("-")[0]
         model_path = self.configs['model_path']
-        
+
+        precision = self.configs['compile_precision'].replace('FP32', 'FP16')
+
+        if precision == 'FP16':
+            if model_name == 'resnet50' or model_name == 'bert' or model_name == 'albert' or model == 'deberta' or model_name == 'yolov5':
+                mod = importlib.import_module("tensorrt_legacy")
+                Dims = getattr(mod, "Dims")
+            else:
+                mod = importlib.import_module("tensorrt")
+                Dims = getattr(mod, "Dims")
+
+        if precision == 'INT8':
+            mod = importlib.import_module("tensorrt")
+            Dims = getattr(mod, "Dims")     
+
+        load_ixrt_plugin(model=model_name, precision=precision)
+
         if model_name == 'gpt2':
             self.batch_size = batch_size
             return
@@ -599,6 +627,9 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
     def load_igie(self, batch_size):
         model = self.configs['model']
         model_path = self.configs['model_path']
+
+        tvm = importlib.import_module("tvm")
+        from general_perf.backends.ILUVATAR.utils import get_target
 
         target, _ = get_target('iluvatar_with_all_libs')
         device = tvm.device(target.kind.name, self.task.device_id)
