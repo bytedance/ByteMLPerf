@@ -81,7 +81,7 @@ class CompileBackendILUVATAR(compile_backend.CompileBackend):
             engine_path = os.path.dirname(model_path) + "/" + model + ".engine"
 
         # model preprocessing
-        # self.get_onnx(configs)
+        self.get_onnx(configs)
 
         # build engine
         if configs['model_info']['model_precision'].replace('FP32', 'FP16') == 'FP16':
