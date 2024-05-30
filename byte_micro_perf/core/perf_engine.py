@@ -134,7 +134,13 @@ class PerfEngine:
         output_dir = os.path.abspath("reports/" + self.backend_type)
         os.makedirs(output_dir, exist_ok=True)
 
-        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
+        if self.args.task in [
+            "allreduce",
+            "allgather",
+            "reducescatter",
+            "alltoall",
+            "broadcast",
+        ]:
             for group in self.workload["group"]:
                 mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
         else:
@@ -187,7 +193,9 @@ class PerfEngine:
                     reports = self.backend.perf(input_shape, dtype)
                 except Exception as e:
                     traceback.print_exc()
-                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {input_shape}, dtype: {dtype}, error msg: {e}")
+                    log.error(
+                        f"Execute op: {op_name.lower()} failed, input_shape: {input_shape}, dtype: {dtype}, error msg: {e}"
+                    )
                     reports = {}
                 perf_reports.append(reports)
             base_report["Performance"] = perf_reports
@@ -227,51 +235,51 @@ class PerfEngine:
 
             venv_dir = os.path.join("backends", hardware_type + "/venv")
             activate_file = os.path.join(venv_dir, "bin", "activate_this.py")
-            if not os.path.exists(venv_dir):
-                log.info("venv not exist, Creating Virtual Env for " + hardware_type)
-
-                virtualenv.create_environment(venv_dir, True)
-
-                exec(open(activate_file).read(), {"__file__": activate_file})
-                python_path = os.path.join(venv_dir, "bin", "python3")
-                subprocess.call(
-                    [python_path, "-m", "pip", "install", "--upgrade", "pip", "--quiet"]
-                )
-                subprocess.call(
-                    [
-                        python_path,
-                        "-m",
-                        "pip",
-                        "install",
-                        "-r",
-                        "backends/" + hardware_type + "/requirements.txt",
-                        "-q",
-                    ]
-                )
-            else:
-                exec(open(activate_file).read(), {"__file__": activate_file})
-                """
-                just in case install failed in pre-run.
-                """
-                python_path = os.path.join(venv_dir, "bin", "python3")
-                subprocess.call(
-                    [python_path, "-m", "pip", "install", "--upgrade", "pip", "--quiet"]
-                )
-                subprocess.call(
-                    [
-                        python_path,
-                        "-m",
-                        "pip",
-                        "install",
-                        "-r",
-                        "backends/" + hardware_type + "/requirements.txt",
-                        "-q",
-                    ]
-                )
-
-                if not hasattr(sys, "real_prefix"):
-                    return False
-                return True
+            # if not os.path.exists(venv_dir):
+            #     log.info("venv not exist, Creating Virtual Env for " + hardware_type)
+            #
+            #     virtualenv.create_environment(venv_dir, True)
+            #
+            #     exec(open(activate_file).read(), {"__file__": activate_file})
+            #     python_path = os.path.join(venv_dir, "bin", "python3")
+            #     subprocess.call(
+            #         [python_path, "-m", "pip", "install", "--upgrade", "pip", "--quiet"]
+            #     )
+            #     subprocess.call(
+            #         [
+            #             python_path,
+            #             "-m",
+            #             "pip",
+            #             "install",
+            #             "-r",
+            #             "backends/" + hardware_type + "/requirements.txt",
+            #             "-q",
+            #         ]
+            #     )
+            # else:
+            #     exec(open(activate_file).read(), {"__file__": activate_file})
+            #     """
+            #     just in case install failed in pre-run.
+            #     """
+            #     python_path = os.path.join(venv_dir, "bin", "python3")
+            #     subprocess.call(
+            #         [python_path, "-m", "pip", "install", "--upgrade", "pip", "--quiet"]
+            #     )
+            #     subprocess.call(
+            #         [
+            #             python_path,
+            #             "-m",
+            #             "pip",
+            #             "install",
+            #             "-r",
+            #             "backends/" + hardware_type + "/requirements.txt",
+            #             "-q",
+            #         ]
+            #     )
+            #
+            #     if not hasattr(sys, "real_prefix"):
+            #         return False
+            #     return True
         return True
 
     def deactivate_venv(self):
