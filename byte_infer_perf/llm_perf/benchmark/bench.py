@@ -15,8 +15,8 @@ from llm_perf.utils.reporter import ReportType
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-from llm_perf import server_pb2, server_pb2_grpc
-from llm_perf.utils.pb import deserialize_value, serialize_value
+from llm_perf.server import server_pb2, server_pb2_grpc
+from llm_perf.server.pb import deserialize_value, serialize_value
 
 
 @backoff.on_exception(backoff.expo, Exception, factor=0.1, max_value=1, max_tries=3)
@@ -79,8 +79,6 @@ def bench_accuracy(stub, workload: Dict[str, Any], result_queue: mp.Queue):
         logger.debug(f"prompt response: {result}")
         result_queue.put(result)
 
-    result_queue.put(None)
-
 
 def bench_performance(
     stub,
@@ -92,11 +90,13 @@ def bench_performance(
     result_queue.put("@start")
     perf_start = time.time()
     perf_time: int = workload["perf_time"]
-    bar = tqdm(total=perf_time, unit="s")
     while perf_start + perf_time > time.time():
+        # make fake prompt, actual input_ids len may exceed input_tokens
         prompt = "我" * input_tokens
+    
         st = time.time()
         first_token_latency = 0
+
         output_messages: str = ""
         for res in gen_stream_request(
             stub,
@@ -110,14 +110,20 @@ def bench_performance(
         ):
             res = {k: deserialize_value(v) for k, v in res.outputs.items()}
             output_messages += res["choice"]["message"]
-
-            if not first_token_latency:
+            if first_token_latency == 0:
                 first_token_latency = time.time() - st
 
         use_time = time.time() - st
+
+        # record context and decode len
         prompt_tokens = res["usage"]["prompt_tokens"]
         completion_tokens = res["usage"]["completion_tokens"]
-        per_token_latency = use_time / completion_tokens
+
+        # seperate context and decode latency
+        if completion_tokens > 1:
+            per_token_latency = (use_time - first_token_latency) / (completion_tokens - 1)
+        else:
+            per_token_latency = first_token_latency
 
         result = {
             "prompt_tokens": prompt_tokens,
@@ -128,10 +134,25 @@ def bench_performance(
         }
         logger.debug(f"bench_{index} prompt response: {result}")
         result_queue.put(result)
-        bar.update(use_time)
 
-    bar.close()
-    result_queue.put(None)
+
+def test(stub, index: int):
+    prompt = "中国的首都在哪里？"
+    output_messages: str = ""
+    for res in gen_stream_request(
+            stub,
+            index=index,
+            prompt=prompt,
+            min_new_tokens=1,
+            max_new_tokens=256,
+            top_p=0,
+            top_k=1,
+            get_input_logits=0,
+        ):
+            res = {k: deserialize_value(v) for k, v in res.outputs.items()}
+            output_messages += res["choice"]["message"]
+    logger.info(f"bench_{index} prompt response: {output_messages}")
+
 
 
 def benchmark(
@@ -142,11 +163,12 @@ def benchmark(
     result_queue: mp.Queue,
     args,
 ):
-    logger.debug(f"{report_type.name} bench_{index} start")
-
     with grpc.insecure_channel(f"{args.host}:{args.port}") as channel:
         stub = server_pb2_grpc.InferenceStub(channel)
-        time.sleep(random.randint(0, 10))
+        logger.info(f"{report_type.name} bench_{index} start")
+
+        # test function
+        # test(stub, index)
 
         try:
             if report_type == ReportType.ACCURACY:
@@ -157,4 +179,5 @@ def benchmark(
             logger.error(f"{report_type.name} bench_{index} error: {e}")
             raise e
 
-    logger.debug(f"{report_type.name} bench_{index} finish")
+    logger.info(f"{report_type.name} bench_{index} finish")
+    result_queue.put(None)

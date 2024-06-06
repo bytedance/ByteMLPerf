@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SHELL_FOLDER=$(cd "$(dirname "$0")"; pwd)
+cd $SHELL_FOLDER/..
+
 echo "******************* Downloading Model and Logits....  *******************"
 
 mkdir -p llm_perf/download
@@ -13,7 +16,13 @@ mkdir -p $GPU_REPORT_BASELINE
 MODEL=$1
 ENABLE_ACC=$2
 
-if [ $MODEL == "chatglm-torch-fp16-6b" ] || [ $MODEL == "chatglm2-torch-fp16-6b" ] || [ $MODEL == "chinese-llama2-torch-fp16-13b" ]; then
+# supported model:
+#   * chatglm2-torch-fp16-6b
+#   * chinese-llama2-torch-fp16-13b
+#   * mixtral-torch-fp16-8x7b
+if  [ $MODEL == "chatglm2-torch-fp16-6b" ] || 
+    [ $MODEL == "chinese-llama2-torch-fp16-13b" ] || 
+    [ $MODEL == "mixtral-torch-fp16-8x7b" ]; then
     if [ -d "$SOTA_MODEL_CKPT/$MODEL" ]; then
         echo "already exist model, skip download"
     else

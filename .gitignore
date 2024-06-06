@@ -26,3 +26,7 @@ init_env.sh
 byte_infer_perf/llm_perf/download
 byte_infer_perf/llm_perf/model_zoo/sota
 byte_infer_perf/llm_perf/reports
+
+
+workspace
+test

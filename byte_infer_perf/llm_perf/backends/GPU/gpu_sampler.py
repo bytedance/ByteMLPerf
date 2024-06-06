@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Tuple, Union
 import torch
 
 from llm_perf.core.generation import GenerateResult
-from llm_perf.core.engine import CoreEngine
+from llm_perf.core.inferencer import CoreInferencer
 from llm_perf.core.sampler import CoreSampler
 
 from llm_perf.utils.logger import logger
@@ -13,16 +13,20 @@ class GpuSampler(CoreSampler):
     def __init__(self) -> None:
         super().__init__()
 
-    def sample(self, packets: List[CoreEngine.Packet], logits: torch.FloatTensor) -> List[int]:
-        top_p = [p.request.generate_config.top_p for p in packets]
+    def sample(
+        self, 
+        tasks: List[CoreInferencer.Task], 
+        logits: torch.FloatTensor
+    ) -> List[int]:
+        top_p = [p.request.generate_config.top_p for p in tasks]
         if all(p == 1.0 for p in top_p):
             top_p = None
 
-        top_k = [p.request.generate_config.top_k for p in packets]
+        top_k = [p.request.generate_config.top_k for p in tasks]
         if all(k == 0 for k in top_k):
             top_k = None
 
-        temperature = [p.request.generate_config.temperature for p in packets]
+        temperature = [p.request.generate_config.temperature for p in tasks]
         if all(t == 1.0 for t in temperature):
             temperature = None
 
@@ -33,7 +37,7 @@ class GpuSampler(CoreSampler):
             repetition_penalty,
             mask_eos_token,
         ) = (None, None, 0, None, None)
-        eos_token_id = [p.request.generate_config.eos_token_id or -1 for p in packets]
+        eos_token_id = [p.request.generate_config.eos_token_id or -1 for p in tasks]
 
         next_tokens, softmax_out = self._sample(
             logits.float(),
@@ -53,6 +57,7 @@ class GpuSampler(CoreSampler):
 
         # The aux_data is softmax_out here
         return next_tokens, softmax_out
+
 
     def _sample(
         self,
@@ -97,19 +102,20 @@ class GpuSampler(CoreSampler):
 
     def postprocess(
         self,
-        packets: List[CoreEngine.Packet],
+        tasks: List[CoreInferencer.Task],
         infer_outputs: Dict[str, torch.FloatTensor],
         next_tokens: List[int],
     ) -> List[GenerateResult]:
         generate_result = []
-        for i in range(len(packets)):
+        for i in range(len(tasks)):
             token_id = next_tokens[i]
-            packet = packets[i]
+            packet = tasks[i]
 
             if token_id == packet.request.generate_config.eos_token_id:
                 finish_reason = "stop"
+            # take current generated token into account
             elif (
-                len(packet.generate_ids)
+                len(packet.generate_ids) + 1
                 >= packet.request.generate_config.max_new_tokens
             ):
                 finish_reason = "max_length"

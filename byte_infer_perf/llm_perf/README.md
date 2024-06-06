@@ -8,7 +8,7 @@ Vendors can refer to this document for guidance on building backend: [Byte LLM P
 
 ## Installation
 ```shell
-pip3 install torch==2.0.1
+pip3 install torch==2.1.0
 pip3 install -r requirements.txt
 ```
 
@@ -22,11 +22,11 @@ To start llm_perf, there are 3 steps:
 
 You can run following command automate all steps with chatglm2 model on GPU backend
 ```shell
-python3 byte_infer_perf/llm_perf/launch.py --task chatglm2-torch-fp16-6b --hardware_type GPU
+python3 byte_infer_perf/llm_perf/launch.py --hardware_type GPU --task chatglm2-torch-fp16-6b 
 ```
 
 ## Models
 The list of supported models is:
-* ChatGLM
-* ChatGLM2
-* Chinese-LLaMA-2
+* [chatglm2-6b](https://huggingface.co/THUDM/chatglm2-6b)
+* [chinese-llama-2-13b](https://huggingface.co/hfl/chinese-llama-2-13b)
+* [Mixtral-8x7B-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1)
