@@ -125,10 +125,13 @@ class BackendGPU(Backend):
         input_tensors_list = []
         for _ in range(data_cnt):
             input_tensors = [
-                #torch.randn(shape).type(torch_type).to(torch.device("cuda"))
+                torch.randn(shape).type(torch_type).to(torch.device("cuda"))
+                if torch_type == torch.int64 or torch_type == torch.int32 or torch_type == torch.int16 or \
+                        torch_type == torch.int8 or torch_type == torch.uint8 else
                 torch.randn(shape, dtype=torch_type, device="cuda")
                 for shape in input_shapes
             ]
+
             input_tensors_list.append(input_tensors)
 
         if hasattr(self.op, "process_inputs"):
