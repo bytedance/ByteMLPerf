@@ -1,6 +1,6 @@
 from typing import Any, Generator, Iterable, List
 
-from llm_perf import server_pb2, server_pb2_grpc
+from llm_perf.server import server_pb2, server_pb2_grpc
 
 
 def deserialize_value(value: server_pb2.Value) -> Any:

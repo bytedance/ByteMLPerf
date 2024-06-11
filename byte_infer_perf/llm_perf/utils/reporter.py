@@ -74,11 +74,12 @@ class Reporter:
 
         self.backend = backend
         self.task: str = task
-
+        # these configs will be update
         self.tp_size = tp_size
         self.batch_size = batch_size
         self.input_tokens = input_tokens
 
+        # result template
         self.result: Dict[str, Any] = {
             "Model": self.task,
             "Backend": self.backend,
@@ -94,6 +95,21 @@ class Reporter:
                 }
             ],
         }
+
+
+    def update_meta(self, tp_size: int, batch_size: int, input_tokens: int):
+        # update config 
+        self.tp_size = tp_size
+        self.batch_size = batch_size
+        self.input_tokens = input_tokens
+
+        self.start_time = time.time()
+        self.request = 0
+        self.performance_datas.clear()
+        logger.info(
+            f"Update reporter meta: TP={self.tp_size}, BS={self.batch_size}, Inputs={self.input_tokens}"
+        )
+
 
     def start(self):
         self._worker = threading.Thread(target=self.worker)
@@ -126,16 +142,6 @@ class Reporter:
                 self.cond.wait()
                 self.calc()
 
-    def update_meta(self, tp_size: int, batch_size: int, input_tokens: int):
-        self.tp_size = tp_size
-        self.batch_size = batch_size
-        self.input_tokens = input_tokens
-        self.start_time = time.time()
-        self.request = 0
-        self.performance_datas.clear()
-        logger.info(
-            f"Update reporter meta: TP={self.tp_size}, BS={self.batch_size}, Inputs={self.input_tokens}"
-        )
 
     def _calc_performance(self):
         # Calc avg/p99/sum of data, return result

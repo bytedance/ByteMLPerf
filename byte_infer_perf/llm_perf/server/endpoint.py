@@ -1,3 +1,6 @@
+import sys
+import json
+import pathlib
 import asyncio
 import importlib
 from typing import Any, AsyncIterable, Dict, Iterable
@@ -10,12 +13,14 @@ from llm_perf.utils.logger import logger
 
 
 class LLMPerfEndpoint:
-    def __init__(
-        self, model_config, 
-        hardware_type, max_batch_size
-    ) -> None:
+    def __init__(self, xpu_cfg) -> None:
         super().__init__()
 
+        self.xpu_cfg = xpu_cfg
+        
+        model_config = xpu_cfg["model_config"]
+        hardware_type = xpu_cfg["hardware_type"]
+        
         # load tokenizer
         tokenizer_path = model_config["tokenizer"]["path"]
         self.add_sep_token = model_config["tokenizer"]["add_sep_token"]
@@ -25,26 +30,24 @@ class LLMPerfEndpoint:
             trust_remote_code=True
         )
         logger.info(f'load tokenizer: {tokenizer_path}')
-        
+        logger.info(f'pad_token_id: {self.tokenizer.pad_token_id}')
+
+        xpu_cfg["pad_token_id"] = self.tokenizer.pad_token_id
+
         # import setup according to hardware_type
         setup = importlib.import_module(
             ".setup", package=f"llm_perf.backends.{hardware_type}"
         )
         logger.info(f"import setup: {setup}")
 
-        # set up scheduler
-        self.scheduler : CoreScheduler = setup.setup_scheduler(
-            model_config, 
-            self.tokenizer.pad_token_id, 
-            max_batch_size
-        )
+        # setup scheduler
+        self.scheduler : CoreScheduler = setup.setup_scheduler(xpu_cfg)
+        self.scheduler.start()
 
-        # start scheduler and warmup
-        if not self.scheduler.started:
-            self.scheduler.start()
-
-        
         self.warmup()
+
+    def __del__(self):
+        self.scheduler.stop()
 
 
     def warmup(self):
@@ -72,7 +75,7 @@ class LLMPerfEndpoint:
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
     ) -> GenerateRequest:
-        input_ids = self.tokenizer.encode(prompt)
+        input_ids = self.tokenizer.encode(prompt)        
         if self.add_sep_token:
             input_ids.append(self.tokenizer.sep_token_id)
 
