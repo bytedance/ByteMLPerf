@@ -7,7 +7,6 @@ import numpy as np
 
 from general_perf.backends import runtime_backend
 
-torch.backends.mudnn.allow_tf32 = True
 log = logging.getLogger("BackendCUDA")
 
 pt_dtype_map = {
@@ -121,8 +120,6 @@ class RuntimeBackendCUDA(runtime_backend.RuntimeBackend):
             model = torch.jit.load(
                 segment['compiled_model'][0]['compiled_obj'],
                 torch.device('cuda'))
-            
-            model = model.to(memory_format=torch.channels_last)
             model.eval()
             self.model_runtimes.append(model)
 
