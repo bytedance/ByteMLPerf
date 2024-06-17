@@ -20,6 +20,7 @@ pt_dtype_map = {
 
 INPUT_TYPE = {
     "UINT8": np.uint8,
+    "FLOAT16": np.float16,
     "FLOAT32": np.float32,
     "LONG": np.long,
     "INT32": np.int32,
@@ -122,6 +123,10 @@ class RuntimeBackendMUSA(runtime_backend.RuntimeBackend):
             model = torch.jit.load(
                 segment['compiled_model'][0]['compiled_obj'],
                 torch.device('musa'))
+            if os.getenv("NCHW"):
+                model = model.to(memory_format=torch.channels_last)
+            if os.getenv("FP16"):
+                model = model.half()
             model.eval()
             self.model_runtimes.append(model)
 
