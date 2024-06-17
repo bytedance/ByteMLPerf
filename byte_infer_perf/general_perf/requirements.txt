@@ -4,9 +4,10 @@ virtualenv==16.7.9
 scikit-learn
 prompt_toolkit
 tqdm
-opencv-python
+opencv-python-headless
 transformers
 tokenization
 fpdf
 typing-extensions==3.7.4.3
 numpy==1.23.0
+packaging
