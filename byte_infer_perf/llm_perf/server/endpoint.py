@@ -49,6 +49,9 @@ class LLMPerfEndpoint:
     def __del__(self):
         self.scheduler.stop()
 
+    def __del__(self):
+        self.scheduler.stop()
+
 
     def warmup(self, max_batch_size):
         prompt = "中国的首都是哪里？"
