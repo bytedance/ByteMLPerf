@@ -146,8 +146,8 @@ def bench_performance(
 
 def benchmark(
     index: int,
+    start_wait: int, 
     workload: Dict[str, Any],
-    batch_size: int, 
     report_type: ReportType,
     input_tokens: int,
     result_queue: mp.Queue,
@@ -157,9 +157,8 @@ def benchmark(
         stub = server_pb2_grpc.InferenceStub(channel)
         logger.debug(f"{report_type.name} bench_{index} start")
         
-        sleep_units = [i for i in range(batch_size)]
-        random.shuffle(sleep_units)
-        time.sleep(1 * sleep_units[index])
+        # wait for start_wait seconds
+        time.sleep(1 * start_wait)
         
         try:
             if report_type == ReportType.ACCURACY:

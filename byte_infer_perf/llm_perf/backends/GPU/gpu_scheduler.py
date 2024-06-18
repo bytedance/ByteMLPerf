@@ -58,11 +58,15 @@ class GpuScheduler(CoreScheduler):
                     cur_task
                 ]
 
+                cur_task.update_st("model_start")
+
                 outputs = self.inferencer.infer(
                     cur_tasks, 
                     is_context=True, 
                     valid_slot_ids=select_slots
                 )
+
+                cur_task.update_st("model_end")
 
                 # sample logits --> tokens
                 next_tokens, _ = self.sampler.sample(
@@ -77,30 +81,36 @@ class GpuScheduler(CoreScheduler):
                     next_tokens=next_tokens,
                 )
 
+                
                 # add result to task
                 cur_task.add_result(generation_results[0])
                 if generation_results[0].finish_reason:
                     cur_task.finish()
 
+                cur_task.update_st("process_end")
+
             # decode phase
             else:
-                
                 select_slots = []
+                valid_tasks = []
                 for i, task in enumerate(task_slots):
                     if task is not None:
                         select_slots.append(i)
-                max_select_slots = max(select_slots)
-                cur_tasks = task_slots[0:max_select_slots+1]
+                        valid_tasks.append(task)
+
+                for task in valid_tasks:
+                    task.update_st("model_start")
 
                 outputs = self.inferencer.infer(
-                    cur_tasks, 
+                    valid_tasks, 
                     is_context=False, 
                     valid_slot_ids=select_slots
                 )
 
-                valid_tasks = [
-                    task_slots[i] for i in select_slots
-                ]
+                for task in valid_tasks:
+                    task.update_st("model_end")
+
+
                 # sample logits --> tokens
                 next_tokens, _ = self.sampler.sample(
                     tasks=valid_tasks, 
@@ -120,8 +130,12 @@ class GpuScheduler(CoreScheduler):
                     if gen_res.finish_reason:
                         valid_tasks[i].finish()
 
+                for task in valid_tasks:
+                    task.update_st("process_end")
+                    
             for i, task in enumerate(task_slots):
                 if task is not None and task.is_finished():
+                    task.print_time()
                     avail_slots.append(i)
                     task_slots[i] = None
             

@@ -565,13 +565,16 @@ class SelfAttention(torch.nn.Module):
         else:
             q_len, batch_size, _, _ = key_layer.shape
             max_qkv_len = q_len + max(all_kv_len)
-            for slot_id in valid_slot_ids:
-                q_len = all_q_len[slot_id]
-                kv_len = all_kv_len[slot_id]
-                kv_cache[0][kv_len:kv_len+q_len, slot_id:slot_id+1, :, :] = key_layer[:, slot_id, :, :]
-                kv_cache[1][kv_len:kv_len+q_len, slot_id:slot_id+1, :, :] = value_layer[:, slot_id, :, :]
-            key_layer = kv_cache[0][0:max_qkv_len, 0:batch_size, :, :]
-            value_layer = kv_cache[1][0:max_qkv_len, 0:batch_size, :, :] 
+            for i, slot_id in enumerate(valid_slot_ids):
+                q_len = all_q_len[i]
+                kv_len = all_kv_len[i]
+                kv_cache[0][kv_len:kv_len+q_len, slot_id:slot_id+1, :, :] = key_layer[:, i, :, :]
+                kv_cache[1][kv_len:kv_len+q_len, slot_id:slot_id+1, :, :] = value_layer[:, i, :, :]
+            cur_k_cache = kv_cache[0][0:max_qkv_len]
+            cur_v_cache = kv_cache[1][0:max_qkv_len]
+            select_slots = torch.tensor(valid_slot_ids, device=key_layer.device)
+            key_layer = torch.index_select(cur_k_cache, 1, select_slots)
+            value_layer = torch.index_select(cur_v_cache, 1, select_slots)
 
         # if self.multi_query_attention:
         #     # [seq_len, batch_size, 2, 1, 128]
@@ -1147,14 +1150,6 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             hidden_states = hidden_states[-1:]
         lm_logits = self.transformer.output_layer(hidden_states)
         lm_logits = lm_logits.transpose(0, 1).contiguous()
-
-
-        is_context = kwargs.get("is_context")
-        valid_slot_ids = kwargs.get("valid_slot_ids")
-
-        if not is_context:
-            select_slots = torch.tensor(valid_slot_ids, device=lm_logits.device)
-            lm_logits = torch.index_select(lm_logits, 0, select_slots)
 
         return CausalLMOutputWithPast(
             logits=lm_logits

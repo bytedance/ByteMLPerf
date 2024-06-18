@@ -1,3 +1,4 @@
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -32,6 +33,42 @@ class CoreInferencer(ABC):
             self.state = PacketStatus.PENDING
             self.generate_ids = []
             self.exception = None
+
+            self.create_st = time.perf_counter_ns()
+            self.last_model_start_st = time.perf_counter_ns()
+            self.last_model_end_st = time.perf_counter_ns()
+            self.last_process_st = time.perf_counter_ns()
+
+            self.wait_time = []
+            self.model_time = []
+            self.post_process_time = []
+
+
+        def update_st(self, st_name):
+            if st_name == "model_start":
+                self.last_model_start_st = time.perf_counter_ns()
+                self.wait_time.append((self.last_model_start_st - self.last_process_st) / 1e6)
+            elif st_name == "model_end":
+                self.last_model_end_st = time.perf_counter_ns()
+                self.model_time.append((self.last_model_end_st - self.last_model_start_st) / 1e6)
+            elif st_name == "process_end":
+                self.last_process_st = time.perf_counter_ns()
+                self.post_process_time.append((self.last_process_st - self.last_model_end_st) / 1e6)
+                
+        def print_time(self):
+
+            context_wait_time = self.wait_time[0]
+            context_model_time = self.model_time[0]
+            context_postprocess_time = self.post_process_time[0]
+            
+            decode_wait_time = sum(self.wait_time[1:]) / len(self.wait_time[1:])
+            decode_model_time = sum(self.model_time[1:]) / len(self.model_time[1:])
+            decode_postprocess_time = sum(self.post_process_time[1:]) / len(self.post_process_time[1:])
+
+            print(f"context wait/model/postprocess: {context_wait_time}\t{context_model_time}\t{context_postprocess_time}")
+            print(f"decode wait/model/postprocess: {decode_wait_time}\t{decode_model_time}\t{decode_postprocess_time}")
+
+
         
         def add_result(self, res: GenerateResult):
             self.generate_ids.append(res.token_id)

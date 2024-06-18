@@ -13,6 +13,7 @@
 # limitations under the License.
 import os
 import sys
+import random
 import argparse
 import subprocess
 import json
@@ -300,13 +301,17 @@ class PerfEngine:
         report_type: ReportType,
     ): 
         clients = 1 if report_type == ReportType.ACCURACY else batch_size
+
+        sleep_units = [i for i in range(batch_size)]
+        random.shuffle(sleep_units)
+
         for i in range(clients):
             p = mp.Process(
                 target=benchmark,
                 args=(
                     i,
+                    sleep_units[i], 
                     workload,
-                    batch_size, 
                     report_type,
                     input_tokens,
                     self.result_queue,
