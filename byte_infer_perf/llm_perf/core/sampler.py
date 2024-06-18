@@ -14,7 +14,7 @@ class CoreSampler(ABC):
     @abstractmethod
     def sample(
         self, 
-        packets: List[CoreInferencer.Task], 
+        tasks: List[CoreInferencer.Task], 
         logits: torch.FloatTensor
     ) -> List[int]:
         """Sample next tokens

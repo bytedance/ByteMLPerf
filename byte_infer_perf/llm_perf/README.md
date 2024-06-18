@@ -1,6 +1,6 @@
 # Byte LLM Perf
 
-Vendors can refer to this document for guidance on building backend: [Byte LLM Perf](https://bytedance.larkoffice.com/docx/ZoU7dkPXYoKtJtxlrRMcNGMwnTc)
+Vendors can refer to this document for guidance on building backend: [Byte LLM Perf](https://bytemlperf.ai/zh/guide/inference_llm_vendor.html)
 
 ## Requirements
 * Python >= 3.8

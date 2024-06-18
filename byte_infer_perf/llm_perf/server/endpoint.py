@@ -44,13 +44,13 @@ class LLMPerfEndpoint:
         self.scheduler : CoreScheduler = setup.setup_scheduler(xpu_cfg)
         self.scheduler.start()
 
-        self.warmup()
+        self.warmup(xpu_cfg["max_batch_size"])
 
     def __del__(self):
         self.scheduler.stop()
 
 
-    def warmup(self):
+    def warmup(self, max_batch_size):
         prompt = "中国的首都是哪里？"
         generate_config = {
             "min_new_tokens": 1,
@@ -59,7 +59,7 @@ class LLMPerfEndpoint:
             "temperature": 0.2,
             "presence_penalty": 1.0,
         }
-        logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
+        logger.info(f"warmup prompt: {prompt}, config: {generate_config}")
 
         async def _steram_warmup():
             message = ""
@@ -68,9 +68,18 @@ class LLMPerfEndpoint:
             result["choice"]["message"] = message
             return result
 
-        result = asyncio.run(_steram_warmup())
-        logger.info(f"warmup response: {result}")
+        async def _multiple_warmup():
+            tasks = []
+            for _ in range(max_batch_size):
+                tasks.append(_steram_warmup())
+            res = await asyncio.gather(*tasks)
+            return res
 
+        single_result = asyncio.run(_steram_warmup())
+        logger.info(f"single warmup response: {single_result}")
+
+        multiple_result = asyncio.run(_multiple_warmup())
+        logger.info(f"multiple warmup reponse: {multiple_result}")
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]

@@ -75,7 +75,7 @@ def get_args():
     )
     parser.add_argument(
         "--port", type=int, 
-        default="50052", 
+        default=51000, 
         help="port of the server")
 
     args = parser.parse_args()
@@ -306,6 +306,7 @@ class PerfEngine:
                 args=(
                     i,
                     workload,
+                    batch_size, 
                     report_type,
                     input_tokens,
                     self.result_queue,

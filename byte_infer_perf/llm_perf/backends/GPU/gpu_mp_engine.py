@@ -1,8 +1,10 @@
 import os
+import time
 from multiprocessing import Queue
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 
 from llm_perf.core.mp_engine import CoreMpEngine
 from llm_perf.utils.logger import logger
@@ -13,11 +15,19 @@ class GpuMpEngine(CoreMpEngine):
 
 
     def build_inputs(self, forward_inputs):
-        forward_inputs["input_ids"] = torch.tensor(forward_inputs["input_ids"]).cuda()
-        forward_inputs["position_ids"] = torch.tensor(forward_inputs["position_ids"]).cuda()
-        forward_inputs["attention_mask"] = torch.tensor(forward_inputs["attention_mask"]).cuda()
+        # list --> torch.Tensor --> cuda
+        forward_inputs["input_ids"] = torch.tensor(
+            forward_inputs["input_ids"]
+        ).cuda()
+        forward_inputs["position_ids"] = torch.tensor(
+            forward_inputs["position_ids"]
+        ).cuda()
+        forward_inputs["attention_mask"] = torch.tensor(
+            forward_inputs["attention_mask"]
+        ).cuda()
         return forward_inputs
-        
+
+
     @torch.no_grad()
     def mp_loop_worker(
         self, 
@@ -36,13 +46,10 @@ class GpuMpEngine(CoreMpEngine):
             os.environ["LOCAL_RANK"] = str(local_rank)
             os.environ["WORLD_SIZE"] = str(world_size)
             os.environ["LOCAL_WORLD_SIZE"] = str(world_size)
-            
-
-            # set device
-            torch.cuda.set_device(local_rank)
 
             # create and init model based on model_impl and xpu_config
             model = model_impl(xpu_config)
+            model.init_inference()
         
             # current rank is ready
             output_queue.put("ready")
@@ -54,13 +61,11 @@ class GpuMpEngine(CoreMpEngine):
                     forward_inputs,
                 ) = input_queue.get(block=True)
 
-                # model forward
                 inputs = self.build_inputs(forward_inputs)
                 logits = model.forward(inputs)
-
+                torch.cuda.synchronize()
                 if local_rank == 0:
                     output_queue.put(logits)
-                torch.cuda.synchronize()
 
         except Exception as e:
             logger.exception(f"[BUG] engine _load_and_listen failed, no more requests will be handled. {e}")

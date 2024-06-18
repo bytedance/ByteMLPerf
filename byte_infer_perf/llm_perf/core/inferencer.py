@@ -57,7 +57,6 @@ class CoreInferencer(ABC):
         super().__init__()
 
 
-
     @abstractmethod
-    def infer(self, tasks: List["CoreInferencer.Task"]):
+    def infer(self, tasks: List["CoreInferencer.Task"], **kwargs):
         raise NotImplementedError

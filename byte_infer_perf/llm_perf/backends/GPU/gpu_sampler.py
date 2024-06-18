@@ -112,7 +112,11 @@ class GpuSampler(CoreSampler):
             packet = tasks[i]
 
             if token_id == packet.request.generate_config.eos_token_id:
-                finish_reason = "stop"
+                if len(packet.generate_ids) + 1 < packet.request.generate_config.min_new_tokens:
+                    finish_reason = ""
+                    token_id = packet.request.generate_config.eos_token_id
+                else:
+                    finish_reason = "stop"
             # take current generated token into account
             elif (
                 len(packet.generate_ids) + 1
