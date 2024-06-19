@@ -144,7 +144,12 @@ class LLMPerfEndpoint:
                 else:
                     result: GenerateResult = gen_res
                     outputs["choice"].update(
-                        {"message": self.tokenizer.decode(result.token_id)}
+                        {
+                            "message": self.tokenizer.decode(result.token_id), 
+                            "wait_time": result.wait_time, 
+                            "model_time": result.model_time, 
+                            "post_process_time": result.post_process_time
+                        }
                     )
 
                 logger.debug(f"steam inference result: {outputs}")

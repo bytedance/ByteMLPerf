@@ -60,20 +60,8 @@ class GpuMpEngine(CoreMpEngine):
                 (
                     forward_inputs,
                 ) = input_queue.get(block=True)
-
                 inputs = self.build_inputs(forward_inputs)
-                
-                is_context = inputs["is_context"]
-                valid_slot_ids = inputs["valid_slot_ids"]
-                all_kv_len = inputs["all_kv_len"]
-
-                torch.cuda.synchronize()
-                start_time = time.perf_counter_ns()
                 logits = model.forward(inputs)
-                torch.cuda.synchronize()
-                end_time = time.perf_counter_ns()
-                duration = (end_time - start_time) / 1e6
-                print(f"is_context={is_context}, valid_slot_ids={valid_slot_ids}, all_kv_len={all_kv_len}, duration={duration}ms")    
                 torch.cuda.synchronize()
                 if local_rank == 0:
                     output_queue.put(logits)

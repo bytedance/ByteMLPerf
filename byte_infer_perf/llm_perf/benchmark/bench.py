@@ -103,21 +103,26 @@ def bench_performance(
         min_new_tokens = workload["min_new_tokens"]
         max_new_tokens = workload["max_new_tokens"]
 
-        new_tokens = random.randint(min_new_tokens, max_new_tokens)
-
         output_messages: str = ""
+        wait_time = []
+        model_time = []
+        post_process_time = []
+
         for res in gen_stream_request(
             stub,
             index=index,
             prompt=prompt,
-            min_new_tokens=new_tokens,
-            max_new_tokens=new_tokens,
+            min_new_tokens=min_new_tokens,
+            max_new_tokens=max_new_tokens,
             top_p=0,
             top_k=1,
             get_input_logits=0,
         ):
             res = {k: deserialize_value(v) for k, v in res.outputs.items()}
             output_messages += res["choice"]["message"]
+            wait_time.append(res["choice"]["wait_time"])
+            model_time.append(res["choice"]["model_time"])
+            post_process_time.append(res["choice"]["post_process_time"])
             if first_token_latency == 0:
                 first_token_latency = (time.perf_counter_ns() - st) / 1e6
 
@@ -134,13 +139,30 @@ def bench_performance(
         else:
             per_token_latency = first_token_latency / 1e6
 
+        context_wait_time = wait_time[0]
+        context_model_time = model_time[0]
+        context_postprocess_time = post_process_time[0]
+
+        decode_wait_time = sum(wait_time[1:]) / len(wait_time[1:])
+        decode_model_time = sum(model_time[1:]) / len(model_time[1:])
+        decode_postprocess_time = sum(post_process_time[1:]) / len(post_process_time[1:])
+
         result = {
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
             "output_message": output_messages,
             "first_token_latency": first_token_latency,
             "per_token_latency": per_token_latency,
+
+            "context_wait_time": context_wait_time, 
+            "context_model_time": context_model_time, 
+            "context_postprocess_time": context_postprocess_time, 
+
+            "decode_wait_time": decode_wait_time, 
+            "decode_model_time": decode_model_time, 
+            "decode_postprocess_time": decode_postprocess_time, 
         }
+
         logger.debug(f"bench_{index} prompt response: {result}")
         result_queue.put(result)
 

@@ -27,7 +27,7 @@ class GpuScheduler(CoreScheduler):
     @torch.inference_mode()
     def scheduler_loop(self):
         task_slots: List[CoreInferencer.Task] = [None] * self.max_batch_size
-        avail_slots: List[int] = [7 - i for i in range(self.max_batch_size)]
+        avail_slots: List[int] = [self.max_batch_size - 1 - i for i in range(self.max_batch_size)]
         context_slots: List[int] = []
 
         while self.started:
@@ -74,6 +74,8 @@ class GpuScheduler(CoreScheduler):
                     logits=outputs["last_logits"]
                 )
 
+                cur_task.update_st("process_end")
+
                 # postprocess -> gen result
                 generation_results = self.sampler.postprocess(
                     tasks=cur_tasks,
@@ -81,14 +83,12 @@ class GpuScheduler(CoreScheduler):
                     next_tokens=next_tokens,
                 )
 
-                
                 # add result to task
                 cur_task.add_result(generation_results[0])
                 if generation_results[0].finish_reason:
                     cur_task.finish()
 
-                cur_task.update_st("process_end")
-
+            
             # decode phase
             else:
                 select_slots = []
@@ -117,6 +117,9 @@ class GpuScheduler(CoreScheduler):
                     logits=outputs["last_logits"]
                 )
 
+                for task in valid_tasks:
+                    task.update_st("process_end")
+
                 # postprocess -> gen result
                 generation_results = self.sampler.postprocess(
                     tasks=valid_tasks,
@@ -129,13 +132,9 @@ class GpuScheduler(CoreScheduler):
                     valid_tasks[i].add_result(gen_res)
                     if gen_res.finish_reason:
                         valid_tasks[i].finish()
-
-                for task in valid_tasks:
-                    task.update_st("process_end")
                     
             for i, task in enumerate(task_slots):
                 if task is not None and task.is_finished():
-                    task.print_time()
                     avail_slots.append(i)
                     task_slots[i] = None
             
