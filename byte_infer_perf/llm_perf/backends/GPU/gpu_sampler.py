@@ -109,30 +109,43 @@ class GpuSampler(CoreSampler):
         generate_result = []
         for i in range(len(tasks)):
             token_id = next_tokens[i]
-            packet = tasks[i]
+            task = tasks[i]
 
-            if token_id == packet.request.generate_config.eos_token_id:
-                finish_reason = "stop"
+            if token_id == task.request.generate_config.eos_token_id:
+                if len(task.generate_ids) + 1 < task.request.generate_config.min_new_tokens:
+                    finish_reason = ""
+                    token_id = task.request.generate_config.eos_token_id
+                else:
+                    finish_reason = "stop"
             # take current generated token into account
             elif (
-                len(packet.generate_ids) + 1
-                >= packet.request.generate_config.max_new_tokens
+                len(task.generate_ids) + 1
+                >= task.request.generate_config.max_new_tokens
             ):
                 finish_reason = "max_length"
             else:
                 finish_reason = ""
 
-            if packet.request.generate_config.get_input_logits:
+            if task.request.generate_config.get_input_logits:
                 last_logits = infer_outputs["last_logits"]
                 input_logits = infer_outputs["input_logits"]
                 gen_res = GenerateResult(
                     token_id=token_id,
-                    finish_reason=finish_reason,
+                    finish_reason=finish_reason, 
+                    wait_time=task.wait_time[-1], 
+                    model_time=task.model_time[-1], 
+                    post_process_time=task.post_process_time[-1], 
                     last_logits=last_logits.view(-1).tolist(),
                     input_logits=input_logits.view(-1).tolist(),
                 )
             else:
-                gen_res = GenerateResult(token_id=token_id, finish_reason=finish_reason)
+                gen_res = GenerateResult(
+                    token_id=token_id, 
+                    finish_reason=finish_reason, 
+                    wait_time=task.wait_time[-1], 
+                    model_time=task.model_time[-1], 
+                    post_process_time=task.post_process_time[-1], 
+                )
 
             generate_result.append(gen_res)
 

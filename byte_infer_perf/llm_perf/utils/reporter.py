@@ -18,9 +18,18 @@ from llm_perf.utils.logger import logger
 # Time To First Token
 __TTFT_AVG__ = "First Token Latency(AVG)"
 __TTFT_P90__ = "First Token Latency(P90)"
+__CONTEXT_WAIT_AVG__ = "Context Wait Time(AVG)"
+__CONTEXT_WAIT_P90__ = "Context Wait Time(P90)"
+__CONTEXT_MODEL_AVG__ = "Context Model Time(AVG)"
+__CONTEXT_MODEL_P90__ = "Context Model Time(P90)"
+
 # Time Per Output Token
 __TPOT_AVG__ = "Per Token Latency(AVG)"
 __TPOT_P90__ = "Per Token Latency(P90)"
+__DECODE_WAIT_AVG__ = "Decode Wait Time(AVG)"
+__DECODE_WAIT_P90__ = "Decode Wait Time(P90)"
+__DECODE_MODEL_AVG__ = "Decode Model Time(AVG)"
+__DECODE_MODEL_P90__ = "Decode Model Time(P90)"
 
 
 class ReportType(Enum):
@@ -103,7 +112,7 @@ class Reporter:
         self.batch_size = batch_size
         self.input_tokens = input_tokens
 
-        self.start_time = time.time()
+        self.start_time = time.perf_counter_ns()
         self.request = 0
         self.performance_datas.clear()
         logger.info(
@@ -116,7 +125,7 @@ class Reporter:
         self._running = True
         self._worker.start()
 
-        self.start_time = time.time()
+        self.start_time = time.perf_counter_ns()
         self.request = 0
 
     def stop(self):
@@ -133,7 +142,7 @@ class Reporter:
                 self._is_performance = True
                 self.performance_datas.append(data)
                 self.request += 1
-                self.last_submit_time = time.time()
+                self.last_submit_time = time.perf_counter_ns()
             self.cond.notify()
 
     def worker(self):
@@ -145,17 +154,49 @@ class Reporter:
 
     def _calc_performance(self):
         # Calc avg/p99/sum of data, return result
+
+        completion_tokens = 0
+        time_since_start = (self.last_submit_time - self.start_time) / 1e9
+
         ttfts = []
         tpots = []
-        completion_tokens = 0
-        for i, data in enumerate(self.performance_datas):
+
+        context_wait_time = []
+        context_model_time = []
+
+        decode_wait_time = []
+        decode_model_time = []
+        
+        for data in self.performance_datas:
+            completion_tokens += data["completion_tokens"]
+
             ttfts.append(data["first_token_latency"])
             tpots.append(data["per_token_latency"])
-            completion_tokens += data["completion_tokens"]
-        cur_ttft_avg = np.mean(ttfts)
-        cur_tpot_avg = np.mean(tpots)
+
+            context_wait_time.append(data["context_wait_time"])
+            context_model_time.append(data["context_model_time"])
+
+            decode_wait_time.append(data["decode_wait_time"])
+            decode_model_time.append(data["decode_model_time"])
+
+
+
+        # context
+        cur_ttft_avg = np.mean(ttfts)        
         cur_ttft_p90 = np.percentile(ttfts, 90)
+        cur_context_wait_avg = np.mean(context_wait_time)
+        cur_context_wait_p90 = np.percentile(context_wait_time, 90)
+        cur_context_model_avg = np.mean(context_model_time)
+        cur_context_model_p90 = np.percentile(context_model_time, 90)
+
+        # decode
+        cur_tpot_avg = np.mean(tpots)
         cur_tpot_p90 = np.percentile(tpots, 90)
+        cur_decode_wait_avg = np.mean(decode_wait_time)
+        cur_decode_wait_p90 = np.percentile(decode_wait_time, 90)
+        cur_decode_model_avg = np.mean(decode_model_time)
+        cur_decode_model_p90 = np.percentile(decode_model_time, 90)
+
 
         performance = None
         for perf in self.result["Performance"]:
@@ -174,20 +215,31 @@ class Reporter:
             }
             self.result["Performance"].append(performance)
 
-        performance[__TTFT_AVG__] = cur_ttft_avg
-        performance[__TPOT_AVG__] = cur_tpot_avg
-        performance[__TTFT_P90__] = cur_ttft_p90
-        performance[__TPOT_P90__] = cur_tpot_p90
 
-        logger.info(
+        performance["client"] = {
+            __TTFT_AVG__: cur_ttft_avg, 
+            __TTFT_P90__: cur_ttft_p90, 
+            __TPOT_AVG__: cur_tpot_avg, 
+            __TPOT_P90__: cur_tpot_p90, 
+        }
+        performance["server"] = {
+            __CONTEXT_WAIT_AVG__ : cur_context_wait_avg, 
+            __CONTEXT_WAIT_P90__ : cur_context_wait_p90, 
+            __CONTEXT_MODEL_AVG__ : cur_context_model_avg, 
+            __CONTEXT_MODEL_P90__ : cur_context_model_p90, 
+            __DECODE_WAIT_AVG__ : cur_decode_wait_avg, 
+            __DECODE_WAIT_P90__ : cur_decode_wait_p90, 
+            __DECODE_MODEL_AVG__ : cur_decode_model_avg, 
+            __DECODE_MODEL_P90__ : cur_decode_model_p90, 
+        }
+
+        logger.debug(
             f"TTFT(AVG)={cur_ttft_avg}, TTFT(P90)={cur_ttft_p90}, TPOT(AVG)={cur_tpot_avg}, TPOT(P90)={cur_tpot_p90}"
         )
 
-        performance["Token Throughput"] = completion_tokens / (
-            self.last_submit_time - self.start_time
-        )
+        performance["Token Throughput"] = completion_tokens / time_since_start
         performance["Request Number"] = self.request
-        performance["QPS"] = self.request / (self.last_submit_time - self.start_time)
+        performance["QPS"] = self.request / time_since_start
 
         logger.info(
             f"Request Number={performance['Request Number']}, Token Throughput={performance['Token Throughput']}, QPS={performance['QPS']}"

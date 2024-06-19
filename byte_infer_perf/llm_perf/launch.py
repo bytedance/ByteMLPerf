@@ -13,6 +13,7 @@
 # limitations under the License.
 import os
 import sys
+import random
 import argparse
 import subprocess
 import json
@@ -75,7 +76,7 @@ def get_args():
     )
     parser.add_argument(
         "--port", type=int, 
-        default="50052", 
+        default=51000, 
         help="port of the server")
 
     args = parser.parse_args()
@@ -300,11 +301,16 @@ class PerfEngine:
         report_type: ReportType,
     ): 
         clients = 1 if report_type == ReportType.ACCURACY else batch_size
+
+        sleep_units = [i for i in range(batch_size)]
+        random.shuffle(sleep_units)
+
         for i in range(clients):
             p = mp.Process(
                 target=benchmark,
                 args=(
                     i,
+                    sleep_units[i], 
                     workload,
                     report_type,
                     input_tokens,

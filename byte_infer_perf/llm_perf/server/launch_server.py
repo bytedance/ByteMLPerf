@@ -99,7 +99,7 @@ def parse_args():
     )
     parser.add_argument(
         "--port", type=int, 
-        default=50050
+        default=51000
     )
     parser.add_argument(
         "--log_level", type=str, 
