@@ -136,7 +136,7 @@ class PerfEngine:
 
         # download model parameter and golden outputs
         weight_dir = LLM_PERF_ROOT.joinpath("model_zoo", "sota", model_name)
-        refer_dir = LLM_PERF_ROOT.joinpath("reports", "GPU", model_name)        
+        refer_dir = LLM_PERF_ROOT.joinpath("reports", "base", model_name)        
         if not weight_dir.exists() or not refer_dir.exists():
             download_script = LLM_PERF_ROOT.joinpath("prepare_model.sh")
             subprocess.run(

@@ -112,17 +112,12 @@ class GpuInferencer(CoreInferencer):
         **kwargs
     ):
         input_dict = self.prepare_inputs(tasks, **kwargs)
-        outputs = self.mp_engine.mp_forward(input_dict)
-
-        input_logits = outputs.logits[..., :-1, :].contiguous()
-        next_tokens_logits = outputs.logits[:, -1, :].contiguous()
-        logger.debug(
-            f"tensor shape: {outputs.logits.shape}\n"
-            f"next tokens logits: {next_tokens_logits.shape}\n"
-            f"input logits: {input_logits.shape}\n"
-        )
-        return {
-            "input_logits": input_logits,
-            "last_logits": next_tokens_logits,
-        }
+        output_dict = self.mp_engine.mp_forward(input_dict)
         
+        logits = output_dict["logits"]
+        next_token_logits = logits[:, -1, :].contiguous()
+        infer_outputs = {
+            "logits": logits, 
+            "last_logits": logits[:, -1, :].contiguous()
+        }
+        return infer_outputs

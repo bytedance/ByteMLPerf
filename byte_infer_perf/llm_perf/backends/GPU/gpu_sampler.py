@@ -94,9 +94,7 @@ class GpuSampler(CoreSampler):
             )
 
         if _is_greedy:
-            return torch.argmax(logits, dim=-1), torch.nn.functional.softmax(
-                logits, dim=-1
-            )
+            return torch.argmax(logits, dim=-1), torch.nn.functional.softmax(logits, dim=-1)
         else:
             raise NotImplementedError
 
@@ -111,41 +109,34 @@ class GpuSampler(CoreSampler):
             token_id = next_tokens[i]
             task = tasks[i]
 
+            logits = infer_outputs["logits"][i].float().cpu()
+            last_logits = infer_outputs["last_logits"][i].float().cpu()
+
+            # take current generated token into account
+            generate_tokens_len = len(task.generate_ids) + 1
+
             if token_id == task.request.generate_config.eos_token_id:
-                if len(task.generate_ids) + 1 < task.request.generate_config.min_new_tokens:
+                if generate_tokens_len < task.request.generate_config.min_new_tokens:
                     finish_reason = ""
                     token_id = task.request.generate_config.eos_token_id
                 else:
                     finish_reason = "stop"
-            # take current generated token into account
-            elif (
-                len(task.generate_ids) + 1
-                >= task.request.generate_config.max_new_tokens
-            ):
+            elif generate_tokens_len >= task.request.generate_config.max_new_tokens:
                 finish_reason = "max_length"
             else:
                 finish_reason = ""
 
-            if task.request.generate_config.get_input_logits:
-                last_logits = infer_outputs["last_logits"]
-                input_logits = infer_outputs["input_logits"]
-                gen_res = GenerateResult(
-                    token_id=token_id,
-                    finish_reason=finish_reason, 
-                    wait_time=task.wait_time[-1], 
-                    model_time=task.model_time[-1], 
-                    post_process_time=task.post_process_time[-1], 
-                    last_logits=last_logits.view(-1).tolist(),
-                    input_logits=input_logits.view(-1).tolist(),
-                )
-            else:
-                gen_res = GenerateResult(
-                    token_id=token_id, 
-                    finish_reason=finish_reason, 
-                    wait_time=task.wait_time[-1], 
-                    model_time=task.model_time[-1], 
-                    post_process_time=task.post_process_time[-1], 
-                )
+            gen_res = GenerateResult(
+                token_id=token_id,
+                finish_reason=finish_reason, 
+
+                wait_time=task.wait_time[-1], 
+                model_time=task.model_time[-1], 
+                post_process_time=task.post_process_time[-1], 
+
+                logits=logits, 
+                last_logits=last_logits, 
+            )
 
             generate_result.append(gen_res)
 

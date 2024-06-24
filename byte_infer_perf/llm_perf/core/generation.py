@@ -1,3 +1,4 @@
+import torch
 import asyncio
 from dataclasses import dataclass, field
 from typing import List
@@ -29,8 +30,8 @@ class GenerateResult:
     wait_time: float
     model_time: float
     post_process_time: float
-    last_logits: List[float] = field(default_factory=list)
-    input_logits: List[float] = field(default_factory=list)
+    logits: torch.Tensor
+    last_logits: torch.Tensor
 
 
 class ResultQueue:

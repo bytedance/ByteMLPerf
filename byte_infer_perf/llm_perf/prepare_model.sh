@@ -8,7 +8,7 @@ echo "******************* Downloading Model and Logits....  *******************"
 mkdir -p llm_perf/download
 
 SOTA_MODEL_CKPT="llm_perf/model_zoo/sota"
-GPU_REPORT_BASELINE="llm_perf/reports/GPU"
+GPU_REPORT_BASELINE="llm_perf/reports/base"
 
 mkdir -p $SOTA_MODEL_CKPT
 mkdir -p $GPU_REPORT_BASELINE

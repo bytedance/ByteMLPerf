@@ -201,7 +201,7 @@ class GPUChatGLM2(nn.Module):
 
 
     def forward(self, inputs : Dict[str, torch.Tensor]):
-        outputs = self.transformer_model.forward(
+        model_outputs = self.transformer_model.forward(
             **inputs, 
             past_key_values=self.kv_cache, 
             use_cache=True, 
@@ -210,4 +210,7 @@ class GPUChatGLM2(nn.Module):
             return_dict=True, 
             return_last_logit=False
         )
-        return outputs
+        output_dict = {
+            "logits": model_outputs.logits
+        }
+        return output_dict

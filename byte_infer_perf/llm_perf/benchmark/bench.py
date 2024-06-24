@@ -58,25 +58,38 @@ def bench_accuracy(stub, workload: Dict[str, Any], result_queue: mp.Queue):
     result_queue.put("@start")
     for row_index, row in tqdm(dataset.iterrows(), total=len(dataset)):
         question = format_question(row)
+        output_messages = ""
         perplexity_list: List[float] = []
         for res in gen_stream_request(
             stub,
-            index=1,
+            index=0,
             prompt=question,
-            min_new_tokens=workload["min_new_tokens"],
-            max_new_tokens=workload["max_new_tokens"],
+            min_new_tokens=1,
+            max_new_tokens=512,
             top_p=0,
             top_k=1,  # use greedy search for accuracy bench
             get_input_logits=1,
         ):
             res = {k: deserialize_value(v) for k, v in res.outputs.items()}
+            output_messages += res["choice"]["message"]
             perplexity = res["choice"]["perplexity"]
             logits_dump = res["choice"]["logits_dump"]
             if not logits_dump:
                 perplexity_list.append(perplexity)
 
-        result = {"perplexity": perplexity_list, "logits_dump": logits_dump}
-        logger.debug(f"prompt response: {result}")
+        print("*"*150)
+        logger.info("question: ")
+        print(question)
+        print("*"*150)
+        logger.info("answer: ")
+        print(output_messages)
+        print("*"*150)
+
+        result = {
+            "output_message": output_messages,
+            "perplexity": perplexity_list, 
+            "logits_dump": logits_dump
+        }
         result_queue.put(result)
 
 
