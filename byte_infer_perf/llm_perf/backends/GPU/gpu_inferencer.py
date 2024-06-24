@@ -34,8 +34,16 @@ class GpuInferencer(CoreInferencer):
         is_context = kwargs.get("is_context") if "is_context" in kwargs.keys() else False
         valid_slot_ids = kwargs.get("valid_slot_ids") if "valid_slot_ids" in kwargs.keys() else [i for i in range(self.max_batch_size)]
     
+
+        get_input_logits = False
+        for task in tasks:
+            if task.request.generate_config.get_input_logits:
+                get_input_logits = True
+                break
+
         input_dict["is_context"] = is_context
         input_dict["valid_slot_ids"] = valid_slot_ids
+        input_dict["get_input_logits"] = get_input_logits
 
         if is_context:
             q_len = len(tasks[0].request.input_ids)
@@ -118,6 +126,6 @@ class GpuInferencer(CoreInferencer):
         next_token_logits = logits[:, -1, :].contiguous()
         infer_outputs = {
             "logits": logits, 
-            "last_logits": logits[:, -1, :].contiguous()
+            "last_logits": next_token_logits
         }
         return infer_outputs

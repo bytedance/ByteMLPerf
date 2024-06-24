@@ -75,12 +75,10 @@ class LLMPerfEndpoint:
             return res
 
         single_result = asyncio.run(_steram_warmup())
-        logger.info(f"single warmup response: {single_result}")
-        print("")
+        logger.info(f"single warmup response: {single_result}\n")
 
         multiple_result = asyncio.run(_multiple_warmup())
-        logger.info(f"multiple warmup reponse: {multiple_result}")
-        print("")
+        logger.info(f"multiple warmup reponse: {multiple_result}\n")
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]

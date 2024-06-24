@@ -208,7 +208,7 @@ class GPUChatGLM2(nn.Module):
             output_attentions=False, 
             output_hidden_states=False, 
             return_dict=True, 
-            return_last_logit=False
+            return_last_logit=(not inputs["get_input_logits"])
         )
         output_dict = {
             "logits": model_outputs.logits

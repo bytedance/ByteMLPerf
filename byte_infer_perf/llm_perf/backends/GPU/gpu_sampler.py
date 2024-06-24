@@ -109,9 +109,6 @@ class GpuSampler(CoreSampler):
             token_id = next_tokens[i]
             task = tasks[i]
 
-            logits = infer_outputs["logits"][i].float().cpu()
-            last_logits = infer_outputs["last_logits"][i].float().cpu()
-
             # take current generated token into account
             generate_tokens_len = len(task.generate_ids) + 1
 
@@ -126,17 +123,31 @@ class GpuSampler(CoreSampler):
             else:
                 finish_reason = ""
 
-            gen_res = GenerateResult(
-                token_id=token_id,
-                finish_reason=finish_reason, 
 
-                wait_time=task.wait_time[-1], 
-                model_time=task.model_time[-1], 
-                post_process_time=task.post_process_time[-1], 
+            if task.request.generate_config.get_input_logits:
+                gen_res = GenerateResult(
+                    token_id=token_id,
+                    finish_reason=finish_reason, 
 
-                logits=logits, 
-                last_logits=last_logits, 
-            )
+                    wait_time=task.wait_time[-1], 
+                    model_time=task.model_time[-1], 
+                    post_process_time=task.post_process_time[-1], 
+
+                    logits=infer_outputs["logits"][i].float().cpu(), 
+                    last_logits=infer_outputs["last_logits"][i].float().cpu(), 
+                )
+            else:
+                gen_res = GenerateResult(
+                    token_id=token_id,
+                    finish_reason=finish_reason, 
+
+                    wait_time=task.wait_time[-1], 
+                    model_time=task.model_time[-1], 
+                    post_process_time=task.post_process_time[-1], 
+
+                    logits=None, 
+                    last_logits=None, 
+                )
 
             generate_result.append(gen_res)
 

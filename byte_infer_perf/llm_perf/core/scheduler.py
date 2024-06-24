@@ -111,7 +111,7 @@ class CoreScheduler(ABC):
                     dtype=torch.int64, device='cpu'
                 )
 
-                input_logits_len =  len(cur_input_tokens) - 1
+                input_logits_len = len(cur_input_tokens) - 1
                 input_logits = task.all_logits[:input_logits_len]
 
                 perplexity = calc_perplexity(input_logits, cur_labels_tensor)
