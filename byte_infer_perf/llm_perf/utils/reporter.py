@@ -149,7 +149,8 @@ class Reporter:
         with self.cond:
             while self._running:
                 self.cond.wait()
-                self.calc()
+                if self._running:
+                    self.calc()
 
 
     def _calc_performance(self):
@@ -258,7 +259,8 @@ class Reporter:
         accuracy["PPL"] = [
             sum(prompt_ppl) / len(prompt_ppl) for prompt_ppl in perplexity_list
         ]
-        logger.info(f"PPL={accuracy['PPL']}")
+        logger.debug(f"PPL={accuracy['PPL']}")
+
 
         # Diff Prepare
         diff_index = -1
@@ -276,23 +278,23 @@ class Reporter:
             shutil.move(dump_file, f"{logits_dump_path}/{i}.npy")
             logger.info(f"move {dump_file} to {logits_dump_path}/{i}.npy")
 
-        if self.backend == "GPU":
-            return
 
         # 2. Logits Diff: First token diff
         def calc_logits_diff(diff_index: int):
-            # 2.1 Get GPU base logits
-            base_file = f"llm_perf/reports/GPU/{self.task}/logits/{diff_index}.npy"
-            base_logits = np.load(base_file)
+            # 2.1 Get base logits
+            base_file = f"llm_perf/reports/base/{self.task}/logits/{diff_index}.npy"
+            base_logits = np.load(base_file).astype(np.float32)
+
             # 2.2 Get Backend logits
             backend_file = (
                 f"llm_perf/reports/{self.backend}/{self.task}/logits/{diff_index}.npy"
             )
-            backend_logits = np.load(backend_file)
+            backend_logits = np.load(backend_file).astype(np.float32)
 
+            # check shape
             if base_logits.shape != backend_logits.shape:
                 logger.warn(
-                    f"GPU and {self.backend} logits shape mismatch! Make sure generate config is the same. \nGPU: {base_logits.shape}, {self.backend}: {backend_logits.shape}"
+                    f"base and {self.backend} logits shape mismatch! Make sure generate config is the same. \nGPU: {base_logits.shape}, {self.backend}: {backend_logits.shape}"
                 )
 
             # Only care about first token
@@ -325,30 +327,33 @@ class Reporter:
             self.logits_diff.append(_diff)
 
         result_logits_diff = accuracy["Logits Diff"]
-        result_logits_diff["Max Difference"] = np.max(
-            [l["Max Difference"] for l in self.logits_diff]
-        )
-        result_logits_diff["Mean Squared Error"] = np.mean(
-            [l["Mean Squared Error"] for l in self.logits_diff]
-        )
-        result_logits_diff["Mean Absolute Error"] = np.mean(
-            [l["Mean Absolute Error"] for l in self.logits_diff]
-        )
-        result_logits_diff["Cosine Similarity"] = np.mean(
-            [l["Cosine Similarity"] for l in self.logits_diff]
-        )
+        if len(self.logits_diff) != 0:
+            result_logits_diff["Max Difference"] = np.max(
+                [l["Max Difference"] for l in self.logits_diff]
+            ).tolist()
+            result_logits_diff["Mean Squared Error"] = np.mean(
+                [l["Mean Squared Error"] for l in self.logits_diff]
+            ).tolist()
+            result_logits_diff["Mean Absolute Error"] = np.mean(
+                [l["Mean Absolute Error"] for l in self.logits_diff]
+            ).tolist()
+            result_logits_diff["Cosine Similarity"] = np.mean(
+                [l["Cosine Similarity"] for l in self.logits_diff]
+            ).tolist()
 
         # 3. Token Diff
         def calc_token_diff(diff_index: int):
             # 2.1 Get GPU base logits
-            base_file = f"llm_perf/reports/GPU/{self.task}/logits/{diff_index}.npy"
-            base_logits = np.load(base_file)
+            base_file = f"llm_perf/reports/base/{self.task}/logits/{diff_index}.npy"
+            base_logits = np.load(base_file).astype(np.float32)
+    
             # 2.2 Get Backend logits
             backend_file = (
                 f"llm_perf/reports/{self.backend}/{self.task}/logits/{diff_index}.npy"
             )
-            backend_logits = np.load(backend_file)
+            backend_logits = np.load(backend_file).astype(np.float32)
 
+            # check shape
             if base_logits.shape != backend_logits.shape:
                 logger.warn(
                     f"GPU and {self.backend} logits shape mismatch! Make sure generate config is the same. \nGPU: {base_logits.shape}, {self.backend}: {backend_logits.shape}"
@@ -372,17 +377,22 @@ class Reporter:
             last_token_diff["Diff Data"] = diff.flatten()
             return last_token_diff
 
+
         if diff_index >= 0 and len(self.token_diff) < self.max_token_diff_num:
             _diff = calc_token_diff(diff_index)
             if _diff == -1:
                 pass
             else:
                 self.token_diff.append(_diff)
+
         result_token_diff = accuracy["Token Diff"]
-        result_token_diff["Max Difference"] = np.max(
-            [l["Max Difference"] for l in self.token_diff]
-        )
-        result_token_diff["Prompt Num"] = len(self.token_diff)
+        if len(self.token_diff) != 0:
+            result_token_diff["Max Difference"] = np.max(
+                [l["Max Difference"] for l in self.token_diff]
+            ).tolist()
+            result_token_diff["Prompt Num"] = len(self.token_diff)
+
+
 
     def calc(self):
         if self.test_accuracy and self.accuracy_datas and not self._is_performance:
@@ -396,7 +406,7 @@ class Reporter:
         output_report_path = f"llm_perf/reports/{self.backend}/{self.task}"
         os.makedirs(output_report_path, exist_ok=True)
 
-        if self.backend != "GPU" and self.test_accuracy:
+        if self.test_accuracy:
             # Save accuracy logits diff plt result
             logits_diff_png_path = f"{output_report_path}/logits_diff.png"
             logits_diff = np.concatenate(
@@ -424,6 +434,11 @@ class Reporter:
             plt.grid(True)
             plt.savefig(token_diff_png_path, dpi=300)
             self.result["Accuracy"]["Token Diff"]["Png"] = logits_diff_png_path
+
+        if not self.test_perf:
+            self.result.pop("Min New Tokens", None)
+            self.result.pop("Max New Tokens", None)
+            self.result.pop("Performance", None)
 
         # Save Result
         with open(f"{output_report_path}/result.json", "w") as file:

@@ -86,79 +86,79 @@ class CoreScheduler(ABC):
         self, 
         get_input_logits: bool, 
         task: CoreInferencer.Task
-    ) -> Union[
-        AsyncIterable[GenerateResult], Tuple[AsyncIterable[GenerateResult], float, str]
-    ]:
-        # Save last generate token index minus 1, cann't use len(generate_ids) because may generate
-        #  many times, but generate thread only schedule once, which means length bigger than last generate token index.
-        _gen_get_id = 0
+    ):
+
+        gen_index = 0
+
         while True:
             result = await task.get_result()
             if result is None:
                 if task.exception:
                     raise task.exception
                 break
+            
+            cur_input_tokens = task.request.input_ids + task.generate_ids[:gen_index]
+            gen_index += 1
 
+            task_results = {
+                "result": result, 
+            }
             if get_input_logits:
-                gen_ids = task.generate_ids[:_gen_get_id]
-                _gen_get_id += 1
-                # 1. label = input_ids + generate_ids[:-1], [:-1] is remove just generate token
-                labels = torch.LongTensor(task.request.input_ids + gen_ids)
-                logger.debug(
-                    f"label shape: {labels.shape}, input_logits shape: {len(result.input_logits)}"
+                await self.update_logits(result, task)
+
+                cur_labels_tensor = torch.tensor(
+                    cur_input_tokens, 
+                    dtype=torch.int64, device='cpu'
                 )
-                # 2. .view convert List to Tensor view
-                input_logits = torch.FloatTensor(result.input_logits).view(
-                    1, labels.size(-1) - 1, -1
-                )
-                perplexity = calc_perplexity(input_logits=input_logits, labels=labels)
-                dump_file = await self.dump_last_logits(result, task)
-                yield result, perplexity, dump_file
-            else:
-                yield result
+
+                input_logits_len = len(cur_input_tokens) - 1
+                input_logits = task.all_logits[:input_logits_len]
+
+                perplexity = calc_perplexity(input_logits, cur_labels_tensor)
+
+                task_results["dump_file"] = ""
+                task_results["perplexity"] = perplexity
+
+            yield task_results
+
+        task_results = {
+            "result": None, 
+            "perplexity": -1, 
+        }
 
         if get_input_logits:
-            dump_file = await self.dump_last_logits(result, task)
-            yield None, -1, dump_file
+            dump_file = await self.dump_last_logits(task)
+            task_results["dump_file"] = dump_file
+            yield task_results
         return
+        
 
-
-
-    async def dump_last_logits(self, result, task: CoreInferencer.Task):
-        """Dump prompt logits
-
-        Args:
-            result: prompt generate result
-            task: prompt relate task
-
-        Return:
-            dump_file: prompt output logits numpy saved file, logits shape: [1, generate_token_len, vocab_size]
-        """
-        if result is None:
-            tmp_dir = ".tmp_logits"
-            if not os.path.exists(tmp_dir):
-                os.mkdir(tmp_dir)
-            import numpy as np
-
-            dump_file = (
-                tmp_dir
-                + "/"
-                + str(random.randint(0, 100))
-                + "_"
-                + str(int(time.time()))
-                + ".npy"
-            )
-            # np_logits shape is [1, seq_len, vocab_size]
-            np_logits = np.expand_dims(np.array(task.all_last_logits), axis=0)
-            np.save(dump_file, np_logits)
-            return dump_file
+    async def update_logits(self, result, task):
+        # [8, num_vocab]
+        if not hasattr(task, "all_logits"):
+            task.all_logits = result.logits
+        # [1, num_vocab]
         else:
-            # last_logits shape is [vocab_size]
-            # all_last_logits shape is [seq_len, vocab_size]
-            if not hasattr(task, "all_last_logits"):
-                task.all_last_logits = [result.last_logits]
-            else:
-                task.all_last_logits.append(result.last_logits)
-            return ""
+            task.all_logits = torch.cat([task.all_logits, result.logits], dim=0)
 
 
+
+    async def dump_last_logits(self, task: CoreInferencer.Task):
+        tmp_dir = ".tmp_logits"
+        if not os.path.exists(tmp_dir):
+            os.mkdir(tmp_dir)
+        import numpy as np
+
+        dump_file = (
+            tmp_dir
+            + "/"
+            + str(random.randint(0, 100))
+            + "_"
+            + str(int(time.time()))
+            + ".npy"
+        )
+        input_tokens_len = len(task.request.input_ids)
+        gen_tokens_len = len(task.generate_ids)
+        generate_logits = task.all_logits[-gen_tokens_len:].unsqueeze(0)
+        np.save(dump_file, generate_logits.numpy())
+        return dump_file

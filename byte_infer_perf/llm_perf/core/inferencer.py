@@ -54,22 +54,8 @@ class CoreInferencer(ABC):
             elif st_name == "process_end":
                 self.last_process_st = time.perf_counter_ns()
                 self.post_process_time.append((self.last_process_st - self.last_model_end_st) / 1e6)
-                
-        # def print_time(self):
 
-        #     context_wait_time = self.wait_time[0]
-        #     context_model_time = self.model_time[0]
-        #     context_postprocess_time = self.post_process_time[0]
-            
-        #     decode_wait_time = sum(self.wait_time[1:]) / len(self.wait_time[1:])
-        #     decode_model_time = sum(self.model_time[1:]) / len(self.model_time[1:])
-        #     decode_postprocess_time = sum(self.post_process_time[1:]) / len(self.post_process_time[1:])
-
-        #     print(f"context wait/model/postprocess: {context_wait_time}\t{context_model_time}\t{context_postprocess_time}")
-        #     print(f"decode wait/model/postprocess: {decode_wait_time}\t{decode_model_time}\t{decode_postprocess_time}")
-
-
-        
+              
         def add_result(self, res: GenerateResult):
             self.generate_ids.append(res.token_id)
             self.result_queue.put(res)

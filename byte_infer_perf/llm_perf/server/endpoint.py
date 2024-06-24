@@ -31,6 +31,7 @@ class LLMPerfEndpoint:
         )
         logger.info(f'load tokenizer: {tokenizer_path}')
         logger.info(f'pad_token_id: {self.tokenizer.pad_token_id}')
+        logger.info(f'eos_token_id: {self.tokenizer.eos_token_id}')
 
         xpu_cfg["pad_token_id"] = self.tokenizer.pad_token_id
 
@@ -55,8 +56,7 @@ class LLMPerfEndpoint:
             "min_new_tokens": 1,
             "max_new_tokens": 512,
             "top_k": 1,
-            "temperature": 0.2,
-            "presence_penalty": 1.0,
+            "get_input_logits": 0
         }
         logger.info(f"warmup prompt: {prompt}, config: {generate_config}")
 
@@ -75,10 +75,10 @@ class LLMPerfEndpoint:
             return res
 
         single_result = asyncio.run(_steram_warmup())
-        logger.info(f"single warmup response: {single_result}")
+        logger.info(f"single warmup response: {single_result}\n")
 
         multiple_result = asyncio.run(_multiple_warmup())
-        logger.info(f"multiple warmup reponse: {multiple_result}")
+        logger.info(f"multiple warmup reponse: {multiple_result}\n")
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
@@ -110,40 +110,28 @@ class LLMPerfEndpoint:
         try:
             # create GenerateRequest object
             req = await self.prepare_request(prompt, generate_config)
+
             prompt_tokens = len(req.input_ids)
             completion_tokens = 0
+
             async for gen_res in self.scheduler.generate(req):
-                completion_tokens += 1
-                outputs = {
+                result = gen_res["result"]
+                if result is not None:
+                    completion_tokens += 1
+
+                infer_outputs = {
                     "usage": {
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                         "total_tokens": prompt_tokens + completion_tokens,
                     },
-                    "choice": {},
+                    "choice": {
+                        "message": ""
+                    }
                 }
 
-                if req.generate_config.get_input_logits:
-                    result, perplexity, logits_dump = gen_res
-                    if result is None:
-                        outputs["choice"].update(
-                            {
-                                "message": "",
-                                "perplexity": perplexity,
-                                "logits_dump": logits_dump,
-                            }
-                        )
-                    else:
-                        outputs["choice"].update(
-                            {
-                                "message": self.tokenizer.decode(result.token_id),
-                                "perplexity": perplexity,
-                                "logits_dump": logits_dump,
-                            }
-                        )
-                else:
-                    result: GenerateResult = gen_res
-                    outputs["choice"].update(
+                if result is not None:
+                    infer_outputs["choice"].update(
                         {
                             "message": self.tokenizer.decode(result.token_id), 
                             "wait_time": result.wait_time, 
@@ -152,8 +140,16 @@ class LLMPerfEndpoint:
                         }
                     )
 
-                logger.debug(f"steam inference result: {outputs}")
-                yield outputs
+                if req.generate_config.get_input_logits:
+                    infer_outputs["choice"].update(
+                        {
+                            "perplexity": gen_res["perplexity"], 
+                            "logits_dump": gen_res["dump_file"]
+                        }
+                    )
+
+                logger.debug(f"steam inference result: {infer_outputs}")
+                yield infer_outputs
         except Exception as e:
             logger.error(f"stream inference error: {e}")
             raise e

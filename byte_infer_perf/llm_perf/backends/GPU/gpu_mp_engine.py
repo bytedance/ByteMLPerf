@@ -60,11 +60,11 @@ class GpuMpEngine(CoreMpEngine):
                 (
                     forward_inputs,
                 ) = input_queue.get(block=True)
-                inputs = self.build_inputs(forward_inputs)
-                logits = model.forward(inputs)
+                inputs_dict = self.build_inputs(forward_inputs)
+                output_dict = model.forward(inputs_dict)
                 torch.cuda.synchronize()
                 if local_rank == 0:
-                    output_queue.put(logits)
+                    output_queue.put(output_dict)
 
         except Exception as e:
             logger.exception(f"[BUG] engine _load_and_listen failed, no more requests will be handled. {e}")
