@@ -127,6 +127,8 @@ class RuntimeBackendCUDA(runtime_backend.RuntimeBackend):
             if os.getenv("FP16"):
                 model = model.half()
             model.eval()
+            print(f"INFO:[Data type]: {next(iter(model.parameters())).dtype}")
+
             self.model_runtimes.append(model)
 
     def _get_fake_samples(self, batch_size, shape, input_type):
