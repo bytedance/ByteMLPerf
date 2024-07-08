@@ -1,5 +1,5 @@
 {
-  "operator": "exponential",
+  "operator": "cast",
   "iterations": 10,
   "input_shape_group": [
     [

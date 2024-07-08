@@ -56,24 +56,12 @@ class BackendGPU(Backend):
             )
 
 
-    # gemm ops
-    def gemm(self):
-        self.op = GPUGemmOp()
-
-    def batch_gemm(self):
-        self.op = BatchGemmOp()
-
-    def group_gemm(self):
-        self.op = GPUGroupGemmOp()
-
-
     # device/host ops
     def host2device(self):
         self.op = Host2DeviceOp(torch.device("cuda"))
 
     def device2host(self):
         self.op = Device2HostOp()
-
 
 
     # communication ops
@@ -98,11 +86,8 @@ class BackendGPU(Backend):
         self.op = BroadcastOp(self.group)
 
 
-
-    # other compute ops
-    def add(self):
-        self.op = AddOp()
-
+    # compute ops
+    # unary ops
     def sin(self):
         self.op = SinOp()
 
@@ -115,8 +100,53 @@ class BackendGPU(Backend):
     def exponential(self):
         self.op = ExponentialOp()
 
+    def silu(self):
+        self.op = SiluOp()
+
     def gelu(self):
         self.op = GeluOp()
+
+    def swiglu(self):
+        self.op = SwiGLUOp()
+
+    def cast(self):
+        self.op = CastOp()
+
+
+    # binary ops
+    def add(self):
+        self.op = AddOp()
+
+    def mul(self):
+        self.op = MulOp()
+
+    def sub(self):
+        self.op = SubOp()
+
+    def div(self):
+        self.op = DivOp()
+
+
+    # reduce ops
+    def layernorm(self):
+        self.op = LayerNormOp()
+
+    def softmax(self):
+        self.op = SoftmaxOp()
+
+    def reducesum(self):
+        self.op = ReduceSumOp()
+
+    def reducemin(self):
+        self.op = ReduceMinOp()
+
+    def reducemax(self):
+        self.op = ReduceMaxOp()
+
+
+    # index ops
+    def indexadd(self):
+        self.op = IndexAddOp()
 
     def sort(self):
         self.op = SortOp()
@@ -124,21 +154,23 @@ class BackendGPU(Backend):
     def unique(self):
         self.op = UniqueOp()
 
-    def indexadd(self):
-        self.op = IndexAddOp()
 
-    def softmax(self):
-        self.op = SoftmaxOp()
+    # gemm ops
+    def gemm(self):
+        self.op = GPUGemmOp()
 
-    def layernorm(self):
-        self.op = LayerNormOp()
+    def batch_gemm(self):
+        self.op = GPUBatchGemmOp()
 
-
+    def group_gemm(self):
+        self.op = GPUGroupGemmOp()
 
 
 
     # create input tensors
     def build_tensor(self, input_shapes, torch_dtype):
+        # import pdb;pdb.set_trace()
+        torch.cuda.empty_cache()
 
         # compute size of input and output tensors
         if hasattr(self.op, "compute_size"):
@@ -154,20 +186,25 @@ class BackendGPU(Backend):
         avail_cnts = avail_bytes // bytes_per_cnt
         max_data_cnt = min(self.iterations, avail_cnts)
 
-
         # create input tensors for each op
         input_tensors_list = []
         for _ in range(max_data_cnt):
             # create input tensors
             if hasattr(self.op, "custom_create_tensors"):
-                input_tensors = self.op.custom_create_tensors(input_shapes, torch_dtype)
+                input_tensors = self.op.custom_create_tensors(input_shapes, torch_dtype, torch.device("cuda"))
                 input_tensors_list.append(input_tensors)
             # default: all input tensors have same dtype
             else:
-                input_tensors = [
-                    torch.randint(0, 3, size=shape).type(torch_dtype).to(torch.device("cuda"))
-                    for shape in input_shapes
-                ]
+                if torch_dtype in [torch.int8, torch.int32]:
+                    input_tensors = [
+                        torch.randint(-3, 3, size=shape, dtype=torch_dtype, device="cuda")
+                        for shape in input_shapes
+                    ]
+                else:
+                    input_tensors = [
+                        torch.randn(shape, dtype=torch_dtype, device="cuda")
+                        for shape in input_shapes
+                    ]
                 input_tensors_list.append(input_tensors)
         if hasattr(self.op, "process_inputs"):
             input_tensors_list = [

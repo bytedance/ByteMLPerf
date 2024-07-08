@@ -63,7 +63,7 @@ def dump_communication_ops_report(
         if bandwidth_limit is not None:
             bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype),
             "Tensor Shapes": input_shapes,
             "Memory Size(MB)": round(mb, 2),
             "Group": group_size,
@@ -74,7 +74,7 @@ def dump_communication_ops_report(
         }
     else:
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype),
             "Tensor Shapes": input_shapes,
             "Memory Size(MB)": round(mb, 2),
             "Group": group_size,
@@ -95,7 +95,7 @@ def dump_computation_ops_report(
     latency: float,
     error: str = ""
 ):
-    if op_name == "add":
+    if op_name in ["add", "mul", "sub", "div"]:
         # c = a + b
         # MAC_total = MAC_a + MAC_b + MAC_c
         size = sum(
@@ -126,6 +126,9 @@ def dump_computation_ops_report(
         size = sum(size_list)
     elif op_name in ["unique", "device2host", "host2device"]:
         size = sum([math.prod(shape) for shape in input_shapes])
+    elif op_name == "cast":
+        size = sum([math.prod(shape) for shape in input_shapes])
+        size = size * (1 + 2) if dtype == torch.float32 else int(size * (1 + 0.5))
     else:
         # out = func(in)
         # MAC_total = MAC_in + MAC_out
@@ -140,7 +143,7 @@ def dump_computation_ops_report(
         if bandwidth_limit is not None:
             bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype),
             "Tensor Shapes": input_shapes,
             "Memory Size(MB)": round(mb, 2),
             "Kernel bandwidth(GB/s)": round(algo_bw, 2),
@@ -149,7 +152,7 @@ def dump_computation_ops_report(
         }
     else:
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype),
             "Tensor Shapes": input_shapes,
             "Memory Size(MB)": round(mb, 2),
             "Kernel bandwidth(GB/s)": 0,

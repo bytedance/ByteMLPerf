@@ -1,5 +1,5 @@
 {
-  "operator": "exponential",
+  "operator": "swiglu",
   "iterations": 10,
   "input_shape_group": [
     [

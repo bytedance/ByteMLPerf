@@ -24,6 +24,7 @@ import pathlib
 import traceback
 import random
 from typing import Any, Dict, List
+import itertools
 
 
 import torch
@@ -135,9 +136,9 @@ class PerfEngine:
         return backend(self.workload, self.args.vendor_path)
 
     def start_engine(self) -> None:
-        status = self.activate_venv(self.backend_type)
-        if not status:
-            log.warning("Activate virtualenv Failed, Please Check...")
+        # status = self.activate_venv(self.backend_type)
+        # if not status:
+        #     log.warning("Activate virtualenv Failed, Please Check...")
 
         self.backend = self.init_backend(self.backend_type)
         output_dir = os.path.abspath("reports/" + self.backend_type)
@@ -149,11 +150,11 @@ class PerfEngine:
         else:
             status = self.start_perf(self.workload)
 
-        self.deactivate_venv()
+        # self.deactivate_venv()
 
     def start_perf(self, workload: Dict[str, Any]) -> bool:
         log.info(
-            "******************************************* Start to test op: {}. *******************************************".format(
+            "******************************************* Start to test op: [{}]. *******************************************".format(
                 workload["operator"]
             )
         )
@@ -180,8 +181,53 @@ class PerfEngine:
         shape_list = []
 
         # normal ops
+        # import pdb;pdb.set_trace()
+        if "input_shape_groups" in self.workload:
+            if isinstance(self.workload["input_shape_groups"], list):
+                input_shape_groups = self.workload["input_shape_groups"]
+            else:
+                input_shape_groups = [self.workload["input_shape_groups"]]
+
+            for input_shape_group in input_shape_groups:
+                if "inputs" in input_shape_group:
+                    inputs_shapes = input_shape_group["inputs"]
+                    input_shape_list = []
+                    for input_shapes in inputs_shapes:
+                        input_shape_list.append([list(shape) for shape in itertools.product(*input_shapes)])
+                    if len(input_shape_list) == 1:
+                        shape_list.extend(input_shape_list[0])
+                    else:
+                        shape_list.extend([list(input_shape) for input_shape in zip(*input_shape_list)])
+
+                # batch gemm
+                elif "batch_size" in input_shape_group:
+                    bs = input_shape_group.get("batch_size", [])
+                    mn = input_shape_group.get("MN", [])
+                    k = input_shape_group.get("K", [])
+                    if mn and k:
+                        for p in itertools.product(bs, mn, k):
+                            shape_list.append([[p[0], p[1][0], p[2]], [p[0], p[2], p[1][1]]])
+                # group gemm
+                elif "group" in input_shape_group:
+                    groups = input_shape_group.get("group", [])
+                    kn = input_shape_group.get("KN", [])
+                    if groups and kn:
+                        for group in groups:
+                            for _kn in kn:
+                                input_shape_list = []
+                                for m in group:
+                                    input_shape_list.append([[m, _kn[0]], [_kn[0], _kn[1]]])
+                                shape_list.append(input_shape_list)
+                # gemm
+                else:
+                    m = input_shape_group.get("M", [])
+                    kn = input_shape_group.get("KN", [])
+                    for p in itertools.product(m, kn):
+                        shape_list.append([[p[0], p[1][0]], [p[1][0], p[1][1]]])
+        print(shape_list)
+        print("   ")
         if "input_shape_list" in self.workload:
-            shape_list = self.workload["input_shape_list"]
+            shape_list.extend(self.workload["input_shape_list"])
         # gemm or batch_gemm
         elif "M/N/K" in self.workload:
             if "batch_size" in self.workload:
@@ -208,7 +254,8 @@ class PerfEngine:
                     cur_shapes = [[M, K], [K, N]]
                     cur_inputs.append(cur_shapes)
             shape_list.append(cur_inputs)
-
+        print(shape_list)
+        print("   ")
         # dtype list
         dtype_list = self.workload["dtype"]
 
@@ -225,7 +272,7 @@ class PerfEngine:
                   List[List[int]]: multiple inputs. add
                   List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
                 """
-
+                log.info(f"Execute op: [{op_name.lower()}], input_shape: {input_shape}, dtype: {dtype}")
                 if isinstance(input_shape[0], int):
                     input_shape = [input_shape]
                 try:
@@ -255,7 +302,7 @@ class PerfEngine:
                 with open(output_report_path, "w") as file:
                     json.dump(base_report, file, indent=4)
         log.info(
-            "******************************************* End to test op: {}. *******************************************".format(
+            "******************************************* Test op: [{}] SUCCESS. *******************************************".format(
                 workload["operator"]
             )
         )
