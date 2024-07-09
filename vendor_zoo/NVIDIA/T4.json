@@ -38,19 +38,20 @@
         },
         "标量参数": {
             "标量精度": null,
-            "INT8标量算力(TFLOPS)": null,
+            "INT8标量算力(TOPS)": null,
             "FP16标量算力(TFLOPS)": null,
             "FP32标量算力(TFLOPS)": null
         },
         "向量参数": {
             "向量精度": "FP32",
-            "INT8量算力(TFLOPS)": null,
+            "INT8量算力(TOPS)": null,
             "FP16向量算力(TFLOPS)": null,
             "FP32向量算力(TFLOPS)": 8.1
         },
         "张量参数": {
             "张量精度": "FP16, INT8, INT4",
-            "INT8张量算力(TFLOPS)": 130.0,
+            "INT4张量算力(TOPS)": 260.0, 
+            "INT8张量算力(TOPS)": 130.0,
             "FP16张量算力(TFLOPS)": 65.0,
             "FP32张量算力(TFLOPS)": null
         }
@@ -61,5 +62,9 @@
         "RDMA协议": null,
         "下行带宽(GB/s)": null,
         "上行带宽(GB/s)": null
-    }
+    }, 
+    "数据源": [
+        "https://www.nvidia.com/en-us/data-center/tesla-t4/", 
+        "https://www.techpowerup.com/gpu-specs/tesla-t4.c3316"
+    ]
 }
