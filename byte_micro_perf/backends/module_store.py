@@ -25,92 +25,120 @@ class GemmOp(torch.nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-    def forward(self, input_tensor_a, input_tensor_b):
-        compute_dtype = input_tensor_a.dtype
-        output_tensor = None
-        if compute_dtype == torch.int8:
-            # to be realized
-            pass
-        elif compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
-            output_tensor = torch.mm(input_tensor_a, input_tensor_b)
-        return output_tensor
-    
-    def compute_size(self, input_shapes, torch_dtype):
+    def compute_size(self, input_shapes, dtype):
         # input_shapes: [[M, K], [K, N]]
+        torch_dtype = getattr(torch, dtype)
         a_shape, b_shape = input_shapes
         M, K = a_shape
         K, N = b_shape
         d_shape = [M, N]
-        dtype_size = get_dtype_bytes(torch_dtype)
-        element_num = sum([math.prod(shape) for shape in [a_shape, b_shape, d_shape]])
-        bytes_per_cnt = dtype_size * element_num
+        dtype_size = get_dtype_bytes(dtype)
+        input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+        output_element_num = sum([math.prod(shape) for shape in [d_shape]])
+        if torch_dtype == torch.int8:
+            bytes_per_cnt = dtype_size * input_element_num + get_dtype_bytes("float32") * output_element_num
+        else:
+            bytes_per_cnt = dtype_size * (input_element_num + output_element_num)
         return bytes_per_cnt
 
+    def forward(self, input_tensor_a, input_tensor_b):
+        compute_dtype = input_tensor_a.dtype
+        output_tensor = None
+        if compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
+            output_tensor = torch.mm(input_tensor_a, input_tensor_b)
+        else:
+            raise Exception(f"GemmOp with dtype {compute_dtype} is not implemented")
+        return output_tensor
+
+
+class GemvOp(torch.nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+    
+    def compute_size(self, input_shapes, dtype):
+        # input_shapes: [[M, K], [K, N]]
+        torch_dtype = getattr(torch, dtype)
+        a_shape, b_shape = input_shapes
+        M, K = a_shape
+        K, N = b_shape
+        d_shape = [M, N]
+        dtype_size = get_dtype_bytes(dtype)
+        input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+        output_element_num = sum([math.prod(shape) for shape in [d_shape]])
+        if torch_dtype == torch.int8:
+            bytes_per_cnt = dtype_size * input_element_num + get_dtype_bytes("float32") * output_element_num
+        else:
+            bytes_per_cnt = dtype_size * (input_element_num + output_element_num)
+        return bytes_per_cnt
+
+    def forward(self, input_tensor_a, input_tensor_b):
+        compute_dtype = input_tensor_a.dtype
+        output_tensor = None
+        if compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
+            output_tensor = torch.mm(input_tensor_a, input_tensor_b)
+        else:
+            raise Exception(f"GemvOp with dtype {compute_dtype} is not implemented")
+        return output_tensor
 
 
 class BatchGemmOp(torch.nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-    def forward(self, input_tensor_a, input_tensor_b):
-        compute_dtype = input_tensor_a.dtype
-        output_tensor = None
-        if compute_dtype == torch.int8:
-            # to be realized
-            pass
-        elif compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
-            output_tensor = torch.bmm(input_tensor_a, input_tensor_b)
-        return output_tensor
-
-    def compute_size(self, input_shapes, torch_dtype):
+    def compute_size(self, input_shapes, dtype):
         # input_shapes: [[bs, M, K], [bs, K, N]]
+        torch_dtype = getattr(torch, dtype)
         a_shape, b_shape = input_shapes
         bs, M, K = a_shape
         bs, K, N = b_shape
         d_shape = [bs, M, N]
-        dtype_size = get_dtype_bytes(torch_dtype)
-        element_num = sum([math.prod(shape) for shape in [a_shape, b_shape, d_shape]])
-        bytes_per_cnt = dtype_size * element_num
+        dtype_size = get_dtype_bytes(dtype)
+        input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+        output_element_num = sum([math.prod(shape) for shape in [d_shape]])
+        if torch_dtype == torch.int8:
+            bytes_per_cnt = dtype_size * input_element_num + get_dtype_bytes("int32") * output_element_num * 2
+        else:
+            bytes_per_cnt = dtype_size * (input_element_num + output_element_num)
         return bytes_per_cnt
-    
+
+    def forward(self, input_tensor_a, input_tensor_b):
+        compute_dtype = input_tensor_a.dtype
+        output_tensor = None
+        if compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
+            output_tensor = torch.bmm(input_tensor_a, input_tensor_b)
+        else:
+            raise Exception(f"BatchGemmOp with dtype {compute_dtype} is not implemented")
+        return output_tensor
 
 
 class GroupGemmOp(torch.nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-    def forward(self, input_tensor_a, input_tensor_b):
-        compute_dtype = input_tensor_a.dtype
-        output_tensor_list = []
-        for a, b in zip(input_tensor_a, input_tensor_b):
-            if compute_dtype == torch.int8:
-                # to be realized
-                pass
-            elif compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
-                output_tensor = torch.mm(a, b)
-                output_tensor_list.append(output_tensor)
-        return output_tensor_list
-
-
-    def compute_size(self, input_shapes, torch_dtype):
+    def compute_size(self, input_shapes, dtype):
         """
         [
             [[M1, K1], [K1, N1]], 
             [[M2, K2], [K2, N2]]
         ]
         """
+        torch_dtype = getattr(torch, dtype)
         bytes_per_cnt = 0
         for problem_shape in input_shapes:
             a_shape, b_shape = problem_shape
             M, K = a_shape
             K, N = b_shape
             d_shape = [M, N]
-            dtype_size = get_dtype_bytes(torch_dtype)
-            element_num = sum([math.prod(shape) for shape in [a_shape, b_shape, d_shape]])
-            bytes_per_cnt += dtype_size * element_num
+            dtype_size = get_dtype_bytes(dtype)
+            input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+            output_element_num = sum([math.prod(shape) for shape in [d_shape]])
+            if torch_dtype == torch.int8:
+                bytes_per_cnt += dtype_size * input_element_num + get_dtype_bytes("float32") * output_element_num
+            else:
+                bytes_per_cnt += dtype_size * (input_element_num + output_element_num)
         return bytes_per_cnt
 
-    def custom_create_tensors(self, input_shapes, torch_dtype):
+    def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
         """
         [
             [[M1, K1], [K1, N1]], 
@@ -122,16 +150,27 @@ class GroupGemmOp(torch.nn.Module):
 
         for problem_shape in input_shapes:
             a_shape, b_shape = problem_shape
-            left_tensors.append(
-                torch.randint(0, 3, size=a_shape).type(torch_dtype).to(torch.device("cuda"))
-            )
-            right_tensors.append(
-                torch.randint(0, 3, size=b_shape).type(torch_dtype).to(torch.device("cuda"))
-            )
+            if torch_dtype in [torch.int8, torch.int32]:
+                left_tensor = torch.randint(-3, 3, size=a_shape, dtype=torch_dtype, device=xpu_device)
+                right_tensor = torch.randint(-3, 3, size=b_shape, dtype=torch_dtype, device=xpu_device)
+            else:
+                left_tensor = torch.randn(a_shape, dtype=torch_dtype, device=xpu_device)
+                right_tensor = torch.randn(b_shape, dtype=torch_dtype, device=xpu_device)
+            left_tensors.append(left_tensor)
+            right_tensors.append(right_tensor)
+
         return [left_tensors, right_tensors]
 
-
-
+    def forward(self, input_tensor_a, input_tensor_b):
+        compute_dtype = input_tensor_a.dtype
+        output_tensor_list = []
+        for a, b in zip(input_tensor_a, input_tensor_b):
+            if compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
+                output_tensor = torch.mm(a, b)
+                output_tensor_list.append(output_tensor)
+            else:
+                raise Exception(f"GroupGemmOp with dtype {compute_dtype} is not implemented")
+        return output_tensor_list
 
 
 class Host2DeviceOp(torch.nn.Module):
@@ -157,8 +196,6 @@ class Device2HostOp(torch.nn.Module):
         assert input_tensors.device.type != "cpu"
         output_cpu = input_tensors.cpu()
         return output_cpu
-
-
 
 
 class AllReduceOp(torch.nn.Module):
@@ -238,18 +275,35 @@ class BroadcastOp(torch.nn.Module):
     def forward(self, input_tensors):
         dist.broadcast(input_tensors, 0, self.group)
         return True
-    
 
 
-
-
-class AddOp(torch.nn.Module):
-    def __init__(self):
+class P2POp(torch.nn.Module):
+    def __init__(self, group, ranks, rank):
         super().__init__()
+        self.group = group
+        self.group_size = self.group.size()
+        self.rank = rank
+        self.ranks = ranks
+        self.rank_size = len(ranks)
 
-    def forward(self, input_tensor_a, input_tensor_b):
-        result = input_tensor_a + input_tensor_b
-        return result
+    def next_rank(self):
+        return self.ranks[(self.rank + 1) % self.rank_size]
+
+    def prev_rank(self):
+        return self.ranks[(self.rank - 1) % self.rank_size]
+
+    def forward(self, send_tensor, recv_tensor):
+        reqs = []
+        if self.rank != (self.group_size - 1):
+            send_req = dist.isend(send_tensor, self.next_rank(), self.group)
+            reqs.append(send_req)
+        if self.rank != 0:
+            recv_req = dist.irecv(recv_tensor, self.prev_rank(), self.group)
+            reqs.append(recv_req)
+
+        for req in reqs:
+            req.wait()
+        return True
 
 
 class SinOp(torch.nn.Module):
@@ -270,12 +324,12 @@ class CosOp(torch.nn.Module):
         return result
 
 
-class GeluOp(torch.nn.Module):
+class ExpOp(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, input_tensors):
-        result = torch.nn.functional.gelu(input_tensors)
+        result = torch.exp(input_tensors)
         return result
 
 
@@ -285,6 +339,141 @@ class ExponentialOp(torch.nn.Module):
 
     def forward(self, input_tensors):
         result = input_tensors.exponential_()
+        return result
+
+
+class SiluOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.nn.functional.silu(input_tensors)
+        return result
+
+
+class GeluOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.nn.functional.gelu(input_tensors)
+        return result
+
+
+class SwiGLUOp(torch.nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.w = 1
+        self.v = 2
+
+    def forward(self, input_tensors):
+        result = (torch.nn.functional.sigmoid(input_tensors) * self.w) + (input_tensors * self.v)
+        return result
+
+
+class CastOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def set_dtype(self, src_dtype: str):
+        target_dtype = "bfloat16" if src_dtype == "float32" else "float32"
+        self.target_dtype = target_dtype
+        self.target_torch_dtype = getattr(torch, target_dtype)
+
+    def compute_size(self, input_shapes, dtype):
+        torch_dtype = getattr(torch, dtype)
+        self.set_dtype(dtype)
+        dtype_size = get_dtype_bytes(dtype)
+        target_dtype_size = get_dtype_bytes(self.target_dtype)
+        element_num = sum([math.prod(shape) for shape in input_shapes])
+        bytes_per_cnt = dtype_size * element_num + target_dtype_size * element_num
+        return bytes_per_cnt
+
+    def forward(self, input_tensors):
+        result = input_tensors.to(self.target_torch_dtype)
+        return result
+
+
+class AddOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensor_a, input_tensor_b):
+        result = input_tensor_a + input_tensor_b
+        return result
+
+
+class MulOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensor_a, input_tensor_b):
+        result = input_tensor_a * input_tensor_b
+        return result
+
+
+class SubOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensor_a, input_tensor_b):
+        result = input_tensor_a - input_tensor_b
+        return result
+
+
+class DivOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensor_a, input_tensor_b):
+        result = input_tensor_a / input_tensor_b
+        return result
+
+
+class LayerNormOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.nn.functional.layer_norm(
+            input_tensors, (input_tensors.shape[-1],)
+        )
+        return result
+
+
+class SoftmaxOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.nn.functional.softmax(input_tensors, dim=-1)
+        return result
+
+
+class ReduceSumOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.sum(input_tensors, dim=-1)
+        return result
+
+
+class ReduceMinOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.min(input_tensors, dim=-1)
+        return result
+
+
+class ReduceMaxOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.max(input_tensors, dim=-1)
         return result
 
 
@@ -319,37 +508,3 @@ class UniqueOp(torch.nn.Module):
     def forward(self, input_tensors):
         result = torch.unique(input_tensors, return_counts=True)
         return result
-
-
-class ExpOp(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, input_tensors):
-        result = torch.exp(input_tensors)
-        return result
-
-
-
-class SoftmaxOp(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, hidden_states):
-        logits = torch.nn.functional.softmax(hidden_states, dim=-1)
-        return logits
-
-
-class LayerNormOp(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, hidden_states):
-        logits = torch.nn.functional.layer_norm(
-            hidden_states, (hidden_states.shape[-1],)
-        )
-        return logits
-
-
-
-

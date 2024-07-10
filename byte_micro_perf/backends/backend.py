@@ -15,6 +15,7 @@
 import os
 import time
 import random
+import traceback
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
@@ -38,6 +39,8 @@ class Backend(ABC):
         self.memory_limit = None
         self.bandwidth_limit = None
         self.get_backend_properties()
+
+        self.target_dtype = None
 
     @abstractmethod
     def get_device_name(self):
@@ -68,27 +71,13 @@ class Backend(ABC):
         pass
 
 
-
-    # gemm ops
-    def gemm(self):
-        pass
-
-    def batch_gemm(self):
-        pass
-
-    def group_gemm(self):
-        pass
-
-
-    # device/host ops
+    # communication ops
     def host2device(self):
         pass
 
     def device2host(self):
         pass
 
-
-    # communication ops
     def allreduce(self):
         pass
 
@@ -104,11 +93,11 @@ class Backend(ABC):
     def broadcast(self):
         pass
 
-
-    # other compute ops
-    def add(self):
+    def p2p(self):
         pass
 
+    # compute ops
+    # unary ops
     def sin(self):
         pass
 
@@ -121,10 +110,52 @@ class Backend(ABC):
     def exponential(self):
         pass
 
+    def silu(self):
+        pass
+
     def gelu(self):
         pass
 
-    def indexadd(self):
+    def swiglu(self):
+        pass
+
+    def cast(self):
+        pass
+
+
+    # binary ops
+    def add(self):
+        pass
+
+    def mul(self):
+        pass
+
+    def sub(self):
+        pass
+
+    def div(self):
+        pass
+
+
+    # reduce ops
+    def layernorm(self):
+        pass
+
+    def softmax(self):
+        pass
+
+    def reduce_sum(self):
+        pass
+
+    def reduce_min(self):
+        pass
+
+    def reduce_max(self):
+        pass
+
+
+    # index ops
+    def index_add(self):
         pass
 
     def sort(self):
@@ -133,18 +164,19 @@ class Backend(ABC):
     def unique(self):
         pass
 
-    def softmax(self):
+
+    # gemm ops
+    def gemm(self):
         pass
 
-    def layernorm(self):
+    def gemv(self):
         pass
 
+    def batch_gemm(self):
+        pass
 
-
-
-
-
-
+    def group_gemm(self):
+        pass
 
 
     # perf specify input_shape for 
@@ -157,42 +189,48 @@ class Backend(ABC):
         )
 
         if tensor_cnt > 0:
-            # random select input tensors
-            input_index_list = [
-                random.randint(0, tensor_cnt - 1) for _ in range(self.iterations)
-            ]
+            try:
+                # random select input tensors
+                input_index_list = [
+                    random.randint(0, tensor_cnt - 1) for _ in range(self.iterations)
+                ]
 
-            # warmup
-            num_warm_up = 10
-            for _ in range(num_warm_up):
-                self._run_operation(self.op, tensor_list[0])
+                # warmup
+                num_warm_up = 10
+                for _ in range(num_warm_up):
+                    self._run_operation(self.op, tensor_list[0])
 
-            # perf
-            self.device_synchronize()
-            start_time = time.perf_counter_ns()
-            for i in range(self.iterations):
-                result = self._run_operation(
-                    self.op, 
-                    tensor_list[input_index_list[i]]
-                )
-            self.device_synchronize()
-            end_time = time.perf_counter_ns()
+                # perf
+                self.device_synchronize()
+                start_time = time.perf_counter_ns()
+                for i in range(self.iterations):
+                    self._run_operation(
+                        self.op,
+                        tensor_list[input_index_list[i]]
+                    )
+                self.device_synchronize()
+                end_time = time.perf_counter_ns()
 
-            # time in us
-            total_exec_time = (end_time - start_time) / 1e3
-            latency = round(total_exec_time / self.iterations, 2)
+                # time in us
+                total_exec_time = (end_time - start_time) / 1e3
+                latency = round(total_exec_time / self.iterations, 2)
+            except Exception as e:
+                traceback.print_exc()
+                latency = 0
+                error = "RUN_OP_ERROR"
         else:
             latency = 0
             error = "OOM"
 
+        tensor_list = []
         
-        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
+        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
             report = dump_communication_ops_report(
                 self.op_name,
                 dtype,
                 input_shapes,
                 self.group.size(),
-                self.bandwidth_limit,
+                None,
                 latency,
                 error
             )

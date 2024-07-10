@@ -1,16 +1,10 @@
 {
   "operator": "group_gemm", 
-  "iterations": 20, 
-  "MNK_choices": [
-    128, 
-    256, 
-    512, 
-    1024
-  ], 
-  "seed": 2024, 
-  "problems": [
-    20
-  ], 
+  "iterations": 100, 
+  "input_shape_groups": {
+    "gemm_group": [[1, 16, 32, 64, 128, 256, 512, 1024]],
+    "KN": [[4096, 4096], [7168, 7168], [16384, 16384]]
+  },
   "dtype": [ 
     "float32", 
     "bfloat16", 
