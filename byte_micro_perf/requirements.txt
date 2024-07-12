@@ -11,3 +11,5 @@ fpdf
 attrs
 decorator
 typing-extensions
+torch==2.1.0
+nvidia-cutlass

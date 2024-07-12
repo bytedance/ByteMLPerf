@@ -20,10 +20,13 @@ import math
 import os
 import subprocess
 import sys
-from typing import Any, Dict, List
+import pathlib
 import traceback
+import random
+from typing import Any, Dict, List
+import itertools
 
-import torch
+
 import torch.multiprocessing as mp
 import virtualenv
 
@@ -89,6 +92,99 @@ def load_workload(task: str) -> Dict[str, Any]:
             "Task name: [ {} ] was not found, please check your task name".format(task)
         )
 
+def parse_workload(workload):
+    shape_list = []
+    if "input_shape_list" in workload:
+        shape_list.extend(workload["input_shape_list"])
+    # gemm or batch_gemm
+    elif "M/K/N" in workload:
+        if "batch_size" in workload:
+            for batch_size in workload["batch_size"]:
+                for M, K, N in workload["M/K/N"]:
+                    shape_list.append([
+                        [batch_size, M, K],
+                        [batch_size, K, N]
+                    ])
+        else:
+            for M, K, N in workload["M/K/N"]:
+                shape_list.append([[M, K], [K, N]])
+    # group_gemm
+    elif "MKN_choices" in workload:
+        seed = workload["seed"]
+        MKN_list = workload["MKN_choices"]
+        problems_list = workload["problems"]
+
+        random.seed(seed)
+        for problems in problems_list:
+            cur_inputs = []
+            for _ in range(problems):
+                M, K, N = [random.choice(MKN_list) for _ in range(3)]
+                cur_shapes = [[M, K], [K, N]]
+                cur_inputs.append(cur_shapes)
+        shape_list.append(cur_inputs)
+
+
+    if "input_shape_groups" in workload:
+        input_shape_groups = workload["input_shape_groups"] if isinstance(workload["input_shape_groups"], list) else [workload["input_shape_groups"]]
+
+        for input_shape_group in input_shape_groups:
+            if "inputs" in input_shape_group:
+                input_shape_list = []
+                for input_shapes in input_shape_group["inputs"]:
+                    input_shape_list.append([list(shape) for shape in itertools.product(*input_shapes)])
+                if len(input_shape_list) == 1:
+                    shape_list.extend(input_shape_list[0])
+                else:
+                    shape_list.extend([list(input_shape) for input_shape in zip(*input_shape_list)])
+
+            else:
+                gemm_keys = ["M", "K", "N", "MN", "MK", "KN"]
+                gemm_values = [input_shape_group.get(k, []) for k in gemm_keys]
+                if any(gemm_values):
+                    m ,k, n, mn, mk, kn = gemm_values
+                    # batch gemm
+                    if "batch_size" in input_shape_group:
+                        bs = input_shape_group.get("batch_size", [])
+                        if m and n and k:
+                            for p in itertools.product(bs, m, k, n):
+                                shape_list.append([[p[0], p[1], p[2]], [p[0], p[2], p[3]]])
+                        if mn and k:
+                            for p in itertools.product(bs, mn, k):
+                                shape_list.append([[p[0], p[1][0], p[2]], [p[0], p[2], p[1][1]]])
+                        if mk and n:
+                            for p in itertools.product(bs, mk, n):
+                                shape_list.append([[p[0], p[1][0], p[1][1]], [p[0], p[1][1], p[2]]])
+                        if m and kn:
+                            for p in itertools.product(bs, m, kn):
+                                shape_list.append([[p[0], p[1], p[2][0]], [p[0], p[2][0], p[2][1]]])
+                    # group gemm
+                    elif "gemm_group" in input_shape_group:
+                        groups = input_shape_group.get("gemm_group", [])
+                        kn = input_shape_group.get("KN", [])
+                        if k and n:
+                            kn.append([list(shape) for shape in itertools.product(k, n)])
+                        for group in groups:
+                            for _kn in kn:
+                                group_input_shape_list = []
+                                for m in group:
+                                    group_input_shape_list.append([[m, _kn[0]], [_kn[0], _kn[1]]])
+                                shape_list.append(group_input_shape_list)
+                    # gemm
+                    else:
+                        if m and n and k:
+                            for p in itertools.product(m, k, n):
+                                shape_list.append([[p[0], p[1]], [p[1], p[2]]])
+                        if mn and k:
+                            for p in itertools.product(mn, k):
+                                shape_list.append([[p[0][0], p[1]], [p[1], p[0][1]]])
+                        if mk and n:
+                            for p in itertools.product(mk, n):
+                                shape_list.append([[p[0][0], p[0][1]], [p[0][1], p[1]]])
+                        if m and kn:
+                            for p in itertools.product(m, kn):
+                                shape_list.append([[p[0], p[1][0]], [p[1][0], p[1][1]]])
+    return shape_list
+
 
 class PerfEngine:
     def __init__(self) -> None:
@@ -106,8 +202,14 @@ class PerfEngine:
 
         """
         initialize_func = getattr(self.backend, "initialize_ccl")
-        initialize_func(rank, world_size)
+
+        # world_size may excced available device count
+        ret = initialize_func(rank, world_size)
+        if ret is not None and not ret:
+            return
+
         status = self.start_perf(self.workload)
+        return status
 
     def init_backend(self, hardware_type: str) -> Backend:
         """
@@ -134,25 +236,29 @@ class PerfEngine:
         output_dir = os.path.abspath("reports/" + self.backend_type)
         os.makedirs(output_dir, exist_ok=True)
 
-        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
+        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
             for group in self.workload["group"]:
-                mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
+                try:
+                    mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
+                except Exception as e:
+                    traceback.print_exc()
+                    log.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
         else:
             status = self.start_perf(self.workload)
 
         self.deactivate_venv()
 
     def start_perf(self, workload: Dict[str, Any]) -> bool:
-        log.info(
-            "******************************************* Start to test op: {}. *******************************************".format(
-                workload["operator"]
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        if local_rank == 0:
+            log.info(
+                "******************************************* Start to test op: [{}]. *******************************************".format(
+                    workload["operator"]
+                )
             )
-        )
 
         # Initalize Output Dir and Reports
-        output_dir = os.path.abspath(
-            "reports/" + self.backend_type + "/" + workload["operator"]
-        )
+        output_dir = pathlib.Path("reports").joinpath(self.backend_type).joinpath(workload["operator"])
         os.makedirs(output_dir, exist_ok=True)
 
         op_name = workload["operator"]
@@ -169,18 +275,25 @@ class PerfEngine:
         else:
             raise ValueError(f"Unknown operation: {op_name.lower()}")
 
-        perf_reports = []
-        if "input_shape_list" in self.workload:
-            shape_list = self.workload["input_shape_list"]
-        else:
-            shape_list = []
-            for M, N, K in self.workload["M/N/K"]:
-                shape_list.append([[M, K], [K, N]])
+        # get input shape info
+        shape_list = parse_workload(self.workload)
 
-        for dtype in self.workload["dtype"]:
+        # dtype list
+        dtype_list = self.workload["dtype"]
+
+        for dtype in dtype_list:
             perf_reports = []
             base_report["Performance"] = {}
+
             for input_shape in shape_list:
+                """
+                input_shape could be:
+                  List[int]: single shape. cos
+                  List[List[int]]: multiple inputs. add
+                  List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+                """
+                if local_rank == 0:
+                    log.info(f"Execute op: [{op_name.lower()}], input_shape: {input_shape}, dtype: {dtype}")
                 if isinstance(input_shape[0], int):
                     input_shape = [input_shape]
                 try:
@@ -204,16 +317,16 @@ class PerfEngine:
                 + ".json"
             )
             output_report_path = os.path.join(output_dir, output_report_path)
-            local_rank = int(os.environ.get("LOCAL_RANK", 0))
             if local_rank == 0:
                 # logging.info(base_report["Performance"])
                 with open(output_report_path, "w") as file:
                     json.dump(base_report, file, indent=4)
-        log.info(
-            "******************************************* End to test op: {}. *******************************************".format(
-                workload["operator"]
+        if local_rank == 0:
+            log.info(
+                "******************************************* Test op: [{}] SUCCESS. *******************************************".format(
+                    workload["operator"]
+                )
             )
-        )
         return True
 
     def get_cpu_name(self):

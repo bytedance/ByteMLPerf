@@ -1,0 +1,14 @@
+{
+  "operator": "group_gemm", 
+  "iterations": 100, 
+  "input_shape_groups": {
+    "gemm_group": [[1, 16, 32, 64, 128, 256, 512, 1024]],
+    "KN": [[4096, 4096], [7168, 7168], [16384, 16384]]
+  },
+  "dtype": [ 
+    "float32", 
+    "bfloat16", 
+    "half", 
+    "int8"
+  ]
+}
