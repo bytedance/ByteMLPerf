@@ -1,12 +1,12 @@
 {
-    "model": "mixtral-torch-fp16-8x7b", 
-    "test_accuracy": false, 
+    "model": "falcon-180b", 
+    "test_accuracy": true, 
     "test_perf": true, 
     "min_new_tokens": 200, 
     "max_new_tokens": 200, 
-    "tp_sizes": [4, 8], 
+    "tp_sizes": [8], 
     "batch_sizes": [1, 8], 
     "input_tokens": [1024, 2048], 
-    "dataset": "llm_perf/datasets/merged_52_test.csv", 
+    "dataset": "llm_perf/datasets/merged_52_test.csv",
     "perf_time": 100
 }

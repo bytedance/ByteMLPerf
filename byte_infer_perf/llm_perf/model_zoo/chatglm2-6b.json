@@ -1,7 +1,11 @@
 {
     "model_name": "chatglm2",
-    "model_path": "llm_perf/model_zoo/sota/chatglm2-torch-fp16-6b",
+    "model_path": "llm_perf/model_zoo/sota/chatglm2-6b",
     "model_interface": "ChatGLMForConditionalGeneration",
+    "tokenizer": {
+        "path": "llm_perf/model_zoo/sota/chatglm2-6b",
+        "add_sep_token": false
+    }, 
     "network": {
         "_name_or_path": "THUDM/chatglm2-6b",
         "model_type": "chatglm",
@@ -43,9 +47,5 @@
         "tie_word_embeddings": false,
         "eos_token_id": 2,
         "pad_token_id": 0
-    },
-    "tokenizer": {
-        "path": "llm_perf/model_zoo/sota/chatglm2-torch-fp16-6b",
-        "add_sep_token": false
     }
 }

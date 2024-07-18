@@ -20,19 +20,23 @@ class LLMPerfEndpoint:
         
         model_config = xpu_cfg["model_config"]
         hardware_type = xpu_cfg["hardware_type"]
-        
+    
         # load tokenizer
         tokenizer_path = model_config["tokenizer"]["path"]
-        self.add_sep_token = model_config["tokenizer"]["add_sep_token"]
+        self.add_sep_token = model_config["tokenizer"].get("add_sep_token", False)
         self.tokenizer : PreTrainedTokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=tokenizer_path, 
             local_files_only=True,
             trust_remote_code=True
         )
-        logger.info(f'load tokenizer: {tokenizer_path}')
-        logger.info(f'pad_token_id: {self.tokenizer.pad_token_id}')
-        logger.info(f'eos_token_id: {self.tokenizer.eos_token_id}')
-
+        logger.info(f"load tokenizer: {tokenizer_path}")
+        logger.info("*"*50)
+        logger.info(f"bos_token_id: {self.tokenizer.bos_token_id}")
+        logger.info(f"eos_token_id: {self.tokenizer.eos_token_id}")
+        logger.info(f"pad_token_id: {self.tokenizer.pad_token_id}")
+        logger.info(f"sep_token_id: {self.tokenizer.sep_token_id}")
+        logger.info("*"*50)
+        
         xpu_cfg["pad_token_id"] = self.tokenizer.pad_token_id
 
         # import setup according to hardware_type
@@ -47,8 +51,11 @@ class LLMPerfEndpoint:
 
         self.warmup(xpu_cfg["max_batch_size"])
 
+
     def __del__(self):
-        self.scheduler.stop()
+        if hasattr(self, "scheduler") and self.scheduler is not None:
+            self.scheduler.stop()
+
 
     def warmup(self, max_batch_size):
         prompt = "中国的首都是哪里？"

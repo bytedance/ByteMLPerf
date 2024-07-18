@@ -1,4 +1,7 @@
 import os
+import json
+import pathlib
+
 import torch
 import torch.distributed as dist
 import torch.nn as nn
@@ -10,6 +13,7 @@ from llm_perf.utils.dist_utils import check_dist
 
 from accelerate import init_empty_weights
 
+from llm_perf.core.ckpt_loader import CoreCkptLoader, ChatGLM2_ModelLoader
 from llm_perf.backends.GPU.gpu_ckpt_loader import GpuCkptLoader
 
 from .chatglm2 import ChatGLMForConditionalGeneration, ChatGLMModel, ChatGLMConfig
@@ -19,24 +23,41 @@ class GPUChatGLM2Loader(GpuCkptLoader):
     def __init__(
         self, 
         prefix, 
-        model, 
-        mp_size=1, 
-        mp_rank=0, 
+        model, model_config, 
+        mp_size=1, mp_rank=0, 
         ckpt_path: str = ""
     ):
         super().__init__(prefix, model, mp_size, mp_rank, ckpt_path)
 
+        self.model_config = model_config
+
+
     def parallel_loader(self):
-        self.state_dict = None
+        self.state_dict = {}
+
+        # load model
         if self.mp_rank == 0:
-            self.state_dict = self.torch_load_wrapper(
-                self.ckpt_path, map_location=torch.device("cpu"))
+            self.state_dict = {}
+
+            model_dir = pathlib.Path(self.ckpt_path).absolute()
+            if not model_dir.exists() or not model_dir.is_dir():
+                return
+
+            weight_index_config = {}
+            for child in model_dir.iterdir():
+                if child.name.endswith(".index.json"):
+                    with open(child, "r") as f:
+                        weight_index_config = json.load(f)
+
+            model_loader = ChatGLM2_ModelLoader(model_dir, self.model_config, weight_index_config)
+            model_loader.load_weight()
+            self.state_dict = model_loader.weight_dict
 
         if self.mp_size == 1:
             return self.state_dict
 
-        # mp_size > 2
-        # broadcast state_dict from rank 0 to other ranks
+        # mp_size > 1
+        # broadcast {key_name: [tensor_shape, tensor]} from rank 0 to other ranks
         self.broadcast_meta()
 
         self.broadcast_weight("transformer.embedding.word_embeddings.weight")
@@ -57,6 +78,8 @@ class GPUChatGLM2Loader(GpuCkptLoader):
             self.scatter_weight(f"transformer.encoder.layers.{i}.self_attention.dense.weight", dim=-1)
 
         return self.state_dict
+
+
 
     def infusion_to_model(self):
         self.model.transformer.embedding.word_embeddings.weight = self.to_parameter(
@@ -121,7 +144,6 @@ class GPUChatGLM2(nn.Module):
         self.mp_size = int(os.environ.get("WORLD_SIZE", "1"))
         self.local_rank = int(os.environ.get("LOCAL_RANK", "0"))
 
-
         self.prefix = "transformer.encoder.layers"
         self.transformer_model : ChatGLMForConditionalGeneration = None
 
@@ -163,14 +185,17 @@ class GPUChatGLM2(nn.Module):
         logger.info(f"cuda model {self.model_path} loaded {self.transformer_model}")
 
 
+
     def load_weight(self, ckpt_path):
         p_loader = GPUChatGLM2Loader(
-            self.prefix, self.transformer_model, 
+            self.prefix, self.transformer_model, self.chatglm_config, 
             self.mp_size, self.local_rank, 
             ckpt_path
         )
-        p_loader.load()
+        p_loader.parallel_loader()
         p_loader.infusion_to_model()
+
+
 
 
     def init_kvcache(self, dtype):

@@ -10,8 +10,8 @@ import grpc
 import signal
 
 
-
 # ${prj_root}/byte_infer_perf
+CUR_DIR = pathlib.Path.cwd().absolute()
 BYTE_MLPERF_ROOT = pathlib.Path(__file__).absolute().parents[2].__str__()
 os.chdir(BYTE_MLPERF_ROOT)
 sys.path.insert(0, BYTE_MLPERF_ROOT)
@@ -82,8 +82,7 @@ async def serve(port, generator: LLMPerfEndpoint) -> None:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model_config", type=str, 
-        default="llm_perf/model_zoo/chatglm2-torch-fp16-6b.json"
+        "--model_config", type=str
     )
     parser.add_argument(
         "--hardware_type", type=str, 
@@ -118,7 +117,7 @@ def main():
     xpu_cfg["tp_size"] = args.tp_size
     xpu_cfg["max_batch_size"] = args.max_batch_size
     
-    model_config_path = pathlib.Path(args.model_config)
+    model_config_path = CUR_DIR / args.model_config
     if not model_config_path.exists():
         logger.error(f"model_config_path not exist")
         sys.exit(-1)

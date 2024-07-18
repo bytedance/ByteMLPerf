@@ -1,5 +1,5 @@
 {
-    "model": "chatglm2-torch-fp16-6b",
+    "model": "chatglm2-6b",
     "test_accuracy": true,
     "test_perf": true,
     "min_new_tokens": 200,
