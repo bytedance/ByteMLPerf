@@ -162,7 +162,7 @@ class GroupGemmOp(torch.nn.Module):
         return [left_tensors, right_tensors]
 
     def forward(self, input_tensor_a, input_tensor_b):
-        compute_dtype = input_tensor_a.dtype
+        compute_dtype = input_tensor_a[0].dtype
         output_tensor_list = []
         for a, b in zip(input_tensor_a, input_tensor_b):
             if compute_dtype in [torch.float32, torch.float16, torch.bfloat16]:
