@@ -74,10 +74,7 @@ In addition to the complete model structure, Byte MLPerf will also add some typi
 | roberta | nlp | popular | pytorch | squad-1.1 | fp32 |
 | deberta | nlp | popular | pytorch | squad-1.1 | fp32 |
 | swin-transformer | cv | popular | pytorch | imagenet2012 | fp32 |
-| gpt2 | nlp | sota | pytorch | none | fp32 |
 | stable diffusion | cv | sota | onnx | none | fp32 |
-| LlaMa2 7B | nlp | sota | torch | none | fp16 |
-| chatGLM2 6B | nlp | sota | torch | none | fp16 |
 
 ### ByteIR
 
