@@ -891,54 +891,7 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
             full_attention_mask -= padding_mask.unsqueeze(-1) - 1
         full_attention_mask = (full_attention_mask < 0.5).bool()
         full_attention_mask.unsqueeze_(1)
-        return full_attention_mask
-
-
-    def get_context_masks(
-        self, 
-        input_ids : torch.Tensor, 
-        padding_mask : torch.Tensor
-    ):
-        # input_ids: [1, q_len]
-        # padding_mask = [1, q_len]
-        batch_size, q_len = input_ids.shape
-
-        # [1, q_len, q_len]
-        full_attention_mask = torch.ones(
-            1, q_len, q_len, 
-            device=input_ids.device
-        )
-        full_attention_mask.tril_()
-        full_attention_mask = full_attention_mask * padding_mask.unsqueeze(1)
-        full_attention_mask -= padding_mask.unsqueeze(-1) - 1
-        full_attention_mask = (full_attention_mask < 0.5).bool()
-        full_attention_mask.unsqueeze_(1)
-        return full_attention_mask
-    
-    def get_decode_masks(
-        self, 
-        input_ids : torch.Tensor, 
-        all_kv_len: List[int]
-    ):
-        # input_ids: [batch_size, 1]
-        # padding_mask: [batch_size, 1 + max_kv_len]
-        batch_size, q_len = input_ids.shape
-        max_qkv_len = q_len + max(all_kv_len)
-        
-        # [batch_size, 1, max_qkv_len]
-        padding_mask = []
-        for i in range(batch_size):
-            cur_qkv_len = q_len + all_kv_len[i]
-            mask_per_batch = [1] * cur_qkv_len + [0] * (max_qkv_len - cur_qkv_len)
-            padding_mask.append(mask_per_batch)
-        full_attention_mask = torch.tensor(
-            padding_mask, 
-            device=input_ids.device
-        ).unsqueeze_(1)
-        full_attention_mask = (full_attention_mask < 0.5).bool()
-        full_attention_mask.unsqueeze_(1)
-        return full_attention_mask
-        
+        return full_attention_mask        
 
     def get_position_ids(self, input_ids, device):
         batch_size, seq_length = input_ids.shape
@@ -1067,13 +1020,7 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
         #     if (attention_mask is not None and not attention_mask.all()) or (past_key_values and seq_length != 1):
         #         full_attention_mask = self.get_masks(input_ids, past_key_values, padding_mask=attention_mask)
 
-
-        is_context = kwargs.get("is_context")
-        all_kv_len = kwargs.get("all_kv_len")
-        if is_context:
-            full_attention_mask = self.get_context_masks(input_ids, attention_mask)
-        else:
-            full_attention_mask = self.get_decode_masks(input_ids, all_kv_len)
+        full_attention_mask = kwargs.get("full_attention_mask")
 
 
         # Rotary positional embeddings

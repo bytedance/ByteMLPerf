@@ -17,26 +17,35 @@ class LLMPerfEndpoint:
         super().__init__()
 
         self.xpu_cfg = xpu_cfg
-        
-        model_config = xpu_cfg["model_config"]
         hardware_type = xpu_cfg["hardware_type"]
+        model_config = xpu_cfg["model_config"]
     
         # load tokenizer
-        tokenizer_path = model_config["tokenizer"]["path"]
-        self.add_sep_token = model_config["tokenizer"].get("add_sep_token", False)
-        self.tokenizer : PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=tokenizer_path, 
-            local_files_only=True,
-            trust_remote_code=True
-        )
+        try:
+            tokenizer_config = model_config["tokenizer"]
+            tokenizer_path = tokenizer_config["path"]
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                pretrained_model_name_or_path=tokenizer_path, 
+                local_files_only=True,
+                trust_remote_code=True
+            )
+            self.support_chn = tokenizer_config.get("support_chn", False)
+            self.apply_chat_template = tokenizer_config.get("apply_chat_template", False)
+        except Exception as e:
+            logger.error(f"load tokenizer error: {e}")
+            sys.exit(-1)
+
         logger.info(f"load tokenizer: {tokenizer_path}")
         logger.info("*"*50)
         logger.info(f"bos_token_id: {self.tokenizer.bos_token_id}")
         logger.info(f"eos_token_id: {self.tokenizer.eos_token_id}")
+        logger.info(f"unk_token_id: {self.tokenizer.unk_token_id}")
         logger.info(f"pad_token_id: {self.tokenizer.pad_token_id}")
-        logger.info(f"sep_token_id: {self.tokenizer.sep_token_id}")
         logger.info("*"*50)
         
+        xpu_cfg["bos_token_id"] = self.tokenizer.bos_token_id
+        xpu_cfg["eos_token_id"] = self.tokenizer.eos_token_id
+        xpu_cfg["unk_token_id"] = self.tokenizer.unk_token_id
         xpu_cfg["pad_token_id"] = self.tokenizer.pad_token_id
 
         # import setup according to hardware_type
@@ -58,7 +67,11 @@ class LLMPerfEndpoint:
 
 
     def warmup(self, max_batch_size):
-        prompt = "中国的首都是哪里？"
+        if self.support_chn:
+            prompt = "7年前，我的年龄是我的儿子的6倍，我的儿子今年12岁，我今年多少岁？"
+        else:
+            prompt = "7 years ago, I was 6 times older than my son. My son is 12 years old now. How old am I now?"
+
         generate_config = {
             "min_new_tokens": 1,
             "max_new_tokens": 512,
@@ -90,9 +103,15 @@ class LLMPerfEndpoint:
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
     ) -> GenerateRequest:
-        input_ids = self.tokenizer.encode(prompt)        
-        if self.add_sep_token:
-            input_ids.append(self.tokenizer.sep_token_id)
+        if not self.apply_chat_template:
+            input_ids = self.tokenizer.encode(prompt)      
+        else:
+            input_ids = self.tokenizer.apply_chat_template(
+                [
+                    {"role": "user", "content": prompt}
+                ], 
+                add_generation_prompt=True
+            )
 
         # create generate config
         config = GenerateConfig(
@@ -138,9 +157,10 @@ class LLMPerfEndpoint:
                 }
 
                 if result is not None:
+                    text = self.tokenizer.decode([result.token_id], skip_special_tokens=True, clean_up_tokenization_spaces=True)
                     infer_outputs["choice"].update(
                         {
-                            "message": self.tokenizer.decode(result.token_id), 
+                            "message": text, 
                             "wait_time": result.wait_time, 
                             "model_time": result.model_time, 
                             "post_process_time": result.post_process_time

@@ -16,7 +16,7 @@ from accelerate import init_empty_weights
 from llm_perf.core.ckpt_loader import CoreCkptLoader, ChatGLM2_ModelLoader
 from llm_perf.backends.GPU.gpu_ckpt_loader import GpuCkptLoader
 
-from .chatglm2 import ChatGLMForConditionalGeneration, ChatGLMModel, ChatGLMConfig
+from .modeling_chatglm2 import ChatGLMForConditionalGeneration, ChatGLMModel, ChatGLMConfig
 
 
 class GPUChatGLM2Loader(GpuCkptLoader):
@@ -28,9 +28,7 @@ class GPUChatGLM2Loader(GpuCkptLoader):
         ckpt_path: str = ""
     ):
         super().__init__(prefix, model, mp_size, mp_rank, ckpt_path)
-
         self.model_config = model_config
-
 
     def parallel_loader(self):
         self.state_dict = {}
@@ -146,8 +144,6 @@ class GPUChatGLM2(nn.Module):
 
         self.prefix = "transformer.encoder.layers"
         self.transformer_model : ChatGLMForConditionalGeneration = None
-
-
 
 
     def init_inference(self):

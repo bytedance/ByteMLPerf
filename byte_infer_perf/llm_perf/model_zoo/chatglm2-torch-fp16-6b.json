@@ -3,8 +3,8 @@
     "model_path": "llm_perf/model_zoo/sota/chatglm2-6b",
     "model_interface": "ChatGLMForConditionalGeneration",
     "tokenizer": {
-        "path": "llm_perf/model_zoo/sota/chatglm2-6b",
-        "add_sep_token": false
+        "path": "llm_perf/model_zoo/sota/chatglm2-6b", 
+        "support_chn": true
     }, 
     "network": {
         "_name_or_path": "THUDM/chatglm2-6b",

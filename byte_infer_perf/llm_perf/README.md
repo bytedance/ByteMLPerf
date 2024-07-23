@@ -54,10 +54,8 @@ Vendors can refer to this document for guidance on building backend: [Byte LLM P
 ## Models
 The following models are planned to be supported:
 * [THUDM/chatglm2-6b](https://huggingface.co/THUDM/chatglm2-6b)
-* [meta-llama/Meta-Llama-3-70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B)
+* [shenzhi-wang/Llama3-70B-Chinese-Chat](https://huggingface.co/shenzhi-wang/Llama3-70B-Chinese-Chat)
 * [tiiuae/falcon-180B](https://huggingface.co/tiiuae/falcon-180B)
+    - test_accuracy is unavailable temporarily.
 * [mistralai/Mixtral-8x22B-v0.1](https://huggingface.co/mistralai/Mixtral-8x22B-v0.1)
-
-The following models are outdated and will be removed in future vesions:
-* [hfl/chinese-llama-2-13b](https://huggingface.co/hfl/chinese-llama-2-13b)
-
+    - test_accuracy is unavailable temporarily.

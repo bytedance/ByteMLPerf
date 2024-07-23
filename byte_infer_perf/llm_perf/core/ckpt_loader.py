@@ -297,28 +297,88 @@ class ChatGLM2_ModelLoader(ModelLoader):
         return self.weight_dict
 
 
+from transformers import LlamaConfig
+class Llama_ModelLoader(ModelLoader):
+    def __init__(self, model_dir : pathlib.Path):
+        model_config = LlamaConfig.from_pretrained(model_dir)
+        weight_index_config = {}
+        for child in model_dir.iterdir():
+            if child.name.endswith(".index.json"):
+                with open(child, "r") as f:
+                    weight_index_config = json.load(f)
+                break
+        
+        self.layer_num = model_config.num_hidden_layers
 
-
-
-
-class Mixtral8x22B_ModelLoader(ModelLoader):
-    def __init__(
-        self, 
-        model_dir : pathlib.Path, 
-        model_config: Dict,
-        weight_index_config: Dict,
-    ) -> None:
-        # parent class
         super().__init__(
             model_dir,
             weight_index_config["metadata"]["total_size"],
             weight_index_config["weight_map"]
         )
 
-        # model config
-        self.layer_num = 56
-        self.expert_num = 8
+    def load_weight(self):
+        self.loaded_bytes = 0
+        self.weight_dict = {}
 
+        self.load_tensor("model.embed_tokens.weight")
+        for i in range(self.layer_num):
+            self.load_tensor(f"model.layers.{i}.input_layernorm.weight")
+
+            self.load_tensor(f"model.layers.{i}.self_attn.q_proj.weight")
+            self.load_tensor(f"model.layers.{i}.self_attn.k_proj.weight")
+            self.load_tensor(f"model.layers.{i}.self_attn.v_proj.weight")
+            self.load_tensor(f"model.layers.{i}.self_attn.o_proj.weight")
+
+            self.load_tensor(f"model.layers.{i}.post_attention_layernorm.weight")
+
+            self.load_tensor(f"model.layers.{i}.mlp.gate_proj.weight")
+            self.load_tensor(f"model.layers.{i}.mlp.up_proj.weight")
+            self.load_tensor(f"model.layers.{i}.mlp.down_proj.weight")
+
+        self.load_tensor("model.norm.weight")
+        self.load_tensor("lm_head.weight")
+
+
+        weight_bytes = 0
+        for tensor_name in self.weight_dict:
+            tensor = self.weight_dict[tensor_name]
+            weight_bytes += tensor.numel() * tensor.element_size()
+        
+        logger.info(f"total_size: {self.total_size}, loaded_bytes: {self.loaded_bytes}, weight_bytes: {weight_bytes}")
+        assert self.loaded_bytes == self.total_size
+        assert weight_bytes == self.total_size
+
+        return self.weight_dict
+
+
+
+
+
+
+from transformers import MixtralConfig
+
+class Mixtral_ModelLoader(ModelLoader):
+    def __init__(
+        self, 
+        model_dir : pathlib.Path
+    ) -> None:
+        model_config = MixtralConfig.from_pretrained(model_dir)
+        weight_index_config = {}
+        for child in model_dir.iterdir():
+            if child.name.endswith(".index.json"):
+                with open(child, "r") as f:
+                    weight_index_config = json.load(f)
+                break
+
+        self.layer_num = model_config.num_hidden_layers
+        self.expert_num = model_config.num_local_experts
+
+        # parent class
+        super().__init__(
+            model_dir,
+            weight_index_config["metadata"]["total_size"],
+            weight_index_config["weight_map"]
+        )
 
 
     def load_weight(self):

@@ -53,9 +53,6 @@ class TestServer(server_pb2_grpc.InferenceServicer):
                 outputs={k: serialize_value(v) for k, v in result.items()},
             )
 
-
-
-
 async def serve(port, generator: LLMPerfEndpoint) -> None:
     server = grpc.aio.server(
         migration_thread_pool=futures.ThreadPoolExecutor(
@@ -113,6 +110,7 @@ def main():
     
     # create xpu config
     xpu_cfg = {}
+
     xpu_cfg["hardware_type"] = args.hardware_type
     xpu_cfg["tp_size"] = args.tp_size
     xpu_cfg["max_batch_size"] = args.max_batch_size

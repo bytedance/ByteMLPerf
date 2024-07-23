@@ -7,6 +7,11 @@ import torch
 from llm_perf.utils.logger import logger
 
 def check_memory_usage(tag):
+
+    # dist config
+    mp_size = int(os.environ.get("WORLD_SIZE", "1"))
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+
     # python doesn't do real-time garbage collection so do it explicitly to get the correct RAM reports
     gc.collect()
 
@@ -21,8 +26,10 @@ def check_memory_usage(tag):
     else:
         pass
 
-    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     msg = f"<<{tag}>> CPU VM State: Used = {used_GB} GB, Percent = {vm_stats.percent}% | "\
           f"DEV MEM State(Rank{local_rank}): Used = {dev_mem_allocated} GB, Reserved = {dev_mem_reserved} GB"
-    logger.info(msg)
+
+    if local_rank == 0:
+        print(msg)
+    # logger.info(msg)
 
