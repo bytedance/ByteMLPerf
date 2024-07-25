@@ -64,8 +64,8 @@ def bench_accuracy(stub, workload: Dict[str, Any], result_queue: mp.Queue):
             stub,
             index=0,
             prompt=question,
-            min_new_tokens=1,
-            max_new_tokens=512,
+            min_new_tokens=workload["min_new_tokens"],
+            max_new_tokens=workload["max_new_tokens"],
             top_p=0,
             top_k=1,  # use greedy search for accuracy bench
             get_input_logits=1,
@@ -102,7 +102,6 @@ def bench_performance(
 ):
     result_queue.put("@start")
 
-
     accum_time = 0
     perf_time: int = workload["perf_time"] * int(1e9)
 
@@ -113,8 +112,8 @@ def bench_performance(
         st = time.perf_counter_ns()
         first_token_latency = 0
 
-        min_new_tokens = workload["min_new_tokens"]
-        max_new_tokens = workload["max_new_tokens"]
+        min_new_tokens = workload["output_tokens"]
+        max_new_tokens = workload["output_tokens"]
 
         output_messages: str = ""
         wait_time = []
@@ -186,9 +185,9 @@ def benchmark(
     report_type: ReportType,
     input_tokens: int,
     result_queue: mp.Queue,
-    args,
+    host, port
 ):
-    with grpc.insecure_channel(f"{args.host}:{args.port}") as channel:
+    with grpc.insecure_channel(f"{host}:{port}") as channel:
         stub = server_pb2_grpc.InferenceStub(channel)
         logger.debug(f"{report_type.name} bench_{index} start")
         

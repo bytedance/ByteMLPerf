@@ -1,7 +1,7 @@
 {
-    "model": "chatglm2-6b",
-    "test_accuracy": true,
-    "min_tp_size": 1, 
+    "model": "mixtral-8x22b",
+    "test_accuracy": false,
+    "min_tp_size": 8, 
     "accuracy_config": {
         "dataset": "llm_perf/datasets/merged_52_test.csv", 
         "min_new_tokens": 1, 

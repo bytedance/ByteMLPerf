@@ -12,9 +12,15 @@ import torch
 import torch.nn as nn
 
 from .gpu_chatglm2 import GPUChatGLM2
+from .gpu_llama3 import GPULlama
+from .gpu_falcon import GPUFalcon
+from .gpu_mixtral import GPUMixtral
 
 from llm_perf.utils.logger import logger
 
 __all__ = {
-    "chatglm2": GPUChatGLM2
+    "chatglm2": GPUChatGLM2, 
+    "llama3": GPULlama,
+    "falcon": GPUFalcon, 
+    "mixtral": GPUMixtral
 }
