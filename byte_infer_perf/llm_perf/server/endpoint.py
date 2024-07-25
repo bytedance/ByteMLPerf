@@ -140,6 +140,8 @@ class LLMPerfEndpoint:
             prompt_tokens = len(req.input_ids)
             completion_tokens = 0
 
+            tokens_buffer = []
+
             async for gen_res in self.scheduler.generate(req):
                 result = gen_res["result"]
                 if result is not None:
@@ -157,7 +159,14 @@ class LLMPerfEndpoint:
                 }
 
                 if result is not None:
-                    text = self.tokenizer.decode([result.token_id], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                    tokens_buffer.append(result.token_id)
+
+                    text = self.tokenizer.decode(tokens_buffer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                    if text == " �" or text == "�":
+                        text = ""
+                    else:
+                        tokens_buffer = []
+
                     infer_outputs["choice"].update(
                         {
                             "message": text, 
