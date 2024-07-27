@@ -105,8 +105,7 @@ class GPUFalcon(nn.Module):
         check_memory_usage("Begin")
 
         with init_empty_weights():
-            self.transformer_model = FalconForCausalLM(self.falcon_config)
-            self.transformer_model.eval()
+            self.transformer_model = FalconForCausalLM(self.falcon_config).to(self.falcon_config.torch_dtype).eval()
 
         check_memory_usage("After build model")
 
@@ -120,7 +119,8 @@ class GPUFalcon(nn.Module):
 
         self.kv_cache = self.init_kvcache(self.falcon_config.torch_dtype)
 
-        dist.barrier()
+        if self.mp_size > 1:
+            dist.barrier()
 
 
 

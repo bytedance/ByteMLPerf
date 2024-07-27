@@ -13,8 +13,8 @@ from transformers import LlamaConfig
 
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 
-sys.path.insert(0, str(FILE_DIR.parent.parent.parent.parent))
-from byte_infer_perf.llm_perf.backends.GPU.model_impl.modeling_llama3 import LlamaForCausalLM
+sys.path.insert(0, str(FILE_DIR.parents[3]))
+from llm_perf.backends.GPU.model_impl.modeling_llama3 import LlamaForCausalLM
 from llm_perf.core.ckpt_loader import Llama_ModelLoader
 
 

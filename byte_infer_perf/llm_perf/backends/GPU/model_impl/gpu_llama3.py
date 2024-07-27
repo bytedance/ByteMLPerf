@@ -119,7 +119,8 @@ class GPULlama(nn.Module):
 
         self.kv_cache = self.init_kvcache(self.llama_config.torch_dtype)
 
-        dist.barrier()
+        if self.mp_size > 1:
+            dist.barrier()
 
     def load_weight(self, ckpt_path):
         p_loader = GPULlamaLoader(self.transformer_model, self.llama_config, ckpt_path)

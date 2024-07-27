@@ -71,7 +71,8 @@ def bench_accuracy(stub, workload: Dict[str, Any], result_queue: mp.Queue):
             get_input_logits=1,
         ):
             res = {k: deserialize_value(v) for k, v in res.outputs.items()}
-            output_messages += res["choice"]["message"]
+            if res["choice"]["message"] != "":
+                output_messages = res["choice"]["message"]
             perplexity = res["choice"]["perplexity"]
             logits_dump = res["choice"]["logits_dump"]
             if not logits_dump:
@@ -131,7 +132,8 @@ def bench_performance(
             get_input_logits=0,
         ):
             res = {k: deserialize_value(v) for k, v in res.outputs.items()}
-            output_messages += res["choice"]["message"]
+            if res["choice"]["message"] != "":
+                output_messages = res["choice"]["message"]
             wait_time.append(res["choice"]["wait_time"])
             model_time.append(res["choice"]["model_time"])
             post_process_time.append(res["choice"]["post_process_time"])
