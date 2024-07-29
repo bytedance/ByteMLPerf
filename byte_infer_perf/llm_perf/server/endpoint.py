@@ -98,10 +98,10 @@ class LLMPerfEndpoint:
         message = single_result["choice"]["message"]
         logger.info(f"single warmup response: {message}\n")
 
-        # multiple_result = asyncio.run(_multiple_warmup())
-        # for i, result in enumerate(multiple_result):
-        #     message = result["choice"]["message"]
-        #     logger.info(f"multiple warmup reponse {i}: {message}\n")
+        multiple_result = asyncio.run(_multiple_warmup())
+        for i, result in enumerate(multiple_result):
+            message = result["choice"]["message"]
+            logger.info(f"multiple warmup reponse {i}: {message}\n")
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
