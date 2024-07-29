@@ -13,8 +13,8 @@ from transformers import MixtralConfig
 
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 
-sys.path.insert(0, str(FILE_DIR.parent.parent.parent.parent))
-from byte_infer_perf.llm_perf.backends.GPU.model_impl.modeling_mixtral import MixtralForCausalLM
+sys.path.insert(0, str(FILE_DIR.parents[3]))
+from llm_perf.backends.GPU.model_impl.modeling_mixtral import MixtralForCausalLM
 from llm_perf.core.ckpt_loader import Mixtral_ModelLoader
 
 

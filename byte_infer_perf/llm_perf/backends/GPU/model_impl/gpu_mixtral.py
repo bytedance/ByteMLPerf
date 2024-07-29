@@ -121,7 +121,8 @@ class GPUMixtral(nn.Module):
 
         self.kv_cache = self.init_kvcache(self.mixtral_config.torch_dtype)
 
-        dist.barrier()
+        if self.mp_size > 1:
+            dist.barrier()
 
     def load_weight(self, ckpt_path):
         p_loader = GPUMixtralLoader(self.transformer_model, self.mixtral_config, ckpt_path)

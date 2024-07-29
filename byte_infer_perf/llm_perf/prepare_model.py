@@ -12,7 +12,7 @@ task_map = {
     "chatglm2-torch-fp16-6b": ("chatglm2-6b", "THUDM/chatglm2-6b"), 
     "llama3-torch-bf16-70b": ("llama3-70b", "shenzhi-wang/Llama3-70B-Chinese-Chat"), 
     "falcon-torch-bf16-180b": ("falcon-180b", "tiiuae/falcon-180B"), 
-    "mixtral-torch-bf16-8x22b": ("mixtral-8x22b", "mistralai/Mixtral-8x22B-v0.1"),
+    "mixtral-torch-bf16-8x22b": ("mixtral-8x22b-instruct", "mistralai/Mixtral-8x22B-Instruct-v0.1"),
 }
 
 if __name__ == "__main__":

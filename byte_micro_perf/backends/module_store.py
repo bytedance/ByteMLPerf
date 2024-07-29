@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import random
 from typing import List
 
 import torch
@@ -508,3 +509,107 @@ class UniqueOp(torch.nn.Module):
     def forward(self, input_tensors):
         result = torch.unique(input_tensors, return_counts=True)
         return result
+
+
+class ScatterOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def compute_size(self, input_shapes, dtype):
+        # dst: [batch_size, len], dtype
+        # index: [batch_size, len], int64
+        # src: [batch_size, len], dtype
+        tensor_shape = input_shapes[0]
+
+        tensor_dtype_size = get_dtype_bytes(dtype)
+        index_dtype_size = get_dtype_bytes("int64")
+
+        shape_func = lambda shape: math.prod(shape)
+
+        bytes_per_cnt = (
+            shape_func(tensor_shape) * tensor_dtype_size
+            + shape_func(tensor_shape) * index_dtype_size
+            + shape_func(tensor_shape) * tensor_dtype_size
+        )
+        
+        return bytes_per_cnt
+
+    def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
+        # dst: [batch_size, len], dtype
+        # index: [batch_size, len], int64
+        # src: [batch_size, len], dtype
+        tensor_shape = input_shapes[0]
+
+        dst_tensor = torch.empty(tensor_shape, dtype=torch_dtype, device=xpu_device)
+        src_tensor = torch.empty(tensor_shape, dtype=torch_dtype, device=xpu_device)
+
+        # dim = 0
+        # dst[index[i, j], j] = src[i, j]
+        batch_size = tensor_shape[0]
+        tensor_len = tensor_shape[1]
+
+        index = [i for i in range(batch_size)]
+        random.shuffle(index)
+        index_tensor = torch.cat(
+            [torch.full((1, tensor_len), i, dtype=torch.int64, device=xpu_device) for i in index], 
+            dim=0
+        )
+        
+        return [dst_tensor, index_tensor, src_tensor]
+
+
+    def forward(self, dst_tensor, index_tensor, src_tensor):
+        dst_tensor.scatter_(0, index_tensor, src_tensor)
+        return dst_tensor
+
+
+class GatherOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def compute_size(self, input_shapes, dtype):
+        # dst: [batch_size, len], dtype
+        # index: [batch_size, len], int64
+        # src: [batch_size, len], dtype
+        tensor_shape = input_shapes[0]
+
+        tensor_dtype_size = get_dtype_bytes(dtype)
+        index_dtype_size = get_dtype_bytes("int64")
+
+        shape_func = lambda shape: math.prod(shape)
+
+        bytes_per_cnt = (
+            shape_func(tensor_shape) * tensor_dtype_size
+            + shape_func(tensor_shape) * index_dtype_size
+            + shape_func(tensor_shape) * tensor_dtype_size
+        )
+        
+        return bytes_per_cnt
+
+    def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
+        # dst: [batch_size, len], dtype
+        # index: [batch_size, len], int64
+        # src: [batch_size, len], dtype
+        tensor_shape = input_shapes[0]
+
+        dst_tensor = torch.empty(tensor_shape, dtype=torch_dtype, device=xpu_device)
+        src_tensor = torch.empty(tensor_shape, dtype=torch_dtype, device=xpu_device)
+
+        # dim = 0
+        # dst[index[i, j], j] = src[i, j]
+        batch_size = tensor_shape[0]
+        tensor_len = tensor_shape[1]
+
+        index = [i for i in range(batch_size)]
+        random.shuffle(index)
+        index_tensor = torch.cat(
+            [torch.full((1, tensor_len), i, dtype=torch.int64, device=xpu_device) for i in index], 
+            dim=0
+        )
+        
+        return [dst_tensor, index_tensor, src_tensor]
+
+
+    def forward(self, dst_tensor, index_tensor, src_tensor):
+        torch.gather(src_tensor, 0, index_tensor, out=dst_tensor)
+        return dst_tensor

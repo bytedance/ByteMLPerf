@@ -13,8 +13,8 @@ from transformers import FalconConfig
 
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 
-sys.path.insert(0, str(FILE_DIR.parent.parent.parent.parent))
-from byte_infer_perf.llm_perf.backends.GPU.model_impl.modeling_falcon import FalconForCausalLM
+sys.path.insert(0, str(FILE_DIR.parents[3]))
+from llm_perf.backends.GPU.model_impl.modeling_falcon import FalconForCausalLM
 from llm_perf.core.ckpt_loader import Falcon_ModelLoader
 
 
@@ -102,8 +102,7 @@ if __name__ == "__main__":
 
         state_dict[attn_qkv] = split(
             state_dict[attn_qkv], args.mp_size, 
-            dim=0, 
-            chunks=[model_config.num_attention_heads, model_config.num_kv_heads, model_config.num_kv_heads]
+            dim=0
         )
         state_dict[attn_dense] = split(
             state_dict[attn_dense], args.mp_size, 

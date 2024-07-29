@@ -1,9 +1,10 @@
 {
     "model_name": "mixtral", 
-    "model_path": "llm_perf/model_zoo/sota/mixtral-8x22b", 
+    "model_path": "llm_perf/model_zoo/sota/mixtral-8x22b-instruct", 
     "model_interface": "MixtralForCausalLM", 
     "tokenizer": {
-        "path": "llm_perf/model_zoo/sota/mixtral-8x22b"
+        "path": "llm_perf/model_zoo/sota/mixtral-8x22b-instruct", 
+        "apply_chat_template": true
     }, 
     "network": {
         "architectures": [

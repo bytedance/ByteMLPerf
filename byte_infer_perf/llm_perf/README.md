@@ -57,5 +57,5 @@ The following models are planned to be supported:
 * [shenzhi-wang/Llama3-70B-Chinese-Chat](https://huggingface.co/shenzhi-wang/Llama3-70B-Chinese-Chat)
 * [tiiuae/falcon-180B](https://huggingface.co/tiiuae/falcon-180B)
     - test_accuracy is unavailable temporarily.
-* [mistralai/Mixtral-8x22B-v0.1](https://huggingface.co/mistralai/Mixtral-8x22B-v0.1)
+* [mistralai/Mixtral-8x22B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1)
     - test_accuracy is unavailable temporarily.

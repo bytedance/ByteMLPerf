@@ -83,7 +83,7 @@ class LLMPerfEndpoint:
         async def _steram_warmup():
             message = ""
             async for result in self.streaming_inference(prompt, generate_config):
-                message += result["choice"]["message"]
+                message = result["choice"]["message"]
             result["choice"]["message"] = message
             return result
 
@@ -95,10 +95,13 @@ class LLMPerfEndpoint:
             return res
 
         single_result = asyncio.run(_steram_warmup())
-        logger.info(f"single warmup response: {single_result}\n")
+        message = single_result["choice"]["message"]
+        logger.info(f"single warmup response: {message}\n")
 
         multiple_result = asyncio.run(_multiple_warmup())
-        logger.info(f"multiple warmup reponse: {multiple_result}\n")
+        for i, result in enumerate(multiple_result):
+            message = result["choice"]["message"]
+            logger.info(f"multiple warmup reponse {i}: {message}\n")
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
@@ -162,10 +165,6 @@ class LLMPerfEndpoint:
                     tokens_buffer.append(result.token_id)
 
                     text = self.tokenizer.decode(tokens_buffer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-                    if text == " �" or text == "�":
-                        text = ""
-                    else:
-                        tokens_buffer = []
 
                     infer_outputs["choice"].update(
                         {
