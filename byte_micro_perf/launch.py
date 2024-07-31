@@ -28,10 +28,24 @@ sys.path.insert(0, BYTE_MLPERF_ROOT)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("lanuch")
 
+
+def parse_task(task_dir):
+    tasks = []
+    if os.path.isdir(task_dir):
+        for root, _, files in os.walk(task_dir, topdown=False):
+            for name in files:
+                if name.endswith(".json"):
+                    tasks.append(name.rsplit('.', 1)[0])
+    return tasks
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--task", default="", help="The task going to be evaluted, refs to workloads/"
+    )
+    parser.add_argument(
+        "--task_dir", default="", help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
     )
     parser.add_argument(
         "--hardware_type",
@@ -67,7 +81,7 @@ if __name__ == "__main__":
         for file in os.listdir("backends"):
             if not file.endswith(".py") and not file.startswith("_"):
                 print(file)
-    if args.task:
+    if args.task or args.task_dir:
         log.info("******************* Pip Package Installing *******************")
         subprocess.call(
             ["python3", "-m", "pip", "install", "pip", "--upgrade", "--quiet"]
@@ -77,8 +91,18 @@ if __name__ == "__main__":
             ["python3", "-m", "pip", "install", "-r", "requirements.txt", "--quiet"]
         )
 
-        cmd = "python3 core/perf_engine.py --hardware_type {} --task {} --vendor_path {}".format(
-            args.hardware_type, args.task, args.vendor_path
-        )
-        exit_code = subprocess.call(cmd, shell=True)
+        if args.task:
+            if args.task_dir:
+                log.warning("task and task_dir are both set, task_dir will be ignored")
+            tasks = args.task.split(',')
+        elif args.task_dir:
+            tasks = parse_task(args.task_dir)
+        logging.info(f"******************* Tasks: {tasks}")
+        exit_code = 0
+        for task in tasks:
+            cmd = "python3 core/perf_engine.py --hardware_type {} --task {} --vendor_path {}".format(
+                args.hardware_type, task, args.vendor_path
+            )
+            exit_code = subprocess.call(cmd, shell=True)
+
         sys.exit(exit_code)

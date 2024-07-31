@@ -10,7 +10,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
+## limitations under the License.
 
 import json
 import logging
@@ -25,16 +25,16 @@ import torch.distributed.distributed_c10d as dist_c10d
 
 from backends.backend import Backend
 from backends.module_store import *
-from backends.utils import get_dtype_bytes
+from backends.utils import get_dtype_bytes 
 
-from .custom_ops import GPUGemmOp, GPUBatchGemmOp, GPUGroupGemmOp
+from backends.module_store import GemmOp, GemvOp, BatchGemmOp, GroupGemmOp
 
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("PerfEngine")
 
 
-class BackendGPU(Backend):
+class BackendILUVATAR(Backend):
     def get_device_name(self):
         return torch.cuda.get_device_name(0)
 
@@ -42,7 +42,6 @@ class BackendGPU(Backend):
         self.memory_limit = int(
             torch.cuda.get_device_properties(0).total_memory / (1024**3)
         )
-
         if self.vendor_path is not None and os.path.exists(self.vendor_path) and (self.vendor_path).endswith(".json"):
             with open(self.vendor_path, "r") as f:
                 self.hw_info_dict = json.load(f)
@@ -54,8 +53,7 @@ class BackendGPU(Backend):
                     self.vendor_path
                 )
             )
-
-
+  
     # device/host ops
     def host2device(self):
         self.op = Host2DeviceOp(torch.device("cuda"))
@@ -88,6 +86,7 @@ class BackendGPU(Backend):
     def p2p(self):
         self.setup_2d_group()
         self.op = P2POp(self.group, self.ranks, self.rank)
+    
 
     # compute ops
     # unary ops
@@ -159,23 +158,23 @@ class BackendGPU(Backend):
 
     def scatter(self):
         self.op = ScatterOp()
-    
+
     def gather(self):
         self.op = GatherOp()
 
+
     # gemm ops
     def gemm(self):
-        self.op = GPUGemmOp()
+        self.op = GemmOp()
 
     def gemv(self):
-        self.op = GPUGemmOp()
+        self.op = GemvOp()
 
     def batch_gemm(self):
-        self.op = GPUBatchGemmOp()
+        self.op = BatchGemmOp()
 
     def group_gemm(self):
-        self.op = GPUGroupGemmOp()
-
+        self.op = GroupGemmOp()
 
 
     # create input tensors
@@ -223,7 +222,6 @@ class BackendGPU(Backend):
                 for input_tensor in input_tensors_list
             ]
         return input_tensors_list, max_data_cnt, bytes_per_cnt
-
 
 
     def _run_operation(self, operation, inputs):

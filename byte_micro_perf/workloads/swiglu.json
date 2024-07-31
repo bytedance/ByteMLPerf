@@ -1,5 +1,5 @@
 {
-  "operator": "exp",
+  "operator": "swiglu",
   "iterations": 100,
   "input_shape_groups": {
     "inputs": [
