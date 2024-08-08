@@ -43,7 +43,7 @@ class BackendGPU(Backend):
             torch.cuda.get_device_properties(0).total_memory / (1024**3)
         )
 
-        if os.path.exists(self.vendor_path) and (self.vendor_path).endswith(".json"):
+        if self.vendor_path is not None and os.path.exists(self.vendor_path) and (self.vendor_path).endswith(".json"):
             with open(self.vendor_path, "r") as f:
                 self.hw_info_dict = json.load(f)
                 # if the vendor path does not exist, please set this param manaually
@@ -157,6 +157,11 @@ class BackendGPU(Backend):
     def unique(self):
         self.op = UniqueOp()
 
+    def scatter(self):
+        self.op = ScatterOp()
+    
+    def gather(self):
+        self.op = GatherOp()
 
     # gemm ops
     def gemm(self):

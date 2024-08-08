@@ -21,14 +21,21 @@ class GpuCkptLoader(CoreCkptLoader):
             weight = torch.empty_like(weight, device=f"cuda:{cur_device}")
         return weight
     
-    def broadcast_weight(self, key, device='cpu', non_blocking=False):
-        weight = self.weight_to_device(self.state_dict[key])
-        dist.broadcast(weight, src=0)
-        dist.barrier()
-        self.state_dict[key] = weight.to(device, non_blocking=non_blocking)
+
+    def broadcast_weight(self, key, device='cpu', non_blocking=False):   
+        if self.mp_rank != 0:
+            tensor_shape = self.state_dict[key]["shape"]
+            tensor_dtype = self.state_dict[key]["dtype"]
+            tensor = torch.empty(tensor_shape, dtype=tensor_dtype)
+        else:
+            tensor = self.state_dict[key].cpu()
+        tensor_gpu = self.weight_to_device(tensor, non_blocking=non_blocking)
+        dist.broadcast(tensor_gpu, src=0)
+        self.state_dict[key] = tensor_gpu
+
 
     def scatter_weight(self, key, dim, split_mode='default', outter=1, device='cpu', non_blocking=False):
-        self.broadcast_weight(key, 'cuda')
+        self.broadcast_weight(key, non_blocking=non_blocking)
         weight = self.state_dict[key]
 
         if split_mode == 'default':
@@ -40,7 +47,5 @@ class GpuCkptLoader(CoreCkptLoader):
         else:
             assert False, f"unknown split mode {split_mode}"
 
-
         weight_split = [x.contiguous() for x in weight_split]
-        weight = weight_split[self.mp_rank].clone()
-        self.state_dict[key] = weight.to(device, non_blocking=non_blocking)
+        self.state_dict[key] = weight_split[self.mp_rank]

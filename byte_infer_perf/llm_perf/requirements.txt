@@ -5,7 +5,9 @@ isort
 sentencepiece
 pandas
 google-api-python-client
-transformers==4.33.2
+transformers==4.40.0
 tqdm
 matplotlib
 backoff
+psutil
+accelerate

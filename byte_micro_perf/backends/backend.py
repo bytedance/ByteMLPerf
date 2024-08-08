@@ -164,6 +164,12 @@ class Backend(ABC):
     def unique(self):
         pass
 
+    def scatter(self):
+        pass
+        
+    def gather(self):
+        pass
+
 
     # gemm ops
     def gemm(self):

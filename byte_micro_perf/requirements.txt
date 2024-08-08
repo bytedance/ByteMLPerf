@@ -11,3 +11,4 @@ fpdf
 attrs
 decorator
 typing-extensions
+pydot

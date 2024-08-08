@@ -1,6 +1,7 @@
 import os
 import time
 from multiprocessing import Queue
+from typing import List
 
 import torch
 import torch.nn as nn
@@ -8,6 +9,61 @@ import torch.distributed as dist
 
 from llm_perf.core.mp_engine import CoreMpEngine
 from llm_perf.utils.logger import logger
+
+
+
+# context: 
+#   input_ids: [1, s_q]
+#   attention_mask = [1, s_q]
+#   full_attention_mask = [1, 1, s_q, s_kv] (sq == s_kv)
+def get_context_masks(
+    input_ids : torch.Tensor, 
+    padding_mask : torch.Tensor
+):
+    # input_ids: [1, q_len]
+    # padding_mask = [1, q_len]
+    _, q_len = input_ids.shape
+
+    # [1, q_len, q_len]
+    full_attention_mask = torch.ones(
+        1, q_len, q_len, 
+        device=input_ids.device
+    )
+    full_attention_mask.tril_()
+    full_attention_mask = full_attention_mask * padding_mask.unsqueeze(1)
+    full_attention_mask -= padding_mask.unsqueeze(-1) - 1
+    full_attention_mask = (full_attention_mask < 0.5).bool()
+    full_attention_mask.unsqueeze_(1)
+    return full_attention_mask
+
+
+# decode
+#   input_ids: [bs, 1]
+#   attention_mask = [bs, 1]
+#   full_attention_mask = [bs, 1, 1, s_kv]
+def get_decode_masks(
+    input_ids : torch.Tensor, 
+    all_kv_len: List[int]
+):
+    # input_ids: [batch_size, 1]
+    # padding_mask: [batch_size, 1 + max_kv_len]
+    batch_size, q_len = input_ids.shape
+    max_qkv_len = q_len + max(all_kv_len)
+    
+    # [batch_size, 1, max_qkv_len]
+    padding_mask = []
+    for i in range(batch_size):
+        cur_qkv_len = q_len + all_kv_len[i]
+        mask_per_batch = [1] * cur_qkv_len + [0] * (max_qkv_len - cur_qkv_len)
+        padding_mask.append(mask_per_batch)
+    full_attention_mask = torch.tensor(
+        padding_mask, 
+        device=input_ids.device
+    ).unsqueeze_(1)
+    full_attention_mask = (full_attention_mask < 0.5).bool()
+    full_attention_mask.unsqueeze_(1)
+    return full_attention_mask
+
 
 class GpuMpEngine(CoreMpEngine):
     def __init__(self, world_size: int, model_impl: nn.Module, xpu_cfg) -> None:
@@ -25,6 +81,18 @@ class GpuMpEngine(CoreMpEngine):
         forward_inputs["attention_mask"] = torch.tensor(
             forward_inputs["attention_mask"]
         ).cuda()
+        
+        is_context = forward_inputs["is_context"]
+        if is_context:
+            forward_inputs["full_attention_mask"] = get_context_masks(
+                forward_inputs["input_ids"],
+                forward_inputs["attention_mask"]
+            )
+        else:
+            forward_inputs["full_attention_mask"] = get_decode_masks(
+                forward_inputs["input_ids"],
+                forward_inputs["all_kv_len"]
+            )
         return forward_inputs
 
 

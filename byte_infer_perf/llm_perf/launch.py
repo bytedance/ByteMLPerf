@@ -33,67 +33,14 @@ from llm_perf.utils.logger import logger, setup_logger
 from llm_perf.utils.reporter import Reporter, ReportType
 
 
-def load_workload(task: str) -> Dict[str, Any]:
-    """
-    Return a list of dictionary with model Configuration
-
-    Args: List[str]
-
-    Returns: List[dic]
-    """
-    modules_dir = LLM_PERF_ROOT.joinpath("workloads")
-
-    workload_dict = None
-    for filepath in modules_dir.iterdir():
-        if filepath.suffix == ".json" and filepath.stem == task:
-            with open(filepath) as file:
-                workload_dict = json.load(file)
-                break
-    if workload_dict is None:
-        logger.error(f"Task name: {task} was not found, please check your task name")
-        raise RuntimeError("invalid parameter")
-    return workload_dict
-    
-
-def get_args():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--hardware_type", type=str, 
-        default="GPU",
-        help="The backend going to be evaluted, refs to backends/",
-    )
-    parser.add_argument(
-        "--task", type=str, 
-        default="chatglm2-torch-fp16-6b",
-        help="The task going to be evaluted, refs to workloads/",
-    )
-
-    parser.add_argument(
-        "--host", type=str, 
-        default="127.0.0.1", 
-        help="Host for the gRPC server"
-    )
-    parser.add_argument(
-        "--port", type=int, 
-        default=51000, 
-        help="port of the server")
-
-    args = parser.parse_args()
-    return args
-
-
-
 class PerfEngine:
-    def __init__(self) -> None:
+    def __init__(self, hardware, task, host, port) -> None:
         super().__init__()
 
-        self.args = get_args()
-
-        self.backend_type = self.args.hardware_type
-        self.task = self.args.task
-        self.host = self.args.host
-        self.port = self.args.port
+        self.backend_type = hardware
+        self.task = task
+        self.host = host
+        self.port = port
 
         self.result_queue = mp.Queue()
         self.jobs: List[mp.Process] = []
@@ -105,55 +52,25 @@ class PerfEngine:
 
 
     def start_engine(self) -> None:
-        """
-        Byte MlPerf will create an virtual env for each backend to avoid dependance conflict
-        """
-        loglevel = os.environ.get("LOG_LEVEL", "info")
-        setup_logger(loglevel)
-
         # load workload
         workload = load_workload(self.task)
 
-        # model name
         model_name = workload["model"]
 
-        # test items
-        test_accuracy = True if "test_accuracy" in workload and bool(workload["test_accuracy"]) else False
-        test_perf = True if "test_perf" in workload and bool(workload["test_perf"]) else False
-
-        # test config
-        test_dataset = workload["dataset"]
-        test_perf_time = workload["perf_time"]
-
-        test_tp_sizes = workload["tp_sizes"]
-        test_batch_sizes = workload["batch_sizes"]
-        test_input_tokens = workload["input_tokens"]
-                
-        # generation config
-        min_new_tokens = workload["min_new_tokens"]
-        max_new_tokens = workload["max_new_tokens"]
-
-
-        # download model parameter and golden outputs
-        weight_dir = LLM_PERF_ROOT.joinpath("model_zoo", "sota", model_name)
-        refer_dir = LLM_PERF_ROOT.joinpath("reports", "base", model_name)        
-        if not weight_dir.exists() or not refer_dir.exists():
-            download_script = LLM_PERF_ROOT.joinpath("prepare_model.sh")
-            subprocess.run(
-                [
-                    "bash", download_script, 
-                    model_name, 
-                    str(test_accuracy)
-                ]
-            )
-
+        min_tp_size = int(workload["min_tp_size"])
+        test_accuracy = bool(workload["test_accuracy"]) if "test_accuracy" in workload else False
+        test_perf = bool(workload["test_perf"]) if "test_perf" in workload else False
         if not any([test_perf, test_accuracy]):
             logger.info(f"End of the llm_perf, enable at least one test item")
             return
 
-        min_tp_size = test_tp_sizes[0]
-        min_batch_size = test_batch_sizes[0]
-        min_input_tokens = test_input_tokens[0]
+
+        # download model parameter and golden outputs
+        download_cmd = f"python3 llm_perf/prepare_model.py --task {self.task} --download_model"
+        if test_accuracy:
+            download_cmd += " --download_baseline"
+        subprocess.run(download_cmd, shell=True)
+
 
         # create and start reporter
         self.reporter = Reporter(
@@ -161,32 +78,39 @@ class PerfEngine:
             backend=self.backend_type,
 
             tp_size=min_tp_size,
-            batch_size=min_batch_size,
-            input_tokens=min_input_tokens,
-            min_new_tokens=min_new_tokens,
-            max_new_tokens=max_new_tokens,
+            batch_size=1,
+            input_tokens=1024,
+            min_new_tokens=1,
+            max_new_tokens=512,
 
             test_perf=test_perf,
             test_accuracy=test_accuracy,
         )
         self.reporter.start()
 
-        # 1. Accuracy Test: default batch_size & tp_size are both 1
         if test_accuracy:
+            accuracy_config = workload["accuracy_config"]
+
             logger.info("start test accuracy.")
             logger.info(f"using tp_size={min_tp_size}")
-            logger.info(f"using batch_size={min_batch_size}")
-            logger.info(f"using input_tokens={min_input_tokens}")
+            logger.info(f"using batch_size=1")
+
             self.run_perf(
-                workload, 
-                min_tp_size, 
-                min_batch_size, 
-                min_input_tokens, 
+                accuracy_config, 
+                min_tp_size, 1, 1024, 
                 ReportType.ACCURACY
             )
 
-        # 2. Performance Test
         if test_perf:
+            perf_config = workload["perf_config"]
+
+            test_tp_sizes = []
+            for tp_size in perf_config["tp_sizes"]:
+                if tp_size >= min_tp_size:
+                    test_tp_sizes.append(tp_size)
+            test_batch_sizes = perf_config["batch_sizes"]
+            test_input_tokens = perf_config["input_tokens"]
+            
             logger.info("start test performance.")
             logger.info(f"tp_sizes list: {test_tp_sizes}")
             logger.info(f"batch_sizes list: {test_batch_sizes}")
@@ -199,10 +123,8 @@ class PerfEngine:
                         print(f"using tp_size={tp_size}, batch_size={batch_size}, input_tokens={input_tokens}")                        
                         print("*"*150)
                         self.run_perf(
-                            workload,
-                            tp_size,
-                            batch_size,
-                            input_tokens,
+                            perf_config,
+                            tp_size, batch_size, input_tokens,
                             ReportType.PERFORMANCE,
                         )
                         print("\n\n\n")
@@ -315,13 +237,86 @@ class PerfEngine:
                     report_type,
                     input_tokens,
                     self.result_queue,
-                    self.args,
+                    self.host, self.port
                 ),
             )
             self.jobs.append(p)
             p.start()
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--hardware_type", type=str, 
+        default="GPU",
+        help="The backend going to be evaluted, refs to backends/",
+    )
+    parser.add_argument(
+        "--task", type=str, 
+        default="chatglm2-torch-fp16-6b",
+        help="The task going to be evaluted, refs to workloads/",
+    )
+
+    parser.add_argument(
+        "--host", type=str, 
+        default="127.0.0.1", 
+        help="Host for the gRPC server"
+    )
+    parser.add_argument(
+        "--port", type=int, 
+        default=51000, 
+        help="port of the server")
+
+    parser.add_argument(
+        "--log_level", type=str,
+        default=os.environ.get("LOG_LEVEL", "info"),
+        help="log level"
+    )
+
+    args = parser.parse_args()
+    return args
+
+
+
+def load_workload(task: str) -> Dict[str, Any]:
+    """
+    Return a list of dictionary with model Configuration
+
+    Args: List[str]
+
+    Returns: List[dic]
+    """
+    modules_dir = LLM_PERF_ROOT.joinpath("workloads")
+
+    workload_dict = None
+    for filepath in modules_dir.iterdir():
+        if filepath.suffix == ".json" and filepath.stem == task:
+            with open(filepath) as file:
+                workload_dict = json.load(file)
+                break
+    if workload_dict is None:
+        logger.error(f"Task name: {task} was not found, please check your task name")
+        exit(-1)
+    return workload_dict
+
+
+
+
 if __name__ == "__main__":
-    instance = PerfEngine()
+    args = parse_args()
+
+    hardware = args.hardware_type
+    task = args.task    
+    host = args.host
+    port = args.port
+
+    setup_logger(args.log_level)
+
+    logger.info(f"hardware: {hardware}")
+    logger.info(f"task: {task}")
+    logger.info(f"host: {host}")
+    logger.info(f"port: {port}")
+
+    instance = PerfEngine(hardware, task, host, port)
     instance.start_engine()

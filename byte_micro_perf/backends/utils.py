@@ -22,7 +22,7 @@ import torch
 def get_dtype_bytes(dtype: str):
     torch_dtype = getattr(torch, dtype)
     dtype_size = 0
-    if torch_dtype in [torch.int32, torch.int8]:
+    if torch_dtype in [torch.int64, torch.int32, torch.int8]:
         dtype_size = torch.iinfo(torch_dtype).bits // 8
     elif torch_dtype in [torch.float32, torch.float16, torch.bfloat16]:
         dtype_size = torch.finfo(torch_dtype).bits // 8
@@ -87,6 +87,10 @@ def get_io_amount(op_name, input_shapes, dtype):
     elif op_name in ["unqiue", "sort"]:
         read_io_amount = dtype_size * sum([math.prod(shape) for shape in input_shapes])
         write_io_amount = 2 * dtype_size * sum([math.prod(shape) for shape in input_shapes])
+    elif op_name in ["scatter", "gather"]:
+        tensor_shape = input_shapes[0]
+        read_io_amount = (dtype_size + get_dtype_bytes("int64")) * math.prod(tensor_shape)
+        write_io_amount = dtype_size * math.prod(tensor_shape)
     elif op_name == "cast":
         read_io_amount = dtype_size * sum([math.prod(shape) for shape in input_shapes])
         write_io_amount = read_io_amount / 2 if dtype == torch.float32 else read_io_amount * 2
