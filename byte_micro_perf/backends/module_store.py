@@ -550,11 +550,9 @@ class ScatterOp(torch.nn.Module):
 
         index = [i for i in range(batch_size)]
         random.shuffle(index)
-        index_tensor = torch.cat(
-            [torch.full((1, tensor_len), i, dtype=torch.int64, device=xpu_device) for i in index], 
-            dim=0
-        )
-        
+        index_tensor = torch.tensor(index, dtype=torch.int64, device=xpu_device)
+        index_tensor = index_tensor.reshape(-1, 1).expand(-1, tensor_len)
+
         return [dst_tensor, index_tensor, src_tensor]
 
 
@@ -602,10 +600,8 @@ class GatherOp(torch.nn.Module):
 
         index = [i for i in range(batch_size)]
         random.shuffle(index)
-        index_tensor = torch.cat(
-            [torch.full((1, tensor_len), i, dtype=torch.int64, device=xpu_device) for i in index], 
-            dim=0
-        )
+        index_tensor = torch.tensor(index, dtype=torch.int64, device=xpu_device)
+        index_tensor = index_tensor.reshape(-1, 1).expand(-1, tensor_len)
         
         return [dst_tensor, index_tensor, src_tensor]
 
