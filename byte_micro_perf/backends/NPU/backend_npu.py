@@ -251,7 +251,7 @@ class BackendNPU(Backend):
         # Call the init process
         timeout_seconds = int(os.environ.get("MEGATRON_NCCL_TIMEOUT_SECOND", 30))
         torch.distributed.init_process_group(
-            backend="nccl",
+            backend="hccl",
             world_size=world_size,
             rank=rank,
             store=None,
