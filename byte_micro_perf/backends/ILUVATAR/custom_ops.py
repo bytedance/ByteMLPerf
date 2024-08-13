@@ -1,7 +1,9 @@
 from typing import List
 
 import torch
-import cutlass
+
+#import cutlass
+from .ixgemmblaslt import gemm88
 
 from backends.module_store import GemmOp, BatchGemmOp, GroupGemmOp
 
@@ -13,27 +15,14 @@ class ILUVATARGemmOp(GemmOp):
         super().__init__()
 
         try:
-            import cutlass
-            dtype = torch.int8
-            accum_dtype=torch.int32
-            self.plan = cutlass.op.Gemm(
-                alpha=1, beta=0,
-                element_A=dtype,
-                element_B=dtype,
-                element_C=accum_dtype,
-                element_D=accum_dtype,
-                layout_A=cutlass.LayoutType.RowMajor,
-                layout_B=cutlass.LayoutType.RowMajor,
-                layout_C=cutlass.LayoutType.RowMajor
-            )
-            self.op = self.plan.construct()
-            self.gemm_op_int8 = cutlass.emit.pytorch(
-                self.op, name='gemm', cc=self.plan.cc, 
-                jit=True, sourcedir='out'
-            )
+            self.blasLtIns = gemm88.gemm_init()
         except:
-            self.gemm_op_int8 = None
-            raise Exception("ILUVATARGemmOp cutlass error")
+            self.blasLtIns = None
+            raise Exception("ILUVATARGemmOp ixgemmblaslt error")
+        
+    def __del__(self):
+        if not self.blasLtIns is None:
+            gemm88.gemm_release(self.blasLtIns)
 
     def forward(
         self, 
@@ -42,7 +31,7 @@ class ILUVATARGemmOp(GemmOp):
     ):
         compute_dtype = input_tensor_a.dtype
         if compute_dtype == torch.int8:
-            output_tensor = self.gemm_op_int8.run(input_tensor_a, input_tensor_b)
+            output_tensor = gemm88.gemm_run(self.blasLtIns, [input_tensor_a], [input_tensor_b])[0]
         else:
             output_tensor = torch.mm(input_tensor_a, input_tensor_b)
         return output_tensor
@@ -55,9 +44,14 @@ class ILUVATARBatchGemmOp(BatchGemmOp):
         super().__init__()
 
         try:
-            import cutlass
+            self.blasLtIns = gemm88.gemm_init()
         except:
-            raise Exception("ILUVATARBatchGemmOp import cutlass error")
+            self.blasLtIns = None
+            raise Exception("ILUVATARBatchGemmOp import ixgemmblaslt error")
+        
+    def __del__(self):
+        if not self.blasLtIns is None:
+            gemm88.gemm_release(self.blasLtIns)
 
     def forward(
         self, 
@@ -68,11 +62,7 @@ class ILUVATARBatchGemmOp(BatchGemmOp):
 
         output_tensor = None
         if compute_dtype == torch.int8:
-            bs, m, n = input_tensor_a.shape[0], input_tensor_a.shape[1], input_tensor_b.shape[2]
-            c_tensor = torch.randint(-3, 3, [bs, m, n], dtype=torch.int32, device="cuda")
-            output_tensor = torch.randint(-3, 3, [bs, m, n], dtype=torch.int32, device="cuda")
-            plan = cutlass.op.Gemm(A=input_tensor_a, B=input_tensor_b, C=c_tensor, D=output_tensor, element_accumulator=cutlass.DataType.s32)
-            plan.run(input_tensor_a, input_tensor_b, c_tensor, output_tensor, 1, 0)
+            output_tensor = gemm88.gemm_run(self.blasLtIns, [input_tensor_a], [input_tensor_b])[0]
         else:
             output_tensor = torch.bmm(input_tensor_a, input_tensor_b)
         return output_tensor
@@ -85,27 +75,14 @@ class ILUVATARGroupGemmOp(GroupGemmOp):
         super().__init__()
 
         try:
-            import cutlass
-            dtype = torch.int8
-            accum_dtype=torch.int32
-            self.plan = cutlass.op.GroupedGemm(
-                alpha=1, beta=0, 
-                element_A=dtype, 
-                element_B=dtype, 
-                element_C=accum_dtype, 
-                element_D=accum_dtype, 
-                layout_A=cutlass.LayoutType.RowMajor, 
-                layout_B=cutlass.LayoutType.RowMajor, 
-                layout_C=cutlass.LayoutType.RowMajor
-            )
-            self.op = self.plan.construct()
-            self.gemm_op_int8 = cutlass.emit.pytorch(
-                self.op, name='group_gemm', cc=self.plan.cc,
-                jit=True, sourcedir='out'
-            )
+            self.blasLtIns = gemm88.gemm_init()
         except:
-            self.gemm_op_int8 = None
+            self.blasLtIns = None
             raise Exception("ILUVATARGroupGemmOp cutlass error")
+        
+    def __del__(self):
+        if not self.blasLtIns is None:
+            gemm88.gemm_release(self.blasLtIns)
 
     def forward(self, 
         a_list : List[torch.Tensor], 
@@ -113,7 +90,7 @@ class ILUVATARGroupGemmOp(GroupGemmOp):
     ):
         compute_dtype = a_list[0].dtype
         if compute_dtype == torch.int8:
-            output_tensors = self.gemm_op_int8.run(a_list, b_list)
+            output_tensors = gemm88.gemm_run(self.blasLtIns, a_list, b_list)
         else:
             output_tensors = [a @ b for a, b in zip(a_list, b_list)]
         return output_tensors

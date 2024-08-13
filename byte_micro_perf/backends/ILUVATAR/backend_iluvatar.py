@@ -27,7 +27,7 @@ from backends.backend import Backend
 from backends.module_store import *
 from backends.utils import get_dtype_bytes 
 
-from backends.module_store import GemmOp, GemvOp, BatchGemmOp, GroupGemmOp
+from .custom_ops import ILUVATARGemmOp, ILUVATARBatchGemmOp, ILUVATARGroupGemmOp
 
 
 logging.basicConfig(level=logging.INFO)
@@ -165,16 +165,16 @@ class BackendILUVATAR(Backend):
 
     # gemm ops
     def gemm(self):
-        self.op = GemmOp()
+        self.op = ILUVATARGemmOp()
 
     def gemv(self):
-        self.op = GemvOp()
+        self.op = ILUVATARGemmOp()
 
     def batch_gemm(self):
-        self.op = BatchGemmOp()
+        self.op = ILUVATARBatchGemmOp()
 
     def group_gemm(self):
-        self.op = GroupGemmOp()
+        self.op = ILUVATARGroupGemmOp()
 
 
     # create input tensors

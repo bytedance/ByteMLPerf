@@ -247,6 +247,7 @@ class PerfEngine:
             status = self.start_perf(self.workload)
 
         self.deactivate_venv()
+        del self.backend
 
     def start_perf(self, workload: Dict[str, Any]) -> bool:
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
