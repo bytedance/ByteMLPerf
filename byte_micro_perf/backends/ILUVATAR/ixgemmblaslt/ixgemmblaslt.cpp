@@ -25,9 +25,9 @@ std::vector<at::Tensor> gemm_run(gemm_kernel_param pins, std::vector<at::Tensor>
     {
       // 二维矩阵
       {
-        int *d_c;
-        cudaMalloc((void **)&d_c, sizeof(int) * shape_a[0] * shape_b[1]);
-        auto options = torch::TensorOptions().dtype(torch::kInt32);
+        char *d_c;
+        cudaMalloc((void **)&d_c, sizeof(char) * shape_a[0] * shape_b[1]);
+        auto options = torch::TensorOptions().dtype(torch::kInt8);
         options.device(at::kCUDA);
         clist[i] = torch::from_blob(d_c, {shape_a[0], shape_b[1]}, std::bind(&free_device, d_c), options);
         clist[i] = clist[i].cuda();
@@ -35,15 +35,15 @@ std::vector<at::Tensor> gemm_run(gemm_kernel_param pins, std::vector<at::Tensor>
       int M = shape_a[0];
       int N = shape_b[1];
       int K = shape_a[1];
-      gemm_kernel_run(pins, (char *)alist[i].data_ptr(), (char *)blist[i].data_ptr(), (int32_t *)clist[i].data_ptr(), M, N, K);
+      gemm_kernel_run(pins, (char *)alist[i].data_ptr(), (char *)blist[i].data_ptr(), (char *)clist[i].data_ptr(), M, N, K);
     }
     else if (shape_a.size() == 3 && shape_b.size() == 3)
     {
       // 三维矩阵
       {
-        int *d_c;
-        cudaMalloc((void **)&d_c, sizeof(int) * shape_a[0] * shape_a[1] * shape_b[2]);
-        auto options = torch::TensorOptions().dtype(torch::kInt32);
+        char *d_c;
+        cudaMalloc((void **)&d_c, sizeof(char) * shape_a[0] * shape_a[1] * shape_b[2]);
+        auto options = torch::TensorOptions().dtype(torch::kInt8);
         options.device(at::kCUDA);
         clist[i] = torch::from_blob(d_c, {shape_a[0], shape_a[1], shape_b[2]}, std::bind(&free_device, d_c), options);
         clist[i] = clist[i].cuda();
@@ -53,7 +53,7 @@ std::vector<at::Tensor> gemm_run(gemm_kernel_param pins, std::vector<at::Tensor>
         int M = shape_a[1];
         int N = shape_b[2];
         int K = shape_a[2];
-        gemm_kernel_run(pins, (char *)alist[i][j].data_ptr(), (char *)blist[i][j].data_ptr(), (int32_t *)clist[i][j].data_ptr(), M, N, K);
+        gemm_kernel_run(pins, (char *)alist[i][j].data_ptr(), (char *)blist[i][j].data_ptr(), (char *)clist[i][j].data_ptr(), M, N, K);
       }
     }
     else

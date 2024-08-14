@@ -29,7 +29,7 @@ struct gemm_kernel_param
 
 gemm_kernel_param gemm_kernel_init();
 
-void gemm_kernel_run(gemm_kernel_param pins, char *d_A, char *d_B, int32_t *d_C, const int M, const int N, const int K);
+void gemm_kernel_run(gemm_kernel_param pins, char *d_A, char *d_B, char *d_C, const int M, const int N, const int K);
 
 void gemm_kernel_release(gemm_kernel_param pins);
 

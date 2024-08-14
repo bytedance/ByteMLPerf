@@ -4,25 +4,25 @@ import time
 
 from ixgemmblaslt import gemm88
 
-shape_0 = 10
-shape_m = 3072
-shape_n = 4096
-shape_k = 30176
-# shape_0 = 1
-# shape_m = 1
-# shape_n = 4
-# shape_k = 4
+#shape_0 = 1
+# shape_m = 3072
+# shape_n = 4096
+# shape_k = 30176
+
+shape_0 = 1
+shape_m = 4
+shape_n = 8
+shape_k = 4
 
 np.random.seed(int(time.time()))
 
-for kk in range(0, 3):
+for kk in range(0, 2):
     alist = []
     blist = []
     clist = []
-
+    begini = -5
+    endi = 5
     for ii in range(0,3):
-        begini = 1
-        endi = (2 * ii + 2) % 100 + 7
         #arr1 = np.random.randint(begini, endi, (shape_0, shape_m, shape_k))
         arr1 = np.random.randint(begini, endi, (shape_m, shape_k))
         t1 = torch.from_numpy(arr1).to(torch.int8).to("cuda")

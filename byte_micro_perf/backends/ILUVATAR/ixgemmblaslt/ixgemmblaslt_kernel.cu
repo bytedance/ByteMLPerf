@@ -14,7 +14,8 @@ gemm_kernel_param gemm_kernel_init()
 #else
     cublasComputeType_t compute_type = CUBLAS_COMPUTE_32I;
 #endif
-  cudaDataType scale_type = CUDA_R_32I;
+  //cudaDataType scale_type = CUDA_R_32I;
+  cudaDataType scale_type = CUDA_R_32F;
   cublasOperation_t op_trans_a = CUBLAS_OP_N;
   cublasOperation_t op_trans_b = CUBLAS_OP_N;
 #ifdef __ILUVATAR__
@@ -33,12 +34,13 @@ gemm_kernel_param gemm_kernel_init()
   return ins;
 }
 
-void gemm_kernel_run(gemm_kernel_param ins, char *d_A, char *d_B, int32_t *d_C, const int M, const int N, const int K)
+void gemm_kernel_run(gemm_kernel_param ins, char *d_A, char *d_B, char *d_C, const int M, const int N, const int K)
 {
-  int alpha_int8 = 1;
-  int beta_int8 = 0;
+  float alpha_int8 = 1.0;
+  float beta_int8 = 0.0;
   cudaDataType ab_type = CUDA_R_8I;
-  cudaDataType c_type = CUDA_R_32I;
+  //cudaDataType c_type = CUDA_R_32I;
+  cudaDataType c_type = CUDA_R_8I;
   cublasLtMatrixLayout_t a_desc = nullptr, b_desc = nullptr, c_desc = nullptr;
 
   cublasLtHandle_t lt_handle = reinterpret_cast<cublasLtHandle_t>(reinterpret_cast<uintptr_t *>(ins.lt_handle));
