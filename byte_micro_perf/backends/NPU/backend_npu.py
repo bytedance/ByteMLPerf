@@ -169,8 +169,7 @@ class BackendNPU(Backend):
         self.op = NPUBatchGemmOp()
 
     def group_gemm(self):
-        # self.op = NPUGroupGemmOp()
-        self.op = GroupGemmOp()
+        self.op = NPUGroupGemmOp()
 
     # create input tensors
     def build_tensor(self, input_shapes, dtype):

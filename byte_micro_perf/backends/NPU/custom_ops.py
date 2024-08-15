@@ -140,13 +140,61 @@ class NPUGroupGemmOp(GroupGemmOp):
     def __init__(self):
         super().__init__()
 
+    def compute_size(self, input_shapes, dtype):
+        # input_shapes: [[[M1, K1], [K1, N1]], [[M2, K2], [K2, N2]]]
+        torch_dtype = getattr(torch, dtype)
+        bytes_per_cnt = 0
+        for problem_shape in input_shapes:
+            a_shape, b_shape = problem_shape
+            M, K = a_shape
+            K, N = b_shape
+            d_shape = [M, N]
+            dtype_size = get_dtype_bytes(dtype)
+            input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+            output_element_num = sum([math.prod(shape) for shape in [d_shape]])
+            if torch_dtype == torch.int8:
+                bytes_per_cnt += dtype_size * (input_element_num + output_element_num) + get_dtype_bytes("int64") * N
+            else:
+                bytes_per_cnt += dtype_size * (input_element_num + output_element_num)
+        return bytes_per_cnt
+
+    def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
+        """
+        [
+            [[M1, K1], [K1, N1]],
+            [[M2, K2], [K2, N2]]
+        ]
+        """
+        left_tensors = []
+        right_tensors = []
+        scale_tensors = []
+
+        for problem_shape in input_shapes:
+            a_shape, b_shape = problem_shape
+            if torch_dtype in [torch.int8, torch.int32]:
+                left_tensor = torch.randint(-3, 3, size=a_shape, dtype=torch_dtype, device=xpu_device)
+                right_tensor = torch.randint(-3, 3, size=b_shape, dtype=torch_dtype, device=xpu_device)
+            else:
+                left_tensor = torch.randn(a_shape, dtype=torch_dtype, device=xpu_device)
+                right_tensor = torch.randn(b_shape, dtype=torch_dtype, device=xpu_device)
+            if torch_dtype in [torch.int8]:
+                N = b_shape[1]
+                scale_tensors.append(torch.randn([N], dtype=torch.int64, device=xpu_device))
+            else:
+                scale_tensors.append(None)
+            left_tensors.append(left_tensor)
+            right_tensors.append(right_tensor)
+
+        return [left_tensors, right_tensors, scale_tensors]
+
     def forward(self, 
         a_list : List[torch.Tensor], 
-        b_list : List[torch.Tensor]
+        b_list : List[torch.Tensor],
+        c_list : List[torch.Tensor]
     ):
         compute_dtype = a_list[0].dtype
         if compute_dtype == torch.int8:
-            output_tensors = torch_npu.npu_grouped_matmul(a_list, b_list)
+            output_tensors = torch_npu.npu_grouped_matmul(a_list, b_list, scale=c_list)
         elif compute_dtype == torch.float32:
             output_tensors = [a @ b for a, b in zip(a_list, b_list)]
         else:
