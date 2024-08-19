@@ -48,6 +48,11 @@ def get_args():
         help="The task going to be evaluted, refs to workloads/",
     )
     parser.add_argument(
+        "--task_dir",
+        default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/workloads",
+        help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
+    )
+    parser.add_argument(
         "--hardware_type",
         default="GPU",
         help="The backend going to be evaluted, refs to backends/",
@@ -65,14 +70,14 @@ def get_args():
     return args
 
 
-def load_workload(task: str) -> Dict[str, Any]:
+def load_workload(task: str, task_dir: str) -> Dict[str, Any]:
     """
     Return a list of dictionary with model Configuration
     Args: List[str]
     Returns: List[dic]
     """
     modules_dir = (
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/workloads"
+        task_dir
     )
 
     for file in os.listdir(modules_dir):
@@ -83,8 +88,7 @@ def load_workload(task: str) -> Dict[str, Any]:
             and (file.endswith(".json") or os.path.isdir(path))
             and file[: file.find(".json")] == task
         ):
-            module_name = file
-            with open("workloads/" + module_name, "r") as f:
+            with open(path, "r") as f:
                 workload_dict = json.load(f)
             return workload_dict
     else:
@@ -160,15 +164,14 @@ def parse_workload(workload):
                     # group gemm
                     elif "gemm_group" in input_shape_group:
                         groups = input_shape_group.get("gemm_group", [])
+                        batches = input_shape_group.get("batch", [])
                         kn = input_shape_group.get("KN", [])
                         if k and n:
                             kn.append([list(shape) for shape in itertools.product(k, n)])
                         for group in groups:
-                            for _kn in kn:
-                                group_input_shape_list = []
-                                for m in group:
-                                    group_input_shape_list.append([[m, _kn[0]], [_kn[0], _kn[1]]])
-                                shape_list.append(group_input_shape_list)
+                            for batch in batches:
+                                for _kn in kn:
+                                    shape_list.append([[[group * batch, _kn[0]], [_kn[0], _kn[1]]]])
                     # gemm
                     else:
                         if m and n and k:
@@ -190,7 +193,7 @@ class PerfEngine:
     def __init__(self) -> None:
         super().__init__()
         self.args = get_args()
-        self.workload = load_workload(self.args.task)
+        self.workload = load_workload(self.args.task, self.args.task_dir)
         self.backend_type = self.args.hardware_type
         self.old_os_path = os.environ["PATH"]
         self.prev_sys_path = list(sys.path)
@@ -280,7 +283,6 @@ class PerfEngine:
 
         # dtype list
         dtype_list = self.workload["dtype"]
-
         for dtype in dtype_list:
             perf_reports = []
             base_report["Performance"] = {}

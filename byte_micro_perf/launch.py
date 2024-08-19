@@ -133,8 +133,8 @@ if __name__ == "__main__":
     )
 
     for task in tasks:
-        cmd = "python3 core/perf_engine.py --hardware_type {} --task {} --vendor_path {}".format(
-            args.hardware_type, task, args.vendor_path
+        cmd = "python3 core/perf_engine.py --hardware_type {} --task {} --vendor_path {} --task_dir {}".format(
+            args.hardware_type, task, args.vendor_path, args.task_dir
         )
         exit_code = subprocess.call(cmd, shell=True)
 
