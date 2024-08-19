@@ -160,15 +160,14 @@ def parse_workload(workload):
                     # group gemm
                     elif "gemm_group" in input_shape_group:
                         groups = input_shape_group.get("gemm_group", [])
+                        batches = input_shape_group.get("batch", [])
                         kn = input_shape_group.get("KN", [])
                         if k and n:
                             kn.append([list(shape) for shape in itertools.product(k, n)])
                         for group in groups:
-                            for _kn in kn:
-                                group_input_shape_list = []
-                                for m in group:
-                                    group_input_shape_list.append([[m, _kn[0]], [_kn[0], _kn[1]]])
-                                shape_list.append(group_input_shape_list)
+                            for batch in batches:
+                                for _kn in kn:
+                                    shape_list.append([[[group * batch, _kn[0]], [_kn[0], _kn[1]]]])
                     # gemm
                     else:
                         if m and n and k:
@@ -280,7 +279,6 @@ class PerfEngine:
 
         # dtype list
         dtype_list = self.workload["dtype"]
-
         for dtype in dtype_list:
             perf_reports = []
             base_report["Performance"] = {}
