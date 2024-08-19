@@ -168,10 +168,12 @@ def parse_workload(workload):
                         kn = input_shape_group.get("KN", [])
                         if k and n:
                             kn.append([list(shape) for shape in itertools.product(k, n)])
-                        for group in groups:
-                            for batch in batches:
-                                for _kn in kn:
-                                    shape_list.append([[[group * batch, _kn[0]], [_kn[0], _kn[1]]]])
+                        for batch in batches:
+                            for _kn in kn:
+                                group_input_shape_list = []
+                                for group in groups:
+                                    group_input_shape_list.append([[group * batch, _kn[0]], [_kn[0], _kn[1]]])
+                                shape_list.append(group_input_shape_list)
                     # gemm
                     else:
                         if m and n and k:
