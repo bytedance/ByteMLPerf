@@ -1,19 +1,31 @@
-onnx==1.15.0
-onnxsim==0.4.36
-tf2onnx==1.16.1
+tqdm
+fpdf
+pandas==1.5.1
+onnx
+onnxsim
 onnxruntime
-onnxoptimizer==0.3.13
-bert-tensorflow==1.0.1
-
-pandas==2.1.1
-numpy==1.23.0
+tf2onnx==1.16.1
 matplotlib
+onnxoptimizer
 scikit-learn
-opencv-python==4.6.0.66
-opencv-python-headless
-tokenization==1.0.7
-tokenizers==0.13.3
-sentencepiece==0.1.96
-typing_extensions==4.10.0
+prompt_toolkit
+pycocotools
+transformers==4.33.2
 
+tokenization==1.0.7
+opencv-python==4.6.0.66
+typing-extensions==3.7.4.3
+protobuf==3.20.3
+sentencepiece==0.1.96
 py-libnuma==1.2
+tokenizers==0.13.3
+virtualenv==16.7.9
+bert-tensorflow==1.0.1
+typing_extensions==4.10.0
+numpy==1.23.0
+
+
+# 利用numa需要安装的依赖
+apt-get install -y libnuma-dev
+apt-get update
+apt-get upgrade -y libnuma-dev

@@ -495,9 +495,9 @@ class RuntimeBackendILUVATAR(runtime_backend.RuntimeBackend):
             'Batch size is {}, QPS: {}, Avg Latency:{}, Tail Latency:{}'.
             format(self.batch_size, qps, avg_latency, tail_latency))
         
-        # log.info(
-        #     'Batch size is {}, fps: {}, predict_avg_latency:{}, predict_tail_latency:{}'.
-        #     format(self.batch_size, fps, predict_avg_latency, tail_latency))
+        log.info(
+            'Batch size is {}, fps: {}, predict_avg_latency:{}, predict_tail_latency:{}'.
+            format(self.batch_size, fps, predict_avg_latency, tail_latency))
 
 
         report['QPS'] = qps
