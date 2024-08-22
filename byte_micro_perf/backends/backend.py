@@ -43,6 +43,24 @@ class Backend(ABC):
         self.target_dtype = None
 
     @abstractmethod
+    def get_device_count(self):
+        pass
+
+    @abstractmethod
+    def set_device(self, device_index):
+        pass
+
+    @abstractmethod
+    def get_device(self):
+        pass
+
+    @abstractmethod
+    def all_gather_object(self, obj):
+        pass
+
+
+
+    @abstractmethod
     def get_device_name(self):
         pass
 

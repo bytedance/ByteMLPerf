@@ -12,26 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import sys
+import json
+import time
 import argparse
 import importlib
-import json
 import logging
-import math
-import os
 import subprocess
-import sys
 import pathlib
 import traceback
 import random
 from typing import Any, Dict, List
 import itertools
-
+from collections import namedtuple
 
 import torch.multiprocessing as mp
 import virtualenv
 
-BYTE_MLPERF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BYTE_MLPERF_ROOT)
+CUR_DIR = pathlib.Path.cwd()
+FILE_DIR = pathlib.Path(sys.path[0])
+BYTE_MLPERF_ROOT = FILE_DIR.parent
+sys.path.insert(0, BYTE_MLPERF_ROOT.__str__())
 
 from backends.backend import Backend
 
@@ -49,7 +51,7 @@ def get_args():
     )
     parser.add_argument(
         "--task_dir",
-        default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/workloads",
+        default=str(BYTE_MLPERF_ROOT.joinpath("workloads")),
         help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
     )
     parser.add_argument(
@@ -63,9 +65,10 @@ def get_args():
         help="The hardware configs need to be loaded, refs to vendor_zoo/NVIDIA/A100-PCIe.json",
     )
     parser.add_argument(
-        "--compile_only", action="store_true", help="Run compilation only"
+        "--activate_venv", 
+        action="store_true",
+        help="Enable virtual environment to run the task",
     )
-
     args = parser.parse_args()
     return args
 
@@ -76,25 +79,27 @@ def load_workload(task: str, task_dir: str) -> Dict[str, Any]:
     Args: List[str]
     Returns: List[dic]
     """
-    modules_dir = (
-        task_dir
-    )
-
-    for file in os.listdir(modules_dir):
-        path = os.path.join(modules_dir, file)
+    modules_dir = pathlib.Path(task_dir).absolute()
+    # create empty workload json data
+    workload_dict = {}
+    for file in modules_dir.iterdir():
         if (
-            not file.startswith("_")
-            and not file.startswith(".")
-            and (file.endswith(".json") or os.path.isdir(path))
-            and file[: file.find(".json")] == task
+            file.stem.startswith('_')
+            or file.stem.startswith('.')
+            or file.is_dir()
+            or file.suffix != '.json'
+            or file.stem != task
         ):
-            with open(path, "r") as f:
-                workload_dict = json.load(f)
-            return workload_dict
-    else:
-        log.error(
-            "Task name: [ {} ] was not found, please check your task name".format(task)
-        )
+            continue
+        workload_dict = json.loads(file.read_text())
+
+    if not workload_dict:
+        log.error(f"could not find {task}.json in {modules_dir}.")
+        exit(1)
+
+    return workload_dict
+
+
 
 def parse_workload(workload):
     shape_list = []
@@ -191,9 +196,20 @@ def parse_workload(workload):
     return shape_list
 
 
+
+
+
+
+
+
+ConfigInstance = namedtuple("ConfigInstance", ["dtype", "tensor_shapes", "index"])
+ResultItem = namedtuple("ResultItem", ["config", "report"])
+
+
 class PerfEngine:
     def __init__(self) -> None:
         super().__init__()
+
         self.args = get_args()
         self.workload = load_workload(self.args.task, self.args.task_dir)
         self.backend_type = self.args.hardware_type
@@ -201,142 +217,193 @@ class PerfEngine:
         self.prev_sys_path = list(sys.path)
         self.real_prefix = sys.prefix
 
-    def init_process(self, rank: int, world_size: int):
-        """
-        Initialize the distributed environment.
+    def get_cpu_name(self):
+        command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
+        cpu_name = subprocess.check_output(command, shell=True)
+        return cpu_name.decode().strip()
 
-        """
-        initialize_func = getattr(self.backend, "initialize_ccl")
 
-        # world_size may excced available device count
-        ret = initialize_func(rank, world_size)
-        if ret is not None and not ret:
-            return
-
-        status = self.start_perf(self.workload)
-        return status
-
-    def init_backend(self, hardware_type: str) -> Backend:
-        """
-        Load related compile backend with input hardware type
-
-        Arguments: str
-
-        Returns: Heterogeneous Backend()
-        """
-        log.info("Loading Heterogeneous Backend: {}".format(hardware_type))
-
-        backend = importlib.import_module(
-            "backends." + hardware_type + ".backend_" + hardware_type.lower()
-        )
-        backend = getattr(backend, "Backend" + hardware_type)
-        return backend(self.workload, self.args.vendor_path)
 
     def start_engine(self) -> None:
-        status = self.activate_venv(self.backend_type)
-        if not status:
-            log.warning("Activate virtualenv Failed, Please Check...")
 
-        self.backend = self.init_backend(self.backend_type)
-        output_dir = os.path.abspath("reports/" + self.backend_type)
-        os.makedirs(output_dir, exist_ok=True)
+        if self.args.activate_venv:
+            self.activate_venv(self.backend_type)
 
-        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
-            for group in self.workload["group"]:
-                try:
-                    mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
-                except Exception as e:
-                    traceback.print_exc()
-                    log.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
-        else:
-            status = self.start_perf(self.workload)
+        # init backend
+        hardware_type = self.backend_type
+        log.info("Loading Heterogeneous Backend: {}".format(hardware_type))
+        
+        backend_module = importlib.import_module(
+            "backends." + hardware_type + ".backend_" + hardware_type.lower())
+        self.backend_class = getattr(backend_module, "Backend" + hardware_type)
+        self.backend = self.backend_class(self.workload, self.args.vendor_path)
 
-        self.deactivate_venv()
-
-    def start_perf(self, workload: Dict[str, Any]) -> bool:
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        if local_rank == 0:
-            log.info(
-                "******************************************* Start to test op: [{}]. *******************************************".format(
-                    workload["operator"]
-                )
+        # start process task
+        log.info(
+            "******************************************* Start to test op: [{}]. *******************************************".format(
+                self.workload["operator"]
             )
+        )
 
-        # Initalize Output Dir and Reports
-        output_dir = pathlib.Path("reports").joinpath(self.backend_type).joinpath(workload["operator"])
-        os.makedirs(output_dir, exist_ok=True)
+        # create output dir based on task
+        output_dir = BYTE_MLPERF_ROOT.joinpath(
+            "reports", self.backend_type, self.workload["operator"])
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        op_name = workload["operator"]
-        base_report = {
-            "Operator": op_name.upper(),
-            "Backend": self.backend_type,
-            "Host Info": self.get_cpu_name(),
-            "Device Info": getattr(self.backend, "get_device_name")(),
-        }
 
-        op = getattr(self.backend, op_name.lower(), None)
+        # get input shape info
+        target_group_list = self.workload.get("group", [1])
+        target_group_list.sort()
+        device_count = getattr(self.backend, "get_device_count")()
+        group_list = []
+        for group in target_group_list:
+            if group <= device_count:
+                group_list.append(group)
+            else:
+                break
+        dtype_list = self.workload.get("dtype", ["float32"])
+        shape_list = parse_workload(self.workload)
+
+        if not group_list or not dtype_list or not shape_list:
+            log.error("empty group/dtype/shape")
+            exit(1)
+
+        test_list = []
+        case_index = 0
+        for dtype in dtype_list:
+            for shape in shape_list:
+                test_list.append(ConfigInstance(dtype, shape, case_index))
+                case_index = case_index + 1
+
+
+        # all operations will enter subprocess to test in parallel
+        for group in group_list:
+            log.info(f"Start to test group size: {group}")
+            # TODO: test allreduce/allgather in parallel
+            instance_num = device_count if group == 1 else group
+            if self.workload["operator"] in ["device2host", "host2device"]:
+                instance_num = 1
+
+            try:
+                mp.spawn(
+                    fn=self.perf_func, 
+                    args=(instance_num, group, output_dir, test_list,), 
+                    nprocs=instance_num, 
+                    join=True
+                )
+            except Exception as e:
+                traceback.print_exc()
+                log.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
+
+            time.sleep(1)
+
+        if self.args.activate_venv:
+            self.deactivate_venv()
+
+
+    def perf_func(self, rank: int, *args):
+        backend_instance = self.backend_class(self.workload, self.args.vendor_path)
+        op_name = self.workload["operator"]
+        
+        world_size, group_size, output_dir, test_list = args
+
+        # set device accroding to local_rank
+        set_device_func = getattr(backend_instance, "set_device")
+        set_device_func(rank)
+        
+
+        if world_size > 1:
+            init_ccl_func = getattr(backend_instance, "initialize_ccl")
+            init_ccl_func(rank, world_size)
+
+
+
+        op = getattr(backend_instance, op_name.lower(), None)
         if op is not None and callable(op):
             op()
         else:
             raise ValueError(f"Unknown operation: {op_name.lower()}")
 
-        # get input shape info
-        shape_list = parse_workload(self.workload)
 
-        # dtype list
-        dtype_list = self.workload["dtype"]
-        for dtype in dtype_list:
-            perf_reports = []
-            base_report["Performance"] = {}
 
-            for input_shape in shape_list:
-                """
-                input_shape could be:
-                  List[int]: single shape. cos
-                  List[List[int]]: multiple inputs. add
-                  List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
-                """
-                if local_rank == 0:
-                    log.info(f"Execute op: [{op_name.lower()}], input_shape: {input_shape}, dtype: {dtype}")
-                if isinstance(input_shape[0], int):
-                    input_shape = [input_shape]
-                try:
-                    reports = self.backend.perf(input_shape, dtype)
-                except Exception as e:
-                    traceback.print_exc()
-                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {input_shape}, dtype: {dtype}, error msg: {e}")
-                    reports = {}
-                perf_reports.append(reports)
-            base_report["Performance"] = perf_reports
+        process_test_list = []
+        if group_size > 1:
+            process_test_list = test_list.copy()
+        elif group_size == 1:
+            for index, test_instance in enumerate(test_list):
+                if index % world_size == rank:
+                    process_test_list.append(test_instance)
 
-            # write output to json file
-            has_group = "Group" in base_report["Performance"][0]
-            output_report_path = (
-                f"result-{str(dtype)}"
-                + (
-                    f"-group{base_report['Performance'][0]['Group']}"
-                    if has_group
-                    else ""
+
+        result_list = []
+        for test_instance in process_test_list:
+            if group_size == 1 or (group_size > 1 and rank == 0):
+                print(test_instance)
+
+            test_dtype = test_instance.dtype
+            test_shape = test_instance.tensor_shapes
+            
+            """
+            input_shape could be:
+                List[int]: single shape. cos
+                List[List[int]]: multiple inputs. add
+                List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+            """
+            if isinstance(test_shape[0], int):
+                test_shape = [test_shape]
+            try:
+                reports = backend_instance.perf(test_shape, test_dtype)
+            except Exception as e:
+                traceback.print_exc()
+                log.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                reports = {}
+
+            result_list.append(ResultItem(test_instance, reports))
+            time.sleep(0.1)
+
+        output_result_list = []
+        if world_size > 1 and group_size == 1:
+            all_gather_object_func = getattr(backend_instance, "all_gather_object")
+            all_result_list = all_gather_object_func(result_list)
+            for result_list in all_result_list:
+                output_result_list.extend(result_list)
+        else:
+            output_result_list = result_list
+
+        if rank == 0:
+            dtype_results_mapping = {}
+            for result in output_result_list:
+                if result.config.dtype not in dtype_results_mapping:
+                    dtype_results_mapping[result.config.dtype] = []
+                dtype_results_mapping[result.config.dtype].append(result)
+
+            for dtype, results in dtype_results_mapping.items():
+                dtype_results_mapping[dtype] = sorted(results, key=lambda x: x.config.index)
+                
+                base_report = {
+                    "Operator": op_name.upper(),
+                    "Backend": self.backend_type,
+                    "Host Info": self.get_cpu_name(),
+                    "Device Info": getattr(self.backend, "get_device_name")(),
+                    "Performance": [result.report for result in dtype_results_mapping[dtype]]
+                }
+                
+                filename = (
+                    f"result-{str(dtype)}"
+                    + (
+                        f"-group{group_size}"
+                        if group_size > 1
+                        else ""
+                    )
+                    + ".json"
                 )
-                + ".json"
-            )
-            output_report_path = os.path.join(output_dir, output_report_path)
-            if local_rank == 0:
-                # logging.info(base_report["Performance"])
-                with open(output_report_path, "w") as file:
-                    json.dump(base_report, file, indent=4)
-        if local_rank == 0:
-            log.info(
-                "******************************************* Test op: [{}] SUCCESS. *******************************************".format(
-                    workload["operator"]
-                )
-            )
+                filepath = output_dir.joinpath(filename)
+                with open(filepath, "w") as f:
+                    json.dump(base_report, f, indent=4)
+        
         return True
+                
 
-    def get_cpu_name(self):
-        command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
-        cpu_name = subprocess.check_output(command, shell=True)
-        return cpu_name.decode().strip()
 
     def activate_venv(self, hardware_type: str) -> bool:
         if os.path.exists("backends/" + hardware_type + "/requirements.txt"):
