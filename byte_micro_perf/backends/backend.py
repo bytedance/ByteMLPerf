@@ -88,6 +88,11 @@ class Backend(ABC):
     def setup_2d_group(self):
         pass
 
+    @abstractmethod
+    def destroy_process_group(self):
+        pass
+
+
 
     # communication ops
     def host2device(self):

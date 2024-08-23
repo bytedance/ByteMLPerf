@@ -331,6 +331,8 @@ class PerfEngine:
             self.deactivate_venv()
 
 
+
+
     def perf_func(self, rank: int, *args):
         backend_instance = self.backend_class(self.workload, self.args.vendor_path)
         op_name = self.workload["operator"]
@@ -419,11 +421,12 @@ class PerfEngine:
 
                 result_list.append(ResultItem(test_instance, reports))
 
+
         if rank == 0:
             print(f"{len(result_list)} tasks finished.")
 
             dtype_results_mapping = {}
-            for result in output_result_list:
+            for result in result_list:
                 if result.config.dtype not in dtype_results_mapping:
                     dtype_results_mapping[result.config.dtype] = []
                 dtype_results_mapping[result.config.dtype].append(result)
@@ -452,6 +455,10 @@ class PerfEngine:
                 with open(filepath, "w") as f:
                     json.dump(base_report, f, indent=4)
         
+        if world_size > 1:
+            destroy_group_func = getattr(backend_instance, "destroy_process_group")
+            destroy_group_func()
+
         return True
                 
 
