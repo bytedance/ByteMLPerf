@@ -92,6 +92,9 @@ class Backend(ABC):
     def destroy_process_group(self):
         pass
 
+    @abstractmethod
+    def barier(self):
+        pass
 
 
     # communication ops
@@ -229,6 +232,11 @@ class Backend(ABC):
                 for _ in range(num_warm_up):
                     self._run_operation(self.op, tensor_list[0])
 
+
+                # ccl ops need barrier
+                if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
+                    self.barier()
+
                 # test perf
                 num_test_perf = 5
                 self.device_synchronize()
@@ -241,7 +249,6 @@ class Backend(ABC):
                 self.device_synchronize()
                 end_time = time.perf_counter_ns()
 
-                
                 prefer_iterations = self.iterations
                 max_perf_seconds = 10.0
                 op_duration = (end_time - start_time) / num_test_perf / 1e9
@@ -249,6 +256,11 @@ class Backend(ABC):
                     prefer_iterations = 5
                 else:
                     prefer_iterations = min(max(int(max_perf_seconds // op_duration), 10), self.iterations)
+
+
+                # ccl ops need barrier
+                if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
+                    self.barier()
 
                 # perf
                 self.device_synchronize()
