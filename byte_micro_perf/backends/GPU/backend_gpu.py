@@ -305,3 +305,6 @@ class BackendGPU(Backend):
 
     def destroy_process_group(self):
         dist.destroy_process_group()
+
+    def barier(self):
+        dist.barrier(self.group)
