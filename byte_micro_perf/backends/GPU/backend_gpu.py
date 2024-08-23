@@ -271,12 +271,10 @@ class BackendGPU(Backend):
         os.environ["WORLD_SIZE"] = str(world_size)
 
         # Call the init process
-        timeout_seconds = int(os.environ.get("MEGATRON_NCCL_TIMEOUT_SECOND", 30))
         torch.distributed.init_process_group(
             backend="nccl",
             world_size=world_size,
-            rank=rank,
-            timeout=timedelta(seconds=timeout_seconds),
+            rank=rank
         )
 
         # create group

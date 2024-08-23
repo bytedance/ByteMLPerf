@@ -224,10 +224,31 @@ class Backend(ABC):
                 for _ in range(num_warm_up):
                     self._run_operation(self.op, tensor_list[0])
 
+                # test perf
+                num_test_perf = 5
+                self.device_synchronize()
+                start_time = time.perf_counter_ns()
+                for i in range(num_test_perf):
+                    self._run_operation(
+                        self.op,
+                        tensor_list[input_index_list[i]]
+                    )
+                self.device_synchronize()
+                end_time = time.perf_counter_ns()
+
+                
+                prefer_iterations = self.iterations
+                max_perf_seconds = 10.0
+                op_duration = (end_time - start_time) / num_test_perf / 1e9
+                if op_duration > max_perf_seconds:
+                    prefer_iterations = 5
+                else:
+                    prefer_iterations = min(max(int(max_perf_seconds // op_duration), 10), self.iterations)
+
                 # perf
                 self.device_synchronize()
                 start_time = time.perf_counter_ns()
-                for i in range(self.iterations):
+                for i in range(prefer_iterations):
                     self._run_operation(
                         self.op,
                         tensor_list[input_index_list[i]]
@@ -237,7 +258,7 @@ class Backend(ABC):
 
                 # time in us
                 total_exec_time = (end_time - start_time) / 1e3
-                latency = round(total_exec_time / self.iterations, 2)
+                latency = round(total_exec_time / prefer_iterations, 2)
             except Exception as e:
                 traceback.print_exc()
                 latency = 0
