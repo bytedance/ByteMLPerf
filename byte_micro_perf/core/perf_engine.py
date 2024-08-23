@@ -198,10 +198,6 @@ def parse_workload(workload):
 
 
 
-
-
-
-
 ConfigInstance = namedtuple("ConfigInstance", ["dtype", "tensor_shapes", "index"])
 ResultItem = namedtuple("ResultItem", ["config", "report"])
 
@@ -275,6 +271,13 @@ class PerfEngine:
                 test_list.append(ConfigInstance(dtype, shape, case_index))
                 case_index = case_index + 1
 
+        
+        try:
+            mp.set_start_method("spawn", force=True)
+        except Exception as e:
+            traceback.print_exc()
+            log.error(f"Set start method failed, error msg: {e}")
+
 
         # all operations will enter subprocess to test in parallel
         for group in group_list:
@@ -284,13 +287,40 @@ class PerfEngine:
             if self.workload["operator"] in ["device2host", "host2device"]:
                 instance_num = 1
 
+
+
+
+
+            input_queues = mp.Queue()
+            output_queues = mp.Queue(maxsize=1)
+
             try:
-                mp.spawn(
+                _subprocesses = mp.spawn(
                     fn=self.perf_func, 
-                    args=(instance_num, group, output_dir, test_list,), 
+                    args=(instance_num, group, output_dir, test_list, input_queues, output_queues), 
                     nprocs=instance_num, 
-                    join=True
+                    join=False, 
+                    daemon=False
                 )
+
+                log.info("waiting for ranks to be ready")
+                for _ in range(instance_num):
+                    assert "ready" == output_queues.get()
+                log.info("all ranks are ready and listening, init done")
+
+
+
+                if group == 1:
+                    for test_instance in test_list:
+                        input_queues.put(test_instance, True)
+
+                    for _ in range(instance_num):
+                        input_queues.put("end", True)
+
+
+                for process in _subprocesses.processes:
+                    process.join()
+
             except Exception as e:
                 traceback.print_exc()
                 log.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
@@ -305,7 +335,7 @@ class PerfEngine:
         backend_instance = self.backend_class(self.workload, self.args.vendor_path)
         op_name = self.workload["operator"]
         
-        world_size, group_size, output_dir, test_list = args
+        world_size, group_size, output_dir, test_list, input_queues, output_queues = args
 
         # set device accroding to local_rank
         set_device_func = getattr(backend_instance, "set_device")
@@ -316,8 +346,6 @@ class PerfEngine:
             init_ccl_func = getattr(backend_instance, "initialize_ccl")
             init_ccl_func(rank, world_size)
 
-
-
         op = getattr(backend_instance, op_name.lower(), None)
         if op is not None and callable(op):
             op()
@@ -325,52 +353,75 @@ class PerfEngine:
             raise ValueError(f"Unknown operation: {op_name.lower()}")
 
 
-
-        process_test_list = []
-        if group_size > 1:
-            process_test_list = test_list.copy()
-        elif group_size == 1:
-            for index, test_instance in enumerate(test_list):
-                if index % world_size == rank:
-                    process_test_list.append(test_instance)
-
+        output_queues.put("ready")
 
         result_list = []
-        for test_instance in process_test_list:
-            if group_size == 1 or (group_size > 1 and rank == 0):
-                print(test_instance)
+        if group_size == 1:
+            while True:
+                test_instance = input_queues.get()
+                if test_instance == "end":
+                    break           
+                
+                print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}")
 
-            test_dtype = test_instance.dtype
-            test_shape = test_instance.tensor_shapes
-            
-            """
-            input_shape could be:
-                List[int]: single shape. cos
-                List[List[int]]: multiple inputs. add
-                List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
-            """
-            if isinstance(test_shape[0], int):
-                test_shape = [test_shape]
-            try:
-                reports = backend_instance.perf(test_shape, test_dtype)
-            except Exception as e:
-                traceback.print_exc()
-                log.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
-                reports = {}
+                test_dtype = test_instance.dtype
+                test_shape = test_instance.tensor_shapes
+                """
+                input_shape could be:
+                    List[int]: single shape. cos
+                    List[List[int]]: multiple inputs. add
+                    List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+                """
+                if isinstance(test_shape[0], int):
+                    test_shape = [test_shape]
+                try:
+                    reports = backend_instance.perf(test_shape, test_dtype)
+                except Exception as e:
+                    traceback.print_exc()
+                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                    reports = {}
 
-            result_list.append(ResultItem(test_instance, reports))
-            time.sleep(0.1)
+                result_list.append(ResultItem(test_instance, reports))
 
-        output_result_list = []
-        if world_size > 1 and group_size == 1:
-            all_gather_object_func = getattr(backend_instance, "all_gather_object")
-            all_result_list = all_gather_object_func(result_list)
-            for result_list in all_result_list:
-                output_result_list.extend(result_list)
-        else:
-            output_result_list = result_list
+            output_result_list = []
+            if world_size > 1:
+                all_gather_object_func = getattr(backend_instance, "all_gather_object")
+                all_result_list = all_gather_object_func(result_list)
+                for data in all_result_list:
+                    output_result_list.extend(data)
+            else:
+                output_result_list = result_list
+
+            result_list = sorted(output_result_list, key=lambda x: x.config.index)
+
+
+        elif group_size > 1:
+            for i, test_instance in enumerate(test_list):
+                if rank == 0:
+                    print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}")
+
+                test_dtype = test_instance.dtype
+                test_shape = test_instance.tensor_shapes
+                """
+                input_shape could be:
+                    List[int]: single shape. cos
+                    List[List[int]]: multiple inputs. add
+                    List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+                """
+                if isinstance(test_shape[0], int):
+                    test_shape = [test_shape]
+                try:
+                    reports = backend_instance.perf(test_shape, test_dtype)
+                except Exception as e:
+                    traceback.print_exc()
+                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                    reports = {}
+
+                result_list.append(ResultItem(test_instance, reports))
 
         if rank == 0:
+            print(f"{len(result_list)} tasks finished.")
+
             dtype_results_mapping = {}
             for result in output_result_list:
                 if result.config.dtype not in dtype_results_mapping:
