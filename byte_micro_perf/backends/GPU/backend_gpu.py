@@ -35,7 +35,6 @@ log = logging.getLogger("PerfEngine")
 
 
 class BackendGPU(Backend):
-
     def get_device_count(self):
         return torch.cuda.device_count()
 
