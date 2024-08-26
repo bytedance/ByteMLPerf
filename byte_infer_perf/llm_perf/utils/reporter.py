@@ -68,6 +68,7 @@ class Reporter:
         max_new_tokens: int,
         test_perf: bool,
         test_accuracy: bool,
+        version: str="",
     ) -> None:
         self._running: bool = False
         self.cond: threading.Condition = threading.Condition()
@@ -87,12 +88,15 @@ class Reporter:
         self.tp_size = tp_size
         self.batch_size = batch_size
         self.input_tokens = input_tokens
+        self.version = version
 
         # result template
         self.result: Dict[str, Any] = {
             "Model": self.task,
             "Backend": self.backend,
             "Host Info": get_cpu_name(),
+            "Version": self.version,
+            "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
             "Min New Tokens": min_new_tokens,
             "Max New Tokens": max_new_tokens,
             "Accuracy": {"PPL": [], "Token Diff": {}, "Logits Diff": {}},

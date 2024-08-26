@@ -212,16 +212,26 @@ class PerfEngine:
         self.old_os_path = os.environ["PATH"]
         self.prev_sys_path = list(sys.path)
         self.real_prefix = sys.prefix
+        self.version = self.get_version()
+
+    def get_version(self):
+        version = ""
+        try:
+            version_file = os.path.join(str(BYTE_MLPERF_ROOT), "../VERSION")
+            with open(version_file) as f:
+                _version = f.read().splitlines()
+            version = '.'.join(v.split('=')[1] for v in _version)
+        except Exception as e:
+            traceback.print_exc()
+            log.warning(f"get bytemlperf version failed, error msg: {e}")
+        return version
 
     def get_cpu_name(self):
         command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
         cpu_name = subprocess.check_output(command, shell=True)
         return cpu_name.decode().strip()
 
-
-
     def start_engine(self) -> None:
-
         if self.args.activate_venv:
             self.activate_venv(self.backend_type)
 
@@ -270,7 +280,6 @@ class PerfEngine:
             for shape in shape_list:
                 test_list.append(ConfigInstance(dtype, shape, case_index))
                 case_index = case_index + 1
-
         
         try:
             mp.set_start_method("spawn", force=True)
@@ -286,10 +295,6 @@ class PerfEngine:
             instance_num = device_count if group == 1 else group
             if self.workload["operator"] in ["device2host", "host2device"]:
                 instance_num = 1
-
-
-
-
 
             input_queues = mp.Queue()
             output_queues = mp.Queue(maxsize=1)
@@ -308,15 +313,12 @@ class PerfEngine:
                     assert "ready" == output_queues.get()
                 log.info("all ranks are ready and listening, init done")
 
-
-
                 if group == 1:
                     for test_instance in test_list:
                         input_queues.put(test_instance, True)
 
                     for _ in range(instance_num):
                         input_queues.put("end", True)
-
 
                 for process in _subprocesses.processes:
                     process.join()
@@ -330,9 +332,6 @@ class PerfEngine:
         if self.args.activate_venv:
             self.deactivate_venv()
 
-
-
-
     def perf_func(self, rank: int, *args):
         backend_instance = self.backend_class(self.workload, self.args.vendor_path)
         op_name = self.workload["operator"]
@@ -342,7 +341,6 @@ class PerfEngine:
         # set device accroding to local_rank
         set_device_func = getattr(backend_instance, "set_device")
         set_device_func(rank)
-        
 
         if world_size > 1:
             init_ccl_func = getattr(backend_instance, "initialize_ccl")
@@ -353,7 +351,6 @@ class PerfEngine:
             op()
         else:
             raise ValueError(f"Unknown operation: {op_name.lower()}")
-
 
         output_queues.put("ready")
 
@@ -396,7 +393,6 @@ class PerfEngine:
 
             result_list = sorted(output_result_list, key=lambda x: x.config.index)
 
-
         elif group_size > 1:
             for i, test_instance in enumerate(test_list):
                 if rank == 0:
@@ -421,7 +417,6 @@ class PerfEngine:
 
                 result_list.append(ResultItem(test_instance, reports))
 
-
         if rank == 0:
             print(f"{len(result_list)} tasks finished.")
 
@@ -439,9 +434,11 @@ class PerfEngine:
                     "Backend": self.backend_type,
                     "Host Info": self.get_cpu_name(),
                     "Device Info": getattr(self.backend, "get_device_name")(),
+                    "Version": self.version,
+                    "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "Performance": [result.report for result in dtype_results_mapping[dtype]]
                 }
-                
+
                 filename = (
                     f"result-{str(dtype)}"
                     + (
@@ -460,8 +457,6 @@ class PerfEngine:
             destroy_group_func()
 
         return True
-                
-
 
     def activate_venv(self, hardware_type: str) -> bool:
         if os.path.exists("backends/" + hardware_type + "/requirements.txt"):
