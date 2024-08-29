@@ -148,6 +148,11 @@ class Backend(ABC):
     def cast(self):
         pass
 
+    def log(self):
+        pass
+
+    def sqrt(self):
+        pass
 
     # binary ops
     def add(self):

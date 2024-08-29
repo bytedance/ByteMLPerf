@@ -110,7 +110,7 @@ if __name__ == "__main__":
         if task in ["gemm", "gemv", "batch_gemm", "group_gemm"]:
             task_mapping["gemm_ops"].append(task)
 
-        if task in ["sin", "cos", "exp", "exponential", "silu", "gelu", "swiglu", "cast"]:
+        if task in ["sin", "cos", "exp", "exponential", "silu", "gelu", "swiglu", "cast", "log", "sqrt"]:
             task_mapping["unary_ops"].append(task)
 
         if task in ["add", "mul", "sub", "div"]:

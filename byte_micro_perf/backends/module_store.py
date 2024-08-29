@@ -403,6 +403,24 @@ class CastOp(torch.nn.Module):
         return result
 
 
+class LogOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.log(input_tensors)
+        return result
+
+
+class SqrtOp(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input_tensors):
+        result = torch.sqrt(input_tensors)
+        return result
+
+
 class AddOp(torch.nn.Module):
     def __init__(self):
         super().__init__()

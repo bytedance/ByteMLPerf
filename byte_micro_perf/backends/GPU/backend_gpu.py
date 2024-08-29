@@ -133,6 +133,11 @@ class BackendGPU(Backend):
     def cast(self):
         self.op = CastOp()
 
+    def log(self):
+        self.op = LogOp()
+
+    def sqrt(self):
+        self.op = SqrtOp()
 
     # binary ops
     def add(self):
