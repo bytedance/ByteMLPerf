@@ -175,28 +175,36 @@ class GroupGemmOp(torch.nn.Module):
 
 
 class Host2DeviceOp(torch.nn.Module):
-    def __init__(self, xpu_device):
+    def __init__(self):
         super().__init__()
-        self.xpu_device = xpu_device
 
-    def process_inputs(self, input_tensors):
-        new_inputs = input_tensors.cpu()
-        return [new_inputs]
+    def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
+        host_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device="cpu")
+        device_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device=xpu_device)
+        return [host_tensor, device_tensor]
 
     def forward(self, input_tensors):
-        assert input_tensors.device.type == "cpu"
-        output_xpu = input_tensors.to(self.xpu_device)
-        return output_xpu
+        host_tensor = input_tensors[0]
+        device_tensor = input_tensors[1]
+        device_tensor.copy_(host_tensor, non_blocking=True)
+        return device_tensor
 
 
 class Device2HostOp(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
+    def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
+        device_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device=xpu_device)
+        host_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device="cpu")
+        return [device_tensor, host_tensor]
+
     def forward(self, input_tensors):
-        assert input_tensors.device.type != "cpu"
-        output_cpu = input_tensors.cpu()
-        return output_cpu
+        device_tensor = input_tensors[0]
+        host_tensor= input_tensors[1]
+        host_tensor.copy_(device_tensor, non_blocking=True)
+        return host_tensor
+
 
 
 class AllReduceOp(torch.nn.Module):

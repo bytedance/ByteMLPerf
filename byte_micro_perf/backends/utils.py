@@ -174,7 +174,7 @@ def dump_computation_ops_report(
     batch_size, total_io_amount, read_io_amount, write_io_amount = get_io_amount(op_name, input_shapes, dtype)
 
     if error == "":
-        qps = round(1000 / latency * batch_size, 2)
+        qps = round(1e6 / latency * batch_size, 2)
         algo_bw = total_io_amount / latency / 1e3
 
         bandwidth_utils = None

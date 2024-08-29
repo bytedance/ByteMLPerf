@@ -34,7 +34,8 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("PerfEngine")
 
 
-class BackendGPU(Backend):
+class BackendAMD(Backend):
+
     def get_device_count(self):
         return torch.cuda.device_count()
 
@@ -77,34 +78,29 @@ class BackendGPU(Backend):
 
     # device/host ops
     def host2device(self):
-        self.op = Host2DeviceOp()
+        self.op = Host2DeviceOp(torch.device("cuda"))
 
     def device2host(self):
         self.op = Device2HostOp()
 
+
     # communication ops
     def allreduce(self):
-        self.setup_2d_group()
         self.op = AllReduceOp(self.group)
 
     def allgather(self):
-        self.setup_2d_group()
         self.op = AllGatherOp(self.group)
 
     def reducescatter(self):
-        self.setup_2d_group()
         self.op = ReduceScatterOp(self.group)
 
     def alltoall(self):
-        self.setup_2d_group()
         self.op = AllToAllOp(self.group)
 
     def broadcast(self):
-        self.setup_2d_group()
         self.op = BroadcastOp(self.group)
 
     def p2p(self):
-        self.setup_2d_group()
         self.op = P2POp(self.group, self.ranks, self.rank)
 
     # compute ops
@@ -210,7 +206,6 @@ class BackendGPU(Backend):
             element_num = 2 * sum([math.prod(shape) for shape in input_shapes])
             bytes_per_cnt = dtype_size * element_num
 
-
         # compute max avail tensors for compute
         avail_bytes = (self.memory_limit - 4) * 1024**3
         avail_cnts = avail_bytes // bytes_per_cnt
@@ -253,14 +248,16 @@ class BackendGPU(Backend):
         torch.cuda.synchronize()
         return True
 
-
     def initialize_ccl(self, rank, world_size):
         """
         initialize distributed process groups and relevant ENVs
         """
-
-        # set cuda device
-        torch.cuda.set_device(rank)
+        # check device_count
+        device_count = torch.cuda.device_count()
+        if world_size > device_count:
+            world_size = device_count
+        if rank >= world_size:
+            return False
 
         # set envs
         os.environ["MASTER_ADDR"] = "127.0.0.1"
@@ -269,36 +266,32 @@ class BackendGPU(Backend):
         os.environ["RANK"] = str(rank)
         os.environ["WORLD_SIZE"] = str(world_size)
 
+        torch.cuda.set_device(rank)
+
         # Call the init process
+        timeout_seconds = int(os.environ.get("MEGATRON_NCCL_TIMEOUT_SECOND", 30))
         torch.distributed.init_process_group(
             backend="nccl",
             world_size=world_size,
-            rank=rank
+            rank=rank,
+            store=None,
+            timeout=timedelta(seconds=timeout_seconds),
         )
-
-        # create group
         self.setup_2d_group()
-
-        log.info(f"DIST: rank {rank}, world_size {world_size}")
+        log.warning("DIST: rank {}, world_size {}".format(rank, world_size))
         return True
 
-
     def setup_2d_group(self):
-        # get rank and set device
         self.rank = dist.get_rank()
         torch.cuda.set_device(self.rank)
-
         origin_store_based_barrier = dist_c10d._store_based_barrier
         dist_c10d._store_based_barrier = lambda *a, **kw: None
-
         self.world_size = dist.get_world_size()
         self.ranks = range(0, self.world_size)
         group = dist.new_group(self.ranks)
         if self.rank in self.ranks:
             self.group = group
-
         dist_c10d._store_based_barrier = origin_store_based_barrier
-
         # wait for all ranks finish group initializing
         torch.distributed.barrier()
 
