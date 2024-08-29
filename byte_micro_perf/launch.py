@@ -185,11 +185,12 @@ if __name__ == "__main__":
                 shell=True
             )
 
-    # create run log
+
+    outputs_dir = pathlib.Path(BYTE_MLPERF_ROOT).joinpath("reports", args.hardware_type)
+    if not outputs_dir.exists():
+        outputs_dir.mkdir(parents=True)
     with open(f"{BYTE_MLPERF_ROOT}/reports/{args.hardware_type}/_run_report.log", "w") as file:
         pass
-
-
 
 
     # terminate task perf process
