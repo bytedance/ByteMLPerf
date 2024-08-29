@@ -77,11 +77,10 @@ class BackendGPU(Backend):
 
     # device/host ops
     def host2device(self):
-        self.op = Host2DeviceOp(torch.device("cuda"))
+        self.op = Host2DeviceOp()
 
     def device2host(self):
         self.op = Device2HostOp()
-
 
     # communication ops
     def allreduce(self):
@@ -210,6 +209,7 @@ class BackendGPU(Backend):
             dtype_size = get_dtype_bytes(dtype)
             element_num = 2 * sum([math.prod(shape) for shape in input_shapes])
             bytes_per_cnt = dtype_size * element_num
+
 
         # compute max avail tensors for compute
         avail_bytes = (self.memory_limit - 4) * 1024**3

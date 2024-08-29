@@ -18,6 +18,7 @@ import argparse
 import pathlib
 import logging
 import subprocess
+import signal
 
 CUR_DIR = pathlib.Path.cwd().absolute()
 BYTE_MLPERF_ROOT = pathlib.Path(__file__).parent.absolute()
@@ -184,16 +185,55 @@ if __name__ == "__main__":
                 shell=True
             )
 
-    failed_tasks = []
+    # create run log
+    with open(f"{BYTE_MLPERF_ROOT}/reports/{args.hardware_type}/_run_report.log", "w") as file:
+        pass
+
+
+
+
+    # terminate task perf process
+    subprocess_pid = -1
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, exiting...")
+        if subprocess_pid != -1:
+            logger.info(f"terminate subprocess: {subprocess_pid}")
+            os.kill(subprocess_pid, signal.SIGTERM)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+
+    failed_ops = []
     for task in test_cases:
+        cmds = [
+            "python3", 
+            "./core/perf_engine.py", 
+            "--hardware_type", 
+            args.hardware_type,
+            "--task",
+            task,
+            "--vendor_path",
+            str(args.vendor_path),
+            "--task_dir",
+            str(args.task_dir)
+        ]
+        if args.activate_venv:
+            cmds.append("--activate_venv")
 
-        activate_venv = "--activate_venv" if args.activate_venv else ""
+        process = subprocess.Popen(cmds)
+        subprocess_pid = process.pid
+        logger.info(f"start subprocess: {subprocess_pid}")
 
-        cmd = f"python3 ./core/perf_engine.py --hardware_type {args.hardware_type} --task {task} --vendor_path {args.vendor_path} --task_dir {args.task_dir} {activate_venv}"
-        exit_code = subprocess.call(cmd, shell=True)
-        if exit_code != 0:
-            failed_tasks.append(task)
+        ret = process.wait()
+        if ret != 0:
+            failed_ops.append(task)
         
-    if failed_tasks:
-        logger.error(f"Failed tasks: {failed_tasks}")
+        subprocess_pid = -1
+    
+    if failed_ops:
+        logger.error(f"Failed ops: {failed_ops}")
         exit(1)
+    else:
+        logger.info("All ops passed")
