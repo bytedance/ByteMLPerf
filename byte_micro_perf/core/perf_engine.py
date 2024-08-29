@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import time
+import signal
 import argparse
 import importlib
 import logging
@@ -38,7 +39,7 @@ sys.path.insert(0, BYTE_MLPERF_ROOT.__str__())
 from backends.backend import Backend
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("PerfEngine")
+logger = logging.getLogger("PerfEngine")
 
 
 def get_args():
@@ -94,7 +95,7 @@ def load_workload(task: str, task_dir: str) -> Dict[str, Any]:
         workload_dict = json.loads(file.read_text())
 
     if not workload_dict:
-        log.error(f"could not find {task}.json in {modules_dir}.")
+        logger.error(f"could not find {task}.json in {modules_dir}.")
         exit(1)
 
     return workload_dict
@@ -223,7 +224,7 @@ class PerfEngine:
             version = '.'.join(v.split('=')[1] for v in _version)
         except Exception as e:
             traceback.print_exc()
-            log.warning(f"get bytemlperf version failed, error msg: {e}")
+            logger.warning(f"get bytemlperf version failed, error msg: {e}")
         return version
 
     def get_cpu_name(self):
@@ -237,7 +238,7 @@ class PerfEngine:
 
         # init backend
         hardware_type = self.backend_type
-        log.info("Loading Heterogeneous Backend: {}".format(hardware_type))
+        logger.info("Loading Heterogeneous Backend: {}".format(hardware_type))
         
         backend_module = importlib.import_module(
             "backends." + hardware_type + ".backend_" + hardware_type.lower())
@@ -245,15 +246,15 @@ class PerfEngine:
         self.backend = self.backend_class(self.workload, self.args.vendor_path)
 
         # start process task
-        log.info(
+        logger.info(
             "******************************************* Start to test op: [{}]. *******************************************".format(
                 self.workload["operator"]
             )
         )
 
         # create output dir based on task
-        output_dir = BYTE_MLPERF_ROOT.joinpath(
-            "reports", self.backend_type, self.workload["operator"])
+        hardware_reports_dir = BYTE_MLPERF_ROOT.joinpath("reports", self.backend_type)
+        output_dir = BYTE_MLPERF_ROOT.joinpath("reports", self.backend_type, self.workload["operator"])
         output_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -271,7 +272,7 @@ class PerfEngine:
         shape_list = parse_workload(self.workload)
 
         if not group_list or not dtype_list or not shape_list:
-            log.error("empty group/dtype/shape")
+            logger.error("empty group/dtype/shape")
             exit(1)
 
         test_list = []
@@ -285,12 +286,26 @@ class PerfEngine:
             mp.set_start_method("spawn", force=True)
         except Exception as e:
             traceback.print_exc()
-            log.error(f"Set start method failed, error msg: {e}")
+            logger.error(f"Set start method failed, error msg: {e}")
+
+
+        # terminate subprocesses
+        subprocess_pids = []
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, exiting...")
+            if subprocess_pids:
+                for pid in subprocess_pids:
+                    logger.info(f"terminate subprocess: {pid}")
+                    os.kill(pid, signal.SIGTERM)
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
 
 
         # all operations will enter subprocess to test in parallel
         for group in group_list:
-            log.info(f"Start to test group size: {group}")
+            logger.info(f"Start to test group size: {group}")
             # TODO: test allreduce/allgather in parallel
             instance_num = device_count if group == 1 else group
             if self.workload["operator"] in ["device2host", "host2device"]:
@@ -308,10 +323,15 @@ class PerfEngine:
                     daemon=False
                 )
 
-                log.info("waiting for ranks to be ready")
+                subprocess_pids = _subprocesses.pids()
+                logger.info(f"subprocess pids: {subprocess_pids}")
+
+
+
+                logger.info("waiting for ranks to be ready")
                 for _ in range(instance_num):
                     assert "ready" == output_queues.get()
-                log.info("all ranks are ready and listening, init done")
+                logger.info("all ranks are ready and listening, init done")
 
                 if group == 1:
                     for test_instance in test_list:
@@ -322,11 +342,18 @@ class PerfEngine:
 
                 for process in _subprocesses.processes:
                     process.join()
-
+  
+                with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                    print(f"[success] {self.args.task}, group_size={group}", file=f)
             except Exception as e:
                 traceback.print_exc()
-                log.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
+                logger.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
 
+                with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                    print(f"[error] {self.args.task}, group_size={group}", file=f)
+
+
+            subprocess_pids = []
             time.sleep(1)
 
         if self.args.activate_venv:
@@ -377,7 +404,7 @@ class PerfEngine:
                     reports = backend_instance.perf(test_shape, test_dtype)
                 except Exception as e:
                     traceback.print_exc()
-                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                    logger.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
                     reports = {}
 
                 result_list.append(ResultItem(test_instance, reports))
@@ -412,7 +439,7 @@ class PerfEngine:
                     reports = backend_instance.perf(test_shape, test_dtype)
                 except Exception as e:
                     traceback.print_exc()
-                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                    logger.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
                     reports = {}
 
                 result_list.append(ResultItem(test_instance, reports))
@@ -460,12 +487,12 @@ class PerfEngine:
 
     def activate_venv(self, hardware_type: str) -> bool:
         if os.path.exists("backends/" + hardware_type + "/requirements.txt"):
-            log.info("Activating Virtual Env for " + hardware_type)
+            logger.info("Activating Virtual Env for " + hardware_type)
 
             venv_dir = os.path.join("backends", hardware_type + "/venv")
             activate_file = os.path.join(venv_dir, "bin", "activate_this.py")
             if not os.path.exists(venv_dir):
-                log.info("venv not exist, Creating Virtual Env for " + hardware_type)
+                logger.info("venv not exist, Creating Virtual Env for " + hardware_type)
 
                 virtualenv.create_environment(venv_dir, True)
 
