@@ -211,10 +211,17 @@ class BackendGPU(Backend):
             bytes_per_cnt = dtype_size * element_num
 
 
-        # compute max avail tensors for compute
-        avail_bytes = (self.memory_limit - 4) * 1024**3
-        avail_cnts = avail_bytes // bytes_per_cnt
-        max_data_cnt = min(self.iterations, avail_cnts)
+        # avoid use L2 Cache: assume 256 MB currently
+        # data_per_cnt > 256 MB, only one buffer
+        # data_per_cnt < 256 MB, malloc multiple buffer to exceed 256MB, and use first and last buffer
+
+        assume_l2_cache_size = 256 * 1024**2
+        if bytes_per_cnt > self.memory_limit * 0.9 * 1024 ** 3:
+            return [], 0, bytes_per_cnt
+        elif bytes_per_cnt > assume_l2_cache_size:
+            max_data_cnt = 1
+        else:
+            max_data_cnt = math.ceil(assume_l2_cache_size / bytes_per_cnt)
 
         # create input tensors for each op
         input_tensors_list = []
@@ -241,7 +248,17 @@ class BackendGPU(Backend):
                 self.op.process_inputs(*(input_tensor))
                 for input_tensor in input_tensors_list
             ]
-        return input_tensors_list, max_data_cnt, bytes_per_cnt
+
+
+        if max_data_cnt > 2:
+            max_data_cnt = 2
+            new_tensor_list = []
+            new_tensor_list.append(input_tensors_list[0])
+            new_tensor_list.append(input_tensors_list[-1])
+        else:
+            new_tensor_list = input_tensors_list
+
+        return new_tensor_list, max_data_cnt, bytes_per_cnt
 
 
 

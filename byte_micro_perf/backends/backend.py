@@ -222,30 +222,17 @@ class Backend(ABC):
 
         if tensor_cnt > 0:
             try:
-                # random select input tensors
-                input_index_list = [
-                    random.randint(0, tensor_cnt - 1) for _ in range(self.iterations)
-                ]
-
                 # warmup
                 num_warm_up = 10
                 for _ in range(num_warm_up):
                     self._run_operation(self.op, tensor_list[0])
 
-
-                # ccl ops need barrier
-                if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
-                    self.barier()
-
                 # test perf
-                num_test_perf = 5
+                num_test_perf = 10
                 self.device_synchronize()
                 start_time = time.perf_counter_ns()
                 for i in range(num_test_perf):
-                    self._run_operation(
-                        self.op,
-                        tensor_list[input_index_list[i]]
-                    )
+                    self._run_operation(self.op, tensor_list[0])
                 self.device_synchronize()
                 end_time = time.perf_counter_ns()
 
@@ -257,7 +244,6 @@ class Backend(ABC):
                 else:
                     prefer_iterations = min(max(int(max_perf_seconds // op_duration), 10), self.iterations)
 
-
                 # ccl ops need barrier
                 if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p"]:
                     self.barier()
@@ -266,10 +252,7 @@ class Backend(ABC):
                 self.device_synchronize()
                 start_time = time.perf_counter_ns()
                 for i in range(prefer_iterations):
-                    self._run_operation(
-                        self.op,
-                        tensor_list[input_index_list[i]]
-                    )
+                    self._run_operation(self.op, tensor_list[i % tensor_cnt])
                 self.device_synchronize()
                 end_time = time.perf_counter_ns()
 

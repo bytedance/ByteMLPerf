@@ -183,9 +183,7 @@ class Host2DeviceOp(torch.nn.Module):
         device_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device=xpu_device)
         return [host_tensor, device_tensor]
 
-    def forward(self, input_tensors):
-        host_tensor = input_tensors[0]
-        device_tensor = input_tensors[1]
+    def forward(self, host_tensor, device_tensor):
         device_tensor.copy_(host_tensor, non_blocking=True)
         return device_tensor
 
@@ -199,9 +197,7 @@ class Device2HostOp(torch.nn.Module):
         host_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device="cpu")
         return [device_tensor, host_tensor]
 
-    def forward(self, input_tensors):
-        device_tensor = input_tensors[0]
-        host_tensor= input_tensors[1]
+    def forward(self, device_tensor, host_tensor):
         host_tensor.copy_(device_tensor, non_blocking=True)
         return host_tensor
 
