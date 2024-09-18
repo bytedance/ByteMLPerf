@@ -1,5 +1,6 @@
 import os
-import atexit
+import sys
+import signal
 from abc import ABC, abstractmethod
 
 import torch.nn as nn
@@ -24,9 +25,16 @@ class CoreMpEngine(ABC):
             mp.set_start_method("spawn", force=True)
         except Exception as e:
             logger.exception(f"failed to set spawn context: {e}")
+            sys.exit(-1)
+        self._subprocesses = None
+        
 
-        self._input_queues = mp.Queue(maxsize=self.world_size)
-        self._output_queues = mp.Queue(maxsize=1)
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, exiting...")
+            self.clean_subprocess()
+            sys.exit(0)
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
 
         if os.getenv("MASTER_PORT", "") == "":
             os.environ["MASTER_PORT"] = str(self.find_free_port())
@@ -34,8 +42,10 @@ class CoreMpEngine(ABC):
         if os.getenv("MASTER_ADDR", "") == "":
             os.environ["MASTER_ADDR"] = "localhost"
 
+        self._input_queues = mp.Queue(maxsize=self.world_size)
+        self._output_queues = mp.Queue(maxsize=1)
         self._subprocesses = mp.spawn(
-            self.mp_loop_worker,
+            fn=self.mp_loop_worker,
             args=(
                 world_size,
                 self._input_queues,
@@ -47,25 +57,29 @@ class CoreMpEngine(ABC):
             join=False,
             daemon=False,
         )
+        self._subprocess_pids = self._subprocesses.pids()
+        logger.info(f"subprocesses created: {self._subprocess_pids}")
 
         logger.info("waiting for ranks to be ready")
-        for i in range(world_size):
+        for _ in range(world_size):
             assert "ready" == self._output_queues.get(block=True)
 
         logger.info("all ranks are ready and listening, init done")
 
-        atexit.register(self.kill)
 
     def __del__(self):
-        self.kill()
+        self.clean_subprocess()
 
-    def kill(self):
+    def clean_subprocess(self):
         try:
-            for p in self._subprocesses.processes:
-                if p.is_alive():
-                    p.terminate()
+            if self._subprocesses is not None:
+                for p in self._subprocesses.processes:
+                    if p.is_alive():
+                        logger.info(f"terminate subprocess: {p.pid}")
+                        p.terminate()
         except Exception as e:
             logger.exception(f"{e}, failed to terminate torch mp, which may cause mem leak; ignored...")
+
 
     def find_free_port(self):
         import socket

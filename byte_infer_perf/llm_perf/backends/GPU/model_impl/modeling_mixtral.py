@@ -894,7 +894,11 @@ class MixtralSparseMoeBlock(nn.Module):
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, 
+        hidden_states: torch.Tensor, 
+        **kwargs
+    ) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
@@ -918,10 +922,18 @@ class MixtralSparseMoeBlock(nn.Module):
         # this will be used to easily index which expert is going to be sollicitated
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
 
+        log_file = kwargs.get("log_file", None)
+        non_zero_num = 0
+        tokens_list = []
+
         # Loop over all available experts in the model and perform the computation on each expert
         for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
+
+            if top_x.shape[0] > 0:
+                non_zero_num += 1
+            tokens_list.append(top_x.shape[0])
 
             # Index the correct hidden states and compute the expert hidden state for
             # the current expert. We need to make sure to multiply the output hidden
@@ -932,6 +944,10 @@ class MixtralSparseMoeBlock(nn.Module):
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
+
+        if log_file is not None:
+            print(f"num_enabled_experts={non_zero_num}, tokens_distribution={tokens_list}", file=log_file, flush=True)
+
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
 
@@ -1005,7 +1021,7 @@ class MixtralDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+        hidden_states, router_logits = self.block_sparse_moe(hidden_states, **kwargs)
         if self.mp_size > 1:
             dist.all_reduce(hidden_states)
         hidden_states = residual + hidden_states
@@ -1177,21 +1193,41 @@ class MixtralModel(MixtralPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
+        if kwargs.pop("override_hidden_states", False):
+            random_seed = kwargs.pop("random_seed", 1)
+            layer_index = kwargs.pop("fixed_layer_index", -1)
+            layer_index = layer_index % len(self.layers)
 
-        hidden_states = self.embed_tokens(input_ids)
+            # create random input ids on cpu and copy to device
+            torch.manual_seed(random_seed)
+            random_input_ids = torch.randint(10, self.vocab_size, input_ids.shape, dtype=torch.int64, device="cpu").to(input_ids.device)
 
-        for decoder_layer in self.layers:
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_values,
-                output_attentions=False,
-                output_router_logits=False,
-                use_cache=False,
-                **kwargs,
-            )
-            hidden_states = layer_outputs[0]
+            hidden_states = self.embed_tokens(random_input_ids)
+            for _ in self.layers:
+                layer_outputs = self.layers[layer_index](
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=False,
+                    output_router_logits=False,
+                    use_cache=False,
+                    **kwargs,
+                )
+        else:
+            hidden_states = self.embed_tokens(input_ids)
+            for decoder_layer in self.layers:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=False,
+                    output_router_logits=False,
+                    use_cache=False,
+                    **kwargs,
+                )
+                hidden_states = layer_outputs[0]
 
         hidden_states = self.norm(hidden_states)
 

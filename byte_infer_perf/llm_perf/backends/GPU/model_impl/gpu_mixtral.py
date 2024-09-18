@@ -124,6 +124,10 @@ class GPUMixtral(nn.Module):
         if self.mp_size > 1:
             dist.barrier()
 
+    def finalize_inference(self):
+        if self.mp_size > 1 and dist.is_initialized():
+            dist.destroy_process_group()
+
     def load_weight(self, ckpt_path):
         p_loader = GPUMixtralLoader(self.transformer_model, self.mixtral_config, ckpt_path)
         p_loader.parallel_loader()
