@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import time
+import datetime
 import signal
 import argparse
 import importlib
@@ -31,30 +32,23 @@ from collections import namedtuple
 import torch.multiprocessing as mp
 import virtualenv
 
-CUR_DIR = pathlib.Path.cwd()
-FILE_DIR = pathlib.Path(sys.path[0])
+import torch
+
+# directory config
+CUR_DIR = pathlib.Path.cwd().absolute()
+FILE_DIR = pathlib.Path(__file__).parent.absolute()
 BYTE_MLPERF_ROOT = FILE_DIR.parent
-sys.path.insert(0, BYTE_MLPERF_ROOT.__str__())
+sys.path.insert(0, str(BYTE_MLPERF_ROOT))
 
-from backends.backend import Backend
-
+# logger config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("PerfEngine")
 
 
 def get_args():
-    """Parse commandline."""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--task",
-        default="gemm",
-        help="The task going to be evaluted, refs to workloads/",
-    )
-    parser.add_argument(
-        "--task_dir",
-        default=str(BYTE_MLPERF_ROOT.joinpath("workloads")),
-        help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
-    )
+
+    # hardware config
     parser.add_argument(
         "--hardware_type",
         default="GPU",
@@ -62,8 +56,26 @@ def get_args():
     )
     parser.add_argument(
         "--vendor_path",
-        required=False,
         help="The hardware configs need to be loaded, refs to vendor_zoo/NVIDIA/A100-PCIe.json",
+    )
+
+    # task config
+    parser.add_argument(
+        "--task_dir",
+        default=str(BYTE_MLPERF_ROOT.joinpath("workloads")),
+        help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
+    )
+    parser.add_argument(
+        "--task",
+        default="gemm",
+        help="The task going to be evaluted, refs to workloads/",
+    )
+
+    # feature control
+    parser.add_argument(
+        "--parallel", 
+        type=int, default=1, 
+        help="Run all tasks in parallel if available"
     )
     parser.add_argument(
         "--activate_venv", 
@@ -253,8 +265,14 @@ class PerfEngine:
         )
 
         # create output dir based on task
-        hardware_reports_dir = BYTE_MLPERF_ROOT.joinpath("reports", self.backend_type)
-        output_dir = BYTE_MLPERF_ROOT.joinpath("reports", self.backend_type, self.workload["operator"])
+        # {BYTEMLPERF_ROOT}/byte_micro_perf/reports/{backend_type}/{task_name}
+        hardware_reports_dir = BYTE_MLPERF_ROOT.joinpath(
+            "reports", self.backend_type
+        )
+        output_dir = BYTE_MLPERF_ROOT.joinpath(
+            "reports", self.backend_type, 
+            self.workload["operator"]
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -281,7 +299,7 @@ class PerfEngine:
             for shape in shape_list:
                 test_list.append(ConfigInstance(dtype, shape, case_index))
                 case_index = case_index + 1
-        
+
         try:
             mp.set_start_method("spawn", force=True)
         except Exception as e:
@@ -305,9 +323,8 @@ class PerfEngine:
 
         # all operations will enter subprocess to test in parallel
         for group in group_list:
-            logger.info(f"Start to test group size: {group}")
-            # TODO: test allreduce/allgather in parallel
-            instance_num = device_count if group == 1 else group
+            logger.info(f"Start to test group size: {group}")       
+            instance_num = min(device_count, max(1, self.args.parallel)) if group == 1 else group
             if self.workload["operator"] in ["device2host", "host2device"]:
                 instance_num = 1
 
@@ -333,6 +350,9 @@ class PerfEngine:
                     assert "ready" == output_queues.get()
                 logger.info("all ranks are ready and listening, init done")
 
+
+                start_time = time.perf_counter_ns()
+
                 if group == 1:
                     for test_instance in test_list:
                         input_queues.put(test_instance, True)
@@ -342,15 +362,32 @@ class PerfEngine:
 
                 for process in _subprocesses.processes:
                     process.join()
+
+                end_time = time.perf_counter_ns()
+                duration = (end_time - start_time) / 1e9
+                duration = round(duration, 3)
   
-                with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
-                    print(f"[success] {self.args.task}, group_size={group}", file=f)
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                ret_code = 0
+                for process in _subprocesses.processes:
+                    if process.exitcode != 0:
+                        ret_code = process.exitcode
+                        break
+                
+                if ret_code != 0:
+                    with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                        print(f"[failed] {self.args.task}, group_size={group}, {current_time}, {duration} s", file=f)
+                else:
+                    with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                        print(f"[success] {self.args.task}, group_size={group}, {current_time}, {duration} s", file=f)
+            
             except Exception as e:
                 traceback.print_exc()
                 logger.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
 
                 with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
-                    print(f"[error] {self.args.task}, group_size={group}", file=f)
+                    print(f"[error] {self.args.task}, group_size={group}, {current_time}, {duration} s", file=f)
 
 
             subprocess_pids = []
@@ -388,7 +425,8 @@ class PerfEngine:
                 if test_instance == "end":
                     break           
                 
-                print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}")
+
+                start_time = time.perf_counter_ns()
 
                 test_dtype = test_instance.dtype
                 test_shape = test_instance.tensor_shapes
@@ -407,7 +445,12 @@ class PerfEngine:
                     logger.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
                     reports = {}
 
-                result_list.append(ResultItem(test_instance, reports))
+                if reports and "Error" not in reports:
+                    result_list.append(ResultItem(test_instance, reports))
+
+                duration = (time.perf_counter_ns() - start_time) / 1e9
+                duration = round(duration, 3)
+                print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}, duration: {duration} s")
 
             output_result_list = []
             if world_size > 1:
@@ -422,8 +465,8 @@ class PerfEngine:
 
         elif group_size > 1:
             for i, test_instance in enumerate(test_list):
-                if rank == 0:
-                    print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}")
+                
+                start_time = time.perf_counter_ns()
 
                 test_dtype = test_instance.dtype
                 test_shape = test_instance.tensor_shapes
@@ -443,6 +486,13 @@ class PerfEngine:
                     reports = {}
 
                 result_list.append(ResultItem(test_instance, reports))
+
+                end_time = time.perf_counter_ns()
+                duration = (end_time - start_time) / 1e9
+                duration = round(duration, 3)
+
+                if rank == 0:
+                    print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}, duration: {duration} s")
 
         if rank == 0:
             print(f"{len(result_list)} tasks finished.")

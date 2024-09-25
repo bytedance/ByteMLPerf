@@ -154,7 +154,7 @@ class CoreScheduler(ABC):
             + "/"
             + str(random.randint(0, 100))
             + "_"
-            + str(int(time.time()))
+            + str(int(time.time_ns()))
             + ".npy"
         )
         input_tokens_len = len(task.request.input_ids)

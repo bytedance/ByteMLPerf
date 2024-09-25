@@ -26,13 +26,13 @@
         "num_local_experts": 8,
         "output_router_logits": false,
         "rms_norm_eps": 1e-05,
-        "rope_theta": 1000000,
+        "rope_theta": 1000000.0,
         "router_aux_loss_coef": 0.001,
         "sliding_window": null,
         "tie_word_embeddings": false,
         "torch_dtype": "bfloat16",
         "transformers_version": "4.38.0",
         "use_cache": true,
-        "vocab_size": 32000
-    }
+        "vocab_size": 32768
+      }
 }

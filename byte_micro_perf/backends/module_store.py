@@ -14,7 +14,6 @@
 
 import math
 import random
-from typing import List
 
 import torch
 import torch.distributed as dist
@@ -22,6 +21,9 @@ import torch.distributed as dist
 from .utils import get_dtype_bytes
 
 
+"""
+gemm ops
+"""
 class GemmOp(torch.nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -174,17 +176,21 @@ class GroupGemmOp(torch.nn.Module):
         return output_tensor_list
 
 
+
+"""
+communication ops
+"""
 class Host2DeviceOp(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
     def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
-        host_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device="cpu")
-        device_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device=xpu_device)
+        host_tensor = torch.zeros(input_shapes[0], dtype=torch_dtype, device="cpu").pin_memory()
+        device_tensor = host_tensor.to(xpu_device)
         return [host_tensor, device_tensor]
 
     def forward(self, host_tensor, device_tensor):
-        device_tensor.copy_(host_tensor, non_blocking=True)
+        device_tensor.copy_(host_tensor)
         return device_tensor
 
 
@@ -193,14 +199,13 @@ class Device2HostOp(torch.nn.Module):
         super().__init__()
 
     def custom_create_tensors(self, input_shapes, torch_dtype, xpu_device):
-        device_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device=xpu_device)
-        host_tensor = torch.randn(input_shapes[0], dtype=torch_dtype, device="cpu")
+        host_tensor = torch.zeros(input_shapes[0], dtype=torch_dtype, device="cpu").pin_memory()
+        device_tensor = host_tensor.to(xpu_device)
         return [device_tensor, host_tensor]
 
     def forward(self, device_tensor, host_tensor):
-        host_tensor.copy_(device_tensor, non_blocking=True)
+        host_tensor.copy_(device_tensor)
         return host_tensor
-
 
 
 class AllReduceOp(torch.nn.Module):

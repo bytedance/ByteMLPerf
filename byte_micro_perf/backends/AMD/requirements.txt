@@ -1,2 +1,0 @@
--i https://download.pytorch.org/whl/rocm6.1
-torch 
