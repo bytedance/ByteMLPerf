@@ -88,6 +88,11 @@ class BackendGPU(Backend):
         self.setup_2d_group()
         return True
 
+    def log(self):
+        self.op = LogOp()
+
+    def sqrt(self):
+        self.op = SqrtOp()
 
     def setup_2d_group(self):
         # get rank and set device
