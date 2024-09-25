@@ -122,6 +122,10 @@ class GPULlama(nn.Module):
         if self.mp_size > 1:
             dist.barrier()
 
+    def finalize_inference(self):
+        if self.mp_size > 1 and dist.is_initialized():
+            dist.destroy_process_group()
+
     def load_weight(self, ckpt_path):
         p_loader = GPULlamaLoader(self.transformer_model, self.llama_config, ckpt_path)
         p_loader.parallel_loader()

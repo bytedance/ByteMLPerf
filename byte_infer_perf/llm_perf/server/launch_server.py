@@ -78,31 +78,13 @@ async def serve(port, generator: LLMPerfEndpoint) -> None:
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_config", type=str
-    )
-    parser.add_argument(
-        "--hardware_type", type=str, 
-        default="GPU"
-    )
-    parser.add_argument(
-        "--tp_size", type=int, 
-        default=1
-    )
-    parser.add_argument(
-        "--max_batch_size", type=int, 
-        default=8
-    )
-    parser.add_argument(
-        "--port", type=int, 
-        default=51000
-    )
-    parser.add_argument(
-        "--log_level", type=str, 
-        default="info"
-    )    
+    parser.add_argument("--model_config", type=str, required=True)
+    parser.add_argument("--hardware_type", type=str, default="GPU")
+    parser.add_argument("--tp_size", type=int, default=1)
+    parser.add_argument("--max_batch_size", type=int, default=8)
+    parser.add_argument("--port", type=int, default=51000)
+    parser.add_argument("--log_level", type=str, default="info")
     return parser.parse_args()
-
 
 def main():
     args = parse_args()

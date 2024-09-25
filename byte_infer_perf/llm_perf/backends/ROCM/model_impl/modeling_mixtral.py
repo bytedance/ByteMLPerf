@@ -55,6 +55,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import is_torch_fx_available
 from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 
+from ..fused_moe.fused_moe import fused_moe
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -889,7 +890,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        # self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
         # Jitter parameters
         self.jitter_noise = config.router_jitter_noise
@@ -907,53 +908,28 @@ class MixtralSparseMoeBlock(nn.Module):
 
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
-        
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        # we cast back to the input dtype
-        routing_weights = routing_weights.to(hidden_states.dtype)
-
-        final_hidden_states = torch.zeros(
-            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-
         log_file = kwargs.get("log_file", None)
-        non_zero_num = 0
-        tokens_list = []
+        final_hidden_states=hidden_states
 
-        # Loop over all available experts in the model and perform the computation on each expert
-        for expert_idx in range(self.num_experts):
-            expert_layer = self.experts[expert_idx]
-            idx, top_x = torch.where(expert_mask[expert_idx])
-
-            if top_x.shape[0] > 0:
-                non_zero_num += 1
-            tokens_list.append(top_x.shape[0])
-
-            # Index the correct hidden states and compute the expert hidden state for
-            # the current expert. We need to make sure to multiply the output hidden
-            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
-            current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state) * routing_weights[top_x, idx, None]
-
-            # However `index_add_` only support torch tensors for indexing so we'll use
-            # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
-
-        if log_file is not None:
-            print(f"num_enabled_experts={non_zero_num}, tokens_distribution={tokens_list}", file=log_file, flush=True)
+        final_hidden_states = fused_moe(hidden_states,
+                                        self.w13_weight,
+                                        self.w2_weight,
+                                        router_logits,
+                                        self.top_k,
+                                        renormalize=True,
+                                        inplace=True)
+        # if log_file is not None:
+        #     print(f"num_enabled_experts={non_zero_num}, tokens_distribution={tokens_list}", file=log_file, flush=True)
 
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        # if int(os.environ.get("LOCAL_RANK", "0"))==0:
+        #     print(f'{final_hidden_states=}')
         return final_hidden_states, router_logits
 
 
 class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: MixtralConfig, layer_idx: int):
+        self.layer_idx=layer_idx
         # dist info
         self.mp_size = int(os.environ.get("WORLD_SIZE", "1"))
         self.local_rank = int(os.environ.get("LOCAL_RANK", "0"))
@@ -1022,6 +998,8 @@ class MixtralDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states, router_logits = self.block_sparse_moe(hidden_states, **kwargs)
+        # print(f'{os.environ.get("LOCAL_RANK", "0")}:{self.layer_idx} {hidden_states.shape=}')
+        # print(f'{os.environ.get("LOCAL_RANK", "0")}:{self.layer_idx} {hidden_states=}')
         if self.mp_size > 1:
             dist.all_reduce(hidden_states)
         hidden_states = residual + hidden_states
@@ -1327,10 +1305,14 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             **kwargs,
         )
 
+        # print(f'{os.environ.get("LOCAL_RANK", "0")} {outputs=}')
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
         logits = logits.float()
-
+        # print(f'{os.environ.get("LOCAL_RANK", "0")}:{hidden_states.shape=}')
+        # print(f'{os.environ.get("LOCAL_RANK", "0")}:{hidden_states=}')
+        # print(f'{os.environ.get("LOCAL_RANK", "0")}:{logits.shape=}')
+        # print(f'{os.environ.get("LOCAL_RANK", "0")}:{logits=}')
         return MoeCausalLMOutputWithPast(
             logits=logits
         )

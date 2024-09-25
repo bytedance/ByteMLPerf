@@ -62,14 +62,47 @@ class GPUMixtralLoader(GpuCkptLoader):
             self.model.model.layers[i].post_attention_layernorm.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.post_attention_layernorm.weight"])
 
             self.model.model.layers[i].block_sparse_moe.gate.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.gate.weight"])
+
+            tmpW=self.state_dict[f"model.layers.{0}.block_sparse_moe.experts.{0}.w1.weight"]
+            ffn_dim=tmpW.shape[0]
+            hidden_dim=tmpW.shape[1]
+            self.model.model.layers[i].block_sparse_moe.w13_weight = nn.Parameter(torch.empty(self.model_config.num_local_experts,
+                                                                                                2 * ffn_dim,
+                                                                                                hidden_dim,
+                                                                                                dtype=tmpW.dtype))
+            self.model.model.layers[i].block_sparse_moe.w2_weight = nn.Parameter(torch.empty(self.model_config.num_local_experts,
+                                                                                                hidden_dim,
+                                                                                                ffn_dim,
+                                                                                                dtype=tmpW.dtype))
             for j in range(self.model_config.num_local_experts):
-                self.model.model.layers[i].block_sparse_moe.experts[j].w1.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w1.weight"])
-                self.model.model.layers[i].block_sparse_moe.experts[j].w2.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight"])
-                self.model.model.layers[i].block_sparse_moe.experts[j].w3.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w3.weight"])
+                # self.model.model.layers[i].block_sparse_moe.experts[j].w1.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w1.weight"])
+                # self.model.model.layers[i].block_sparse_moe.experts[j].w2.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight"])
+                # self.model.model.layers[i].block_sparse_moe.experts[j].w3.weight = self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w3.weight"])
+                weights=(self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w1.weight"]),
+                         self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w3.weight"]))
+                weights=torch.cat(weights, dim=0)
+                self.model.model.layers[i].block_sparse_moe.w13_weight[j][:] = weights
+
+                weights=self.to_parameter(self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight"])
+                self.model.model.layers[i].block_sparse_moe.w2_weight[j][:] = weights
+            # self.model.model.layers[i].block_sparse_moe.w13_weight.data=permute_weight(self.model.model.layers[i].block_sparse_moe.w13_weight.data)
+            # self.model.model.layers[i].block_sparse_moe.w2_weight.data =permute_weight(self.model.model.layers[i].block_sparse_moe.w2_weight.data)
 
         self.model.model.norm.weight = self.to_parameter(self.state_dict["model.norm.weight"])
         self.model.lm_head.weight = self.to_parameter(self.state_dict["lm_head.weight"])
 
+def permute_weight(x: torch.Tensor) -> torch.Tensor:
+    ## Hardcode BLOCK_K and BLOCK_N
+    BK = 128
+    BN = 128
+    x_ = x
+    x_ = x_.view(x.shape[0],
+                 x.shape[1]//BN, BN//16, 16,
+                 x.shape[2]//BK, BK//32, 4, 8)
+    x_ = x_.permute(0,1,5,2,6,4,3,7)
+    x_ = x_.contiguous()
+    x_ = x_.view(x.shape[0], x.shape[1], x.shape[2])
+    return x_
 
 class GPUMixtral(nn.Module):
     def __init__(self, xpu_cfg: Dict[str, Any]) -> None:

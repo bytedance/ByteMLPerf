@@ -1,5 +1,8 @@
 import os
+import sys
 import time
+import signal
+import pathlib
 from multiprocessing import Queue
 from typing import List
 
@@ -9,7 +12,6 @@ import torch.distributed as dist
 
 from llm_perf.core.mp_engine import CoreMpEngine
 from llm_perf.utils.logger import logger
-
 
 
 # context: 
@@ -65,6 +67,13 @@ def get_decode_masks(
     return full_attention_mask
 
 
+
+# basic TP realization mp engine
+# 1. main process send all inputs to all subprocesses
+# 2. subprocesses process inputs with same logic simultaneously and collaboratively using TP mechanism
+# 3. suppose tp = 8, rank 0-7 receive same data, 
+#    computing each part of data, using allreduce or allgather to gather data.
+#    then rank 0 sends data back to main process
 class GpuMpEngine(CoreMpEngine):
     def __init__(self, world_size: int, model_impl: nn.Module, xpu_cfg) -> None:
         super().__init__(world_size, model_impl, xpu_cfg)
@@ -117,10 +126,20 @@ class GpuMpEngine(CoreMpEngine):
 
             # create and init model based on model_impl and xpu_config
             model = model_impl(xpu_config)
-            model.init_inference()
+            if hasattr(model, 'init_inference'):
+                model.init_inference()
         
+            def signal_handler(signum, frame):
+                logger.info(f"rank {local_rank} received signal {signum}, exiting...")
+                if hasattr(model, 'finalize_inference'):
+                    model.finalize_inference()
+                sys.exit(0)
+
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+
             # current rank is ready
-            output_queue.put("ready")
+            output_queue.put("ready", block=True)
             logger.info(f"{local_rank}/{world_size} rank is ready")
 
             # model process loop
@@ -128,11 +147,33 @@ class GpuMpEngine(CoreMpEngine):
                 (
                     forward_inputs,
                 ) = input_queue.get(block=True)
+
+                log = forward_inputs.get("log", False)
+                workspace = forward_inputs.get("workspace", None)
+
+                forward_inputs["log_file"] = None
+                if log and workspace is not None:
+                    workspace_dir = workspace / f"rank_{local_rank}"
+                    workspace_dir.mkdir(exist_ok=True, parents=True)
+                    forward_inputs["log_file"] = open(workspace_dir / "run.log", "w")
+
+
                 inputs_dict = self.build_inputs(forward_inputs)
+                start_time = time.perf_counter_ns()
+
                 output_dict = model.forward(inputs_dict)
+
                 torch.cuda.synchronize()
+                end_time = time.perf_counter_ns()
+                duration_ms = round((end_time - start_time) / 1e6, 3)
+                output_dict["duration_ms"] = duration_ms
+
+                # TP realization: rank0 send result back to main process
                 if local_rank == 0:
                     output_queue.put(output_dict)
+
+                if log and workspace is not None:
+                    forward_inputs["log_file"].close()
 
         except Exception as e:
             logger.exception(f"[BUG] engine _load_and_listen failed, no more requests will be handled. {e}")
@@ -140,6 +181,18 @@ class GpuMpEngine(CoreMpEngine):
             
 
     def mp_forward(self, *args):
-        for i in range(self.world_size):
-            self._input_queues.put(args, True)
-        return self._output_queues.get(True)
+        # extra args
+        #   workspace: pathlib.Path, where to save files for each rank
+        #   log: bool, whether to save logs to file
+        #   override_hidden_states: bool, whether to override hidden_states
+        #   random_seed: int, random seed for torch.manual_seed
+
+        # send inputs to all subprocesses
+        for _ in range(self.world_size):
+            self._input_queues.put(args, block=True)
+
+        # wait for one subprocess send result back to main process
+        output_dict = self._output_queues.get(block=True)
+
+        return output_dict
+    
