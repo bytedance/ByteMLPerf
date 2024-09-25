@@ -1193,16 +1193,19 @@ class MixtralModel(MixtralPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
+        hidden_states = self.embed_tokens(input_ids)
         if kwargs.pop("override_hidden_states", False):
             random_seed = kwargs.pop("random_seed", 1)
             layer_index = kwargs.pop("fixed_layer_index", -1)
             layer_index = layer_index % len(self.layers)
 
-            # create random input ids on cpu and copy to device
             torch.manual_seed(random_seed)
-            random_input_ids = torch.randint(10, self.vocab_size, input_ids.shape, dtype=torch.int64, device="cpu").to(input_ids.device)
+            hidden_states = torch.randn(
+                size=hidden_states.shape, 
+                dtype=hidden_states.dtype, 
+                device="cpu"
+            ).to(device=hidden_states.device)
 
-            hidden_states = self.embed_tokens(random_input_ids)
             for _ in self.layers:
                 layer_outputs = self.layers[layer_index](
                     hidden_states,
@@ -1215,7 +1218,6 @@ class MixtralModel(MixtralPreTrainedModel):
                     **kwargs,
                 )
         else:
-            hidden_states = self.embed_tokens(input_ids)
             for decoder_layer in self.layers:
                 layer_outputs = decoder_layer(
                     hidden_states,

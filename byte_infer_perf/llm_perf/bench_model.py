@@ -41,23 +41,22 @@ def parse_args():
 
     # realization_version, mapping to:
     # 1. engine_type: tp_engine, pp_engine, ...
-    # 2. model realization info, default is opt
-    parser.add_argument("--model_version", type=str, default="opt")
+    # 2. model realization info,
+    parser.add_argument("--model_version", type=str, default="default")
     parser.add_argument("--infer_dtype", type=str, default="bfloat16")
-
 
     # perf config, using default config
     parser.add_argument("--perf_config", type=str, default=None)
 
-    parser.add_argument("--workspace", type=str, default=None)
-
-    parser.add_argument("--log_level", type=str, default="info")
-
+    # feature control
     parser.add_argument("--random_seed", type=int, default=1)
     parser.add_argument("--log_model", action="store_true")
+
+
+    parser.add_argument("--workspace", type=str, default=None)
+    parser.add_argument("--log_level", type=str, default="info")
+
     return parser.parse_args()
-
-
 
 
 def perf_engine(xpu_config, workspace):
@@ -67,61 +66,75 @@ def perf_engine(xpu_config, workspace):
     )
     logger.info(f"import setup: {setup}")
 
-
-    xpu_config["device_name"] = setup.get_device_name()
+    xpu_config["sku_name"] = setup.get_device_name()
     with open(workspace.joinpath("config.json"), "w") as f:
         json.dump(xpu_config, f, indent=4)
 
-    # get mp_engine
+
+
+    random_seed = xpu_config["feature_config"]["random_seed"]
+    log_model = xpu_config["feature_config"]["log_model"]
+
+    max_batch_size = xpu_config["deploy_config"]["max_batch_size"]
+
+
+    # create mp_engine (currently only support tp)
+    #   1. tp_size
+    #   2. max_batch_size
     engine = setup.get_engine(xpu_config)
 
 
-    def update_template(mode, batch_size, seq_len):
 
+
+    def update_template(mode, batch_size, seq_len):
         if mode == "context":
             input_template = {
+                "is_context": True, 
+
                 "input_ids": [[random.randint(1000, 5000) for _ in range(seq_len)] for _ in range(batch_size)], 
                 "position_ids": [[i for i in range(seq_len)] for _ in range(batch_size)], 
                 "attention_mask": [[1 for _ in range(seq_len)] for _ in range(batch_size)], 
+
+                "valid_slot_ids": [i for i in range(batch_size)], 
                 "all_q_len": [seq_len for _ in range(batch_size)], 
                 "all_kv_len": [seq_len for _ in range(batch_size)], 
-                "is_context": True, 
-                "valid_slot_ids": [i for i in range(batch_size)], 
+
                 "get_input_logits": False, 
-                "workspace": pathlib.Path.cwd().absolute(),
-                "log": xpu_config["log_model"], 
+                "workspace": workspace,
+                "log": log_model, 
                 "override_hidden_states": True,
-                "random_seed": xpu_config["random_seed"]
+                "random_seed": random_seed
             }
         elif mode == "decode":
             input_template = {
+                "is_context": False, 
+
                 "input_ids": [[random.randint(1000, 5000)] for _ in range(batch_size)], 
                 "position_ids": [[seq_len] for _ in range(batch_size)], 
                 "attention_mask": [[1] for _ in range(batch_size)], 
+
+                "valid_slot_ids": [i for i in range(batch_size)], 
                 "all_q_len": [1 for _ in range(batch_size)], 
                 "all_kv_len": [seq_len for _ in range(batch_size)], 
-                "is_context": False, 
-                "valid_slot_ids": [i for i in range(batch_size)], 
+                
                 "get_input_logits": False, 
-                "workspace": pathlib.Path.cwd().absolute(),
-                "log": xpu_config["log_model"], 
+                "workspace": workspace,
+                "log": log_model, 
                 "override_hidden_states": True,
-                "random_seed": xpu_config["random_seed"]
+                "random_seed": random_seed
             }
         return input_template
 
+
     # warmup
     num_warm_iter = 10
-    seq_len = 1024
-    input_template = update_template("context", 1, seq_len)
+    input_template = update_template("context", 1, 1024)
 
     start_time = time.perf_counter_ns()
     for _ in range(num_warm_iter):
         engine.mp_forward(input_template)
-    end_time = time.perf_counter_ns()
-    duration_s = round((end_time - start_time) / 1e9, 3)
+    duration_s = round((time.perf_counter_ns() - start_time) / 1e9, 3)
     logger.info(f"warmup cost: {duration_s}s")
-
 
 
     def results_to_csv(file_path, results):
@@ -147,80 +160,76 @@ def perf_engine(xpu_config, workspace):
 
 
     log_results = []
+    if xpu_config["perf_config"]["perf_context"]:
+        batch_size_list = [1]
+        seq_len_list = xpu_config["perf_config"]["seq_len_list"]
 
-    # context perf
-    batch_size_list = [1]
-    seq_len_list = [1024, 2048, 4096, 8192]
-    context_results = {}
-    for batch_size in batch_size_list:
-        context_results[batch_size] = {}
-        for seq_len in seq_len_list:
-            input_template = update_template("context", 1, seq_len)
+        context_results = {}
+        for batch_size in batch_size_list:
+            context_results[batch_size] = {}
+            for seq_len in seq_len_list:
+                input_template = update_template("context", 1, seq_len)
 
-            start_iters = 2
-            test_iter = 0
-            duration_ms = 0.
-            while duration_ms < 5000. and test_iter < 100:
-                result = engine.mp_forward(input_template)
-                if start_iters > 0:
-                    start_iters -= 1
-                    continue
-                test_iter += 1
-                duration_ms += result["duration_ms"]
+                start_iters = 2
+                test_iter = 0
+                duration_ms = 0.
+                while duration_ms < 5000. and test_iter < 100:
+                    result = engine.mp_forward(input_template)
+                    if start_iters > 0:
+                        start_iters -= 1
+                        continue
+                    test_iter += 1
+                    duration_ms += result["duration_ms"]
 
-            avg_duration_ms = round(duration_ms / test_iter, 3)
-
-            context_results[batch_size][seq_len] = avg_duration_ms
-
-            log_results.append(f"context, batch_size={batch_size}, seq_len={seq_len}, avg_duration_ms={avg_duration_ms}")
-            if xpu_config["log_model"]:
-                log_path = pathlib.Path.cwd().joinpath("rank_0", "run.log")
-                if log_path.exists():
-                    lines = pathlib.Path.cwd().joinpath("rank_0", "run.log").read_text().splitlines()
-                    log_results[-1] += f", {lines[0]}"
-            print(log_results[-1])
-
-
-    results_to_csv(workspace.joinpath("context_perf.csv"), context_results)
+                avg_duration_ms = round(duration_ms / test_iter, 3)
+                context_results[batch_size][seq_len] = avg_duration_ms
+                log_results.append(f"context, batch_size={batch_size}, seq_len={seq_len}, avg_duration_ms={avg_duration_ms}")
+                if log_model:
+                    log_path = workspace.joinpath("rank_0", "run.log")
+                    if log_path.exists():
+                        lines = workspace.joinpath("rank_0", "run.log").read_text().splitlines()
+                        log_results[-1] += f", {lines[0]}"
+                print(log_results[-1])
+        results_to_csv(workspace.joinpath("context_perf.csv"), context_results)
 
 
-    # decode perf
-    batch_size_list = [1, 2, 4, 8]
-    seq_len_list = [1024, 2048, 4096, 8192]
+    if xpu_config["perf_config"]["perf_decode"]:
+        batch_size_list = xpu_config["perf_config"]["batch_size_list"]
+        seq_len_list = xpu_config["perf_config"]["seq_len_list"]
 
-    decode_results = {}
-    for batch_size in batch_size_list:
-        if batch_size > xpu_config["max_batch_size"]:
-            continue
-        decode_results[batch_size] = {}
-        for seq_len in seq_len_list:
-            input_template = update_template("decode", batch_size, seq_len)
+        decode_results = {}
 
-            start_iters = 2
-            test_iter = 0
-            duration_ms = 0.
-            while duration_ms < 5000. and test_iter < 100:
-                result = engine.mp_forward(input_template)
-                if start_iters > 0:
-                    start_iters -= 1
-                    continue
-                test_iter += 1
-                duration_ms += result["duration_ms"]
+        for batch_size in batch_size_list:
+            if batch_size > max_batch_size:
+                continue
+            decode_results[batch_size] = {}
+            for seq_len in seq_len_list:
+                input_template = update_template("decode", batch_size, seq_len)
 
-            avg_duration_ms = round(duration_ms / test_iter, 3)
+                start_iters = 2
+                test_iter = 0
+                duration_ms = 0.
+                while duration_ms < 5000. and test_iter < 100:
+                    result = engine.mp_forward(input_template)
+                    if start_iters > 0:
+                        start_iters -= 1
+                        continue
+                    test_iter += 1
+                    duration_ms += result["duration_ms"]
 
-            decode_results[batch_size][seq_len] = avg_duration_ms
+                avg_duration_ms = round(duration_ms / test_iter, 3)
 
-            log_results.append(f"decode, batch_size={batch_size}, seq_len={seq_len}, avg_duration_ms={avg_duration_ms}")
-            if xpu_config["log_model"]:
-                log_path = pathlib.Path.cwd().joinpath("rank_0", "run.log")
-                if log_path.exists():
-                    lines = pathlib.Path.cwd().joinpath("rank_0", "run.log").read_text().splitlines()
-                    log_results[-1] += f", {lines[0]}"
-            print(log_results[-1])
+                decode_results[batch_size][seq_len] = avg_duration_ms
 
+                log_results.append(f"decode, batch_size={batch_size}, seq_len={seq_len}, avg_duration_ms={avg_duration_ms}")
+                if log_model:
+                    log_path = workspace.joinpath("rank_0", "run.log")
+                    if log_path.exists():
+                        lines = workspace.joinpath("rank_0", "run.log").read_text().splitlines()
+                        log_results[-1] += f", {lines[0]}"
+                print(log_results[-1])
 
-    results_to_csv(workspace.joinpath("decode_perf.csv"), decode_results)
+        results_to_csv(workspace.joinpath("decode_perf.csv"), decode_results)
 
     # release subprocess resources manually to enable auto garbage collection
     engine.clean_subprocess()
@@ -256,9 +265,9 @@ if __name__ == '__main__':
             workspace = CUR_DIR / workspace
     else:
         workspace = INFER_ROOT_DIR.joinpath(
-            "llm_perf", "reports", hardware_type, model_config_path.stem, 
-            "bench_model", 
-            model_config_path.stem
+            "llm_perf", "reports", 
+            hardware_type, model_config_path.stem, 
+            "bench_model"
         )
     if not workspace.exists():
         workspace.mkdir(parents=True, exist_ok=True)
@@ -275,18 +284,30 @@ if __name__ == '__main__':
     print("\n\n")
 
 
-    xpu_config = {}
-    xpu_config["model_name"] = model_name
-    xpu_config["hardware_type"] = hardware_type
-    
-    xpu_config["infer_dtype"] = args.infer_dtype
-    xpu_config["tp_size"] = tp_size
-    xpu_config["max_batch_size"] = max_batch_size
-    xpu_config["model_version"] = model_version
+    xpu_config = {
+        "hardware_type": hardware_type,
+        "sku_name": "", 
+        "model_name": model_name, 
+        "deploy_config": {
+            "impl_framework": "bytemlperf", 
+            "impl_version": model_version, 
+            "infer_dtype": args.infer_dtype,
+            "tp_size": tp_size,
+            "max_batch_size": max_batch_size,
+        }, 
+        "model_config": json.loads(model_config_path.read_text()), 
+        "perf_config": {
+            "perf_context": True, 
+            "perf_decode": True,
+            "batch_size_list": [1, 4, 8, 16, 24, 32],
+            "seq_len_list": [1024, 2048, 4096, 8192]
+        }, 
+        "feature_config": {
+            "random_seed": args.random_seed,
+            "log_model": args.log_model,
+        }, 
+        "tp_size": tp_size,
+        "max_batch_size": max_batch_size,
+    }
 
-    xpu_config["model_config"] = json.loads(model_config_path.read_text())
-    xpu_config["random_seed"] = args.random_seed
-    xpu_config["log_model"] = args.log_model
-    
     perf_engine(xpu_config, workspace)
-

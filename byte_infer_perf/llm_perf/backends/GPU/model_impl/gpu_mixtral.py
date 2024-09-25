@@ -147,8 +147,9 @@ class GPUMixtral(nn.Module):
         past_key_values = ()
         for i in range(num_layers):
             kv_shape = (max_batch_size, kv_head_num // self.mp_size, max_seq_len, head_dim)
-            key_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
-            value_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
+            torch.manual_seed(1)
+            key_cache = torch.randn(size=kv_shape, dtype=torch.float32, device="cpu").to(dtype=dtype).to(device=cur_device)
+            value_cache = torch.randn(size=kv_shape, dtype=torch.float32, device="cpu").to(dtype=dtype).to(device=cur_device)
             past_key_values += ((key_cache, value_cache),)
         return past_key_values
     
