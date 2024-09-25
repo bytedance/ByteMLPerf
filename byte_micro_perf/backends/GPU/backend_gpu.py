@@ -23,11 +23,9 @@ import torch
 import torch.distributed as dist
 import torch.distributed.distributed_c10d as dist_c10d
 
+from backends import module_store
 from backends.backend import Backend
-from backends.module_store import *
 from backends.utils import get_dtype_bytes
-
-from .custom_ops import GPUGemmOp, GPUBatchGemmOp, GPUGroupGemmOp
 
 
 logging.basicConfig(level=logging.INFO)
@@ -35,27 +33,23 @@ log = logging.getLogger("PerfEngine")
 
 
 class BackendGPU(Backend):
+    def __init__(self, workload_dict: Dict[str, Any], vendor_path: str):
+        super().__init__(workload_dict, vendor_path)
+
     def get_device_count(self):
         return torch.cuda.device_count()
 
-    def set_device(self, device_index):
+    def get_device_name(self):
+        return torch.cuda.get_device_name(0)
+
+    def set_device(self, device_index : int):
         torch.cuda.set_device(device_index)
     
     def get_device(self):
         return torch.cuda.current_device()
 
-    def all_gather_object(self, obj):
-        gather_object_list = [None for _ in range(self.world_size)]
-        dist.all_gather_object(
-            object_list=gather_object_list,
-            obj=obj,
-            group=self.group
-        )
-        return gather_object_list
-
-
-    def get_device_name(self):
-        return torch.cuda.get_device_name(0)
+    def device_synchronize(self):
+        torch.cuda.synchronize()
 
     def get_backend_properties(self):
         self.memory_limit = int(
@@ -75,125 +69,60 @@ class BackendGPU(Backend):
             )
 
 
-    # device/host ops
-    def host2device(self):
-        self.op = Host2DeviceOp()
+    def initialize_ccl(self, rank, world_size):
+        torch.cuda.set_device(rank)
 
-    def device2host(self):
-        self.op = Device2HostOp()
+        os.environ["MASTER_ADDR"] = "127.0.0.1"
+        os.environ["MASTER_PORT"] = "49373"
+        os.environ["LOCAL_RANK"] = str(rank)
+        os.environ["RANK"] = str(rank)
+        os.environ["WORLD_SIZE"] = str(world_size)
 
-    # communication ops
-    def allreduce(self):
+        dist.init_process_group(
+            backend="nccl",
+            world_size=world_size,
+            rank=rank, 
+            timeout=timedelta(seconds=1800)
+        )
+
         self.setup_2d_group()
-        self.op = AllReduceOp(self.group)
-
-    def allgather(self):
-        self.setup_2d_group()
-        self.op = AllGatherOp(self.group)
-
-    def reducescatter(self):
-        self.setup_2d_group()
-        self.op = ReduceScatterOp(self.group)
-
-    def alltoall(self):
-        self.setup_2d_group()
-        self.op = AllToAllOp(self.group)
-
-    def broadcast(self):
-        self.setup_2d_group()
-        self.op = BroadcastOp(self.group)
-
-    def p2p(self):
-        self.setup_2d_group()
-        self.op = P2POp(self.group, self.ranks, self.rank)
-
-    # compute ops
-    # unary ops
-    def sin(self):
-        self.op = SinOp()
-
-    def cos(self):
-        self.op = CosOp()
-
-    def exp(self):
-        self.op = ExpOp()
-
-    def exponential(self):
-        self.op = ExponentialOp()
-
-    def silu(self):
-        self.op = SiluOp()
-
-    def gelu(self):
-        self.op = GeluOp()
-
-    def swiglu(self):
-        self.op = SwiGLUOp()
-
-    def cast(self):
-        self.op = CastOp()
+        return True
 
 
-    # binary ops
-    def add(self):
-        self.op = AddOp()
+    def setup_2d_group(self):
+        # get rank and set device
+        self.rank = dist.get_rank()
+        torch.cuda.set_device(self.rank)
 
-    def mul(self):
-        self.op = MulOp()
+        origin_store_based_barrier = dist_c10d._store_based_barrier
+        dist_c10d._store_based_barrier = lambda *a, **kw: None
 
-    def sub(self):
-        self.op = SubOp()
+        self.world_size = dist.get_world_size()
+        self.ranks = range(0, self.world_size)
+        group = dist.new_group(self.ranks)
+        if self.rank in self.ranks:
+            self.group = group
 
-    def div(self):
-        self.op = DivOp()
+        dist_c10d._store_based_barrier = origin_store_based_barrier
 
+        # wait for all ranks finish group initializing
+        dist.barrier()
 
-    # reduce ops
-    def layernorm(self):
-        self.op = LayerNormOp()
+    def destroy_process_group(self):
+        dist.destroy_process_group()
 
-    def softmax(self):
-        self.op = SoftmaxOp()
-
-    def reduce_sum(self):
-        self.op = ReduceSumOp()
-
-    def reduce_min(self):
-        self.op = ReduceMinOp()
-
-    def reduce_max(self):
-        self.op = ReduceMaxOp()
+    def barrier(self):
+        dist.barrier(self.group)
 
 
-    # index ops
-    def index_add(self):
-        self.op = IndexAddOp()
-
-    def sort(self):
-        self.op = SortOp()
-
-    def unique(self):
-        self.op = UniqueOp()
-
-    def scatter(self):
-        self.op = ScatterOp()
-    
-    def gather(self):
-        self.op = GatherOp()
-
-    # gemm ops
-    def gemm(self):
-        self.op = GPUGemmOp()
-
-    def gemv(self):
-        self.op = GPUGemmOp()
-
-    def batch_gemm(self):
-        self.op = GPUBatchGemmOp()
-
-    def group_gemm(self):
-        self.op = GPUGroupGemmOp()
-
+    def all_gather_object(self, obj):
+        gather_object_list = [None for _ in range(self.world_size)]
+        dist.all_gather_object(
+            object_list=gather_object_list,
+            obj=obj,
+            group=self.group
+        )
+        return gather_object_list
 
 
     # create input tensors
@@ -211,15 +140,18 @@ class BackendGPU(Backend):
             bytes_per_cnt = dtype_size * element_num
 
 
-        # avoid use L2 Cache: assume 256 MB currently
-        # data_per_cnt > 256 MB, only one buffer
-        # data_per_cnt < 256 MB, malloc multiple buffer to exceed 256MB, and use first and last buffer
+        # avoid use L2 Cache: assume max 1GB currently
+        # data_per_cnt > 1GB, use two buffers
+        # data_per_cnt < 1GB, malloc multiple buffer to exceed 1GB
+        assume_l2_cache_size = 1 * 1024**3
+        assume_avail_bytes = self.memory_limit * 0.9 * 1024**3
 
-        assume_l2_cache_size = 256 * 1024**2
-        if bytes_per_cnt > self.memory_limit * 0.9 * 1024 ** 3:
+        if bytes_per_cnt > assume_avail_bytes:
             return [], 0, bytes_per_cnt
-        elif bytes_per_cnt > assume_l2_cache_size:
+        elif 2 * bytes_per_cnt > assume_avail_bytes:
             max_data_cnt = 1
+        elif bytes_per_cnt > assume_l2_cache_size:
+            max_data_cnt = 2
         else:
             max_data_cnt = math.ceil(assume_l2_cache_size / bytes_per_cnt)
 
@@ -249,78 +181,125 @@ class BackendGPU(Backend):
                 for input_tensor in input_tensors_list
             ]
 
-
-        if max_data_cnt > 2:
-            max_data_cnt = 2
-            new_tensor_list = []
-            new_tensor_list.append(input_tensors_list[0])
-            new_tensor_list.append(input_tensors_list[-1])
-        else:
-            new_tensor_list = input_tensors_list
-
-        return new_tensor_list, max_data_cnt, bytes_per_cnt
-
+        return input_tensors_list, max_data_cnt, bytes_per_cnt
 
 
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)
         return result
 
-    def device_synchronize(self):
-        torch.cuda.synchronize()
-        return True
 
 
-    def initialize_ccl(self, rank, world_size):
-        """
-        initialize distributed process groups and relevant ENVs
-        """
+    # device/host ops
+    def host2device(self):
+        self.op = module_store.Host2DeviceOp()
 
-        # set cuda device
-        torch.cuda.set_device(rank)
+    def device2host(self):
+        self.op = module_store.Device2HostOp()
 
-        # set envs
-        os.environ["MASTER_ADDR"] = "127.0.0.1"
-        os.environ["MASTER_PORT"] = "49373"
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["RANK"] = str(rank)
-        os.environ["WORLD_SIZE"] = str(world_size)
+    # communication ops
+    def allreduce(self):
+        self.op = module_store.AllReduceOp(self.group)
 
-        # Call the init process
-        torch.distributed.init_process_group(
-            backend="nccl",
-            world_size=world_size,
-            rank=rank
-        )
+    def allgather(self):
+        self.op = module_store.AllGatherOp(self.group)
 
-        # create group
-        self.setup_2d_group()
+    def reducescatter(self):
+        self.op = module_store.ReduceScatterOp(self.group)
 
-        log.info(f"DIST: rank {rank}, world_size {world_size}")
-        return True
+    def alltoall(self):
+        self.op = module_store.AllToAllOp(self.group)
+
+    def broadcast(self):
+        self.op = module_store.BroadcastOp(self.group)
+
+    def p2p(self):
+        self.op = module_store.P2POp(self.group, self.ranks, self.rank)
+
+    # compute ops
+    # unary ops
+    def sin(self):
+        self.op = module_store.SinOp()
+
+    def cos(self):
+        self.op = module_store.CosOp()
+
+    def exp(self):
+        self.op = module_store.ExpOp()
+
+    def exponential(self):
+        self.op = module_store.ExponentialOp()
+
+    def silu(self):
+        self.op = module_store.SiluOp()
+
+    def gelu(self):
+        self.op = module_store.GeluOp()
+
+    def swiglu(self):
+        self.op = module_store.SwiGLUOp()
+
+    def cast(self):
+        self.op = module_store.CastOp()
 
 
-    def setup_2d_group(self):
-        # get rank and set device
-        self.rank = dist.get_rank()
-        torch.cuda.set_device(self.rank)
+    # binary ops
+    def add(self):
+        self.op = module_store.AddOp()
 
-        origin_store_based_barrier = dist_c10d._store_based_barrier
-        dist_c10d._store_based_barrier = lambda *a, **kw: None
+    def mul(self):
+        self.op = module_store.MulOp()
 
-        self.world_size = dist.get_world_size()
-        self.ranks = range(0, self.world_size)
-        group = dist.new_group(self.ranks)
-        if self.rank in self.ranks:
-            self.group = group
+    def sub(self):
+        self.op = module_store.SubOp()
 
-        dist_c10d._store_based_barrier = origin_store_based_barrier
+    def div(self):
+        self.op = module_store.DivOp()
 
-        # wait for all ranks finish group initializing
-        torch.distributed.barrier()
 
-    def destroy_process_group(self):
-        dist.destroy_process_group()
+    # reduce ops
+    def layernorm(self):
+        self.op = module_store.LayerNormOp()
 
-    def barier(self):
-        dist.barrier(self.group)
+    def softmax(self):
+        self.op = module_store.SoftmaxOp()
+
+    def reduce_sum(self):
+        self.op = module_store.ReduceSumOp()
+
+    def reduce_min(self):
+        self.op = module_store.ReduceMinOp()
+
+    def reduce_max(self):
+        self.op = module_store.ReduceMaxOp()
+
+
+    # index ops
+    def index_add(self):
+        self.op = module_store.IndexAddOp()
+
+    def sort(self):
+        self.op = module_store.SortOp()
+
+    def unique(self):
+        self.op = module_store.UniqueOp()
+
+    def scatter(self):
+        self.op = module_store.ScatterOp()
+    
+    def gather(self):
+        self.op = module_store.GatherOp()
+
+
+    # gemm ops
+    def gemm(self):
+        self.op = module_store.GemmOp()
+
+    def gemv(self):
+        self.op = module_store.GemmOp()
+
+    def batch_gemm(self):
+        self.op = module_store.BatchGemmOp()
+
+    def group_gemm(self):
+        self.op = module_store.GroupGemmOp()
