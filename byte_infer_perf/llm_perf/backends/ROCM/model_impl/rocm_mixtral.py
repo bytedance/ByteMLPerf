@@ -4,6 +4,7 @@ import pathlib
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+import torch.nn.functional as F
 
 from typing import Dict, Any
 from llm_perf.utils.logger import logger
@@ -83,7 +84,7 @@ class GPUMixtralLoader(GpuCkptLoader):
 
                 w2_weight[j, :] = self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight"]
             w13_weight = w13_weight.view(self.model_config.num_local_experts, 2*ffn_dim, hidden_dim)
-            if bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1"))):
+            if bool(int(os.getenv("FUSED_MOE_PERSISTENT", "0"))):
                 w13_weight = permute_weight(w13_weight)
                 w2_weight = permute_weight(w2_weight)
             w13_weight = F.pad(w13_weight, (0, 128), "constant", 0)
