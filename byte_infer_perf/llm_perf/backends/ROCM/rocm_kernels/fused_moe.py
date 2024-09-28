@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # padding_size = 128 if envs.VLLM_MOE_PADDING else 0
 padding_size = 128
 FUSED_MOE_PERSISTENT = bool(int(os.getenv("FUSED_MOE_PERSISTENT", "0")))
-ENABLE_MOE_LDS_BYPASS = bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "0")))
+ENABLE_MOE_LDS_BYPASS = bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1")))
 print(f'{FUSED_MOE_PERSISTENT=}, {ENABLE_MOE_LDS_BYPASS=}')
 VLLM_FUSED_MOE_CHUNK_SIZE = 65536
 
