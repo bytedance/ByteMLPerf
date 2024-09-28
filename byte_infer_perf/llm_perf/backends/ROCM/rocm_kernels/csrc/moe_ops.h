@@ -11,3 +11,9 @@ void moe_align_block_size(torch::Tensor topk_ids, int num_experts,
                           torch::Tensor experts_ids,
                           torch::Tensor num_tokens_post_pad);
 void silu_and_mul(torch::Tensor &out, torch::Tensor &input);
+
+void rms_norm(torch::Tensor& out, torch::Tensor& input, torch::Tensor& weight,
+              double epsilon);
+
+void fused_add_rms_norm(torch::Tensor& input, torch::Tensor& residual,
+                        torch::Tensor& weight, double epsilon);

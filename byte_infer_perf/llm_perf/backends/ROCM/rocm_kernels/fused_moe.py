@@ -8,13 +8,11 @@ import torch
 import triton
 import triton.language as tl
 
-import moeKernels as moe_kernels
-# from vllm import _custom_ops as ops
-# # from vllm import envs
-# # from vllm.logger import init_logger
-
-# from vllm import _custom_C
-
+import rocmKernels as moe_kernels
+# import vllm.envs as envs
+# from vllm import _custom_ops as moe_kernels
+# from vllm.logger import init_logger
+# from vllm.platforms import current_platform
 
 # logger = init_logger(__name__)
 padding_size = 0
