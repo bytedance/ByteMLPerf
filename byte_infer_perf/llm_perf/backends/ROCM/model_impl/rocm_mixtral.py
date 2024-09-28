@@ -84,7 +84,7 @@ class GPUMixtralLoader(GpuCkptLoader):
 
                 w2_weight[j, :] = self.state_dict[f"model.layers.{i}.block_sparse_moe.experts.{j}.w2.weight"]
             w13_weight = w13_weight.view(self.model_config.num_local_experts, 2*ffn_dim, hidden_dim)
-            if bool(int(os.getenv("FUSED_MOE_PERSISTENT", "0"))):
+            if bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1"))):
                 w13_weight = permute_weight(w13_weight)
                 w2_weight = permute_weight(w2_weight)
             w13_weight = F.pad(w13_weight, (0, 128), "constant", 0)
@@ -92,8 +92,6 @@ class GPUMixtralLoader(GpuCkptLoader):
             torch.cuda.empty_cache()
             self.model.model.layers[i].block_sparse_moe.w13_weight = self.to_parameter(w13_weight)
             self.model.model.layers[i].block_sparse_moe.w2_weight = self.to_parameter(w2_weight)
-            # self.model.model.layers[i].block_sparse_moe.w13_weight.data=permute_weight(self.model.model.layers[i].block_sparse_moe.w13_weight.data)
-            # self.model.model.layers[i].block_sparse_moe.w2_weight.data =permute_weight(self.model.model.layers[i].block_sparse_moe.w2_weight.data)
 
         self.model.model.norm.weight = self.to_parameter(self.state_dict["model.norm.weight"])
         self.model.lm_head.weight = self.to_parameter(self.state_dict["lm_head.weight"])
