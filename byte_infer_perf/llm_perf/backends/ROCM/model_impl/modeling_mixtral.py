@@ -55,7 +55,8 @@ from transformers.utils import (
 from transformers.utils.import_utils import is_torch_fx_available
 from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 
-from ..fused_moe.fused_moe import fused_moe
+from ..rocm_kernels.fused_moe import fused_moe
+import rocmKernels as ops
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -176,12 +177,40 @@ class MixtralRMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+    def forward(self, hidden_states, residual=None):
+        # # ori implementation
+        # input_dtype = hidden_states.dtype
+        # if residual is not None:
+        #     hidden_states = hidden_states + residual
+        #     residual = hidden_states
+        # hidden_states = hidden_states.to(torch.float32)
+        # variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        # hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # hidden_states = self.weight * hidden_states.to(input_dtype)
+        # if residual is None:
+        #     return hidden_states
+        # else:
+        #     return hidden_states, residual
+
+        # optimized implementation
+        if residual is not None:
+            ops.fused_add_rms_norm(
+                hidden_states,
+                residual,
+                self.weight.data,
+                self.variance_epsilon,
+            )
+            return hidden_states, residual
+        out = torch.empty_like(hidden_states)
+        ops.rms_norm(
+            out,
+            hidden_states,
+            self.weight.data,
+            self.variance_epsilon,
+        )
+        return out
+
+
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Mixtral
@@ -946,6 +975,7 @@ class MixtralDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        residual: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -975,9 +1005,14 @@ class MixtralDecoderLayer(nn.Module):
                 (see `past_key_values`).
         """
 
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
+        # residual = hidden_states
+        # hidden_states = self.input_layernorm(hidden_states)
+        if residual is None:
+            residual = hidden_states
+            hidden_states = self.input_layernorm(hidden_states)
+        else:
+            hidden_states, residual = self.input_layernorm(
+                hidden_states, residual)
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -992,19 +1027,22 @@ class MixtralDecoderLayer(nn.Module):
         if self.mp_size > 1:
             dist.all_reduce(hidden_states)
             
-        hidden_states = residual + hidden_states
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
+        # hidden_states = residual + hidden_states
+        # residual = hidden_states
+        hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
         hidden_states, router_logits = self.block_sparse_moe(hidden_states, **kwargs)
+        if (os.environ.get("LOCAL_RANK", "0"), self.layer_idx) == ():
+            pass
         # print(f'{os.environ.get("LOCAL_RANK", "0")}:{self.layer_idx} {hidden_states.shape=}')
         # print(f'{os.environ.get("LOCAL_RANK", "0")}:{self.layer_idx} {hidden_states=}')
         if self.mp_size > 1:
             dist.all_reduce(hidden_states)
-        hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
+        # hidden_states = residual + hidden_states
+        # outputs = (hidden_states,)
+        outputs = (hidden_states, residual)
 
         return outputs
 
@@ -1171,6 +1209,7 @@ class MixtralModel(MixtralPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
+        residual = None
         if kwargs.pop("override_hidden_states", False):
             random_seed = kwargs.pop("random_seed", 1)
             layer_index = kwargs.pop("fixed_layer_index", -1)
@@ -1182,8 +1221,9 @@ class MixtralModel(MixtralPreTrainedModel):
 
             hidden_states = self.embed_tokens(random_input_ids)
             for _ in self.layers:
-                layer_outputs = self.layers[layer_index](
+                layer_outputs, residual = self.layers[layer_index](
                     hidden_states,
+                    residual=residual,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -1195,8 +1235,9 @@ class MixtralModel(MixtralPreTrainedModel):
         else:
             hidden_states = self.embed_tokens(input_ids)
             for decoder_layer in self.layers:
-                layer_outputs = decoder_layer(
+                hidden_states, residual = decoder_layer(
                     hidden_states,
+                    residual=residual,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -1205,9 +1246,8 @@ class MixtralModel(MixtralPreTrainedModel):
                     use_cache=False,
                     **kwargs,
                 )
-                hidden_states = layer_outputs[0]
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states, _ = self.norm(hidden_states, residual)
 
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states

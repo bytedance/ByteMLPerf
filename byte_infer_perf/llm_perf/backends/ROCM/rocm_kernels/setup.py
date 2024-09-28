@@ -27,7 +27,7 @@ from torch.utils.cpp_extension import (
 
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_NAME='moeKernels'
+PACKAGE_NAME='rocmKernels'
 BUILD_TARGET = os.environ.get("BUILD_TARGET", "auto")
 
 if BUILD_TARGET == "auto":
@@ -238,4 +238,4 @@ if os.path.exists(f"{this_dir}/build"):
     shutil.rmtree(f"{this_dir}/build")
     shutil.rmtree(f"./.eggs")
     shutil.rmtree(f"./build")
-    shutil.rmtree(f"./moeKernels.egg-info")
+    shutil.rmtree(f"./{PACKAGE_NAME}.egg-info")

@@ -8,7 +8,7 @@ import torch
 import triton
 import triton.language as tl
 
-import moeKernels as moe_kernels
+import rocmKernels as moe_kernels
 # import vllm.envs as envs
 # from vllm import _custom_ops as moe_kernels
 # from vllm.logger import init_logger
