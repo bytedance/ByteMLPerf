@@ -112,14 +112,14 @@ if __name__ == "__main__":
         "binary_ops": [], 
         "reduction_ops": [], 
         "index_ops": [], 
-        "ccl_ops": [], 
-        "h2d_ops": []
+        "h2d_ops": [], 
+        "ccl_ops": []
     }
     for task in task_list:
         if task in ["gemm", "gemv", "batch_gemm", "group_gemm"]:
             task_mapping["gemm_ops"].append(task)
 
-        if task in ["sin", "cos", "exp", "exponential", "silu", "gelu", "swiglu", "cast", "log", "sqrt"]:
+        if task in ["sin", "cos", "exp", "exponential", "log", "sqrt", "cast", "silu", "gelu", "swiglu"]:
             task_mapping["unary_ops"].append(task)
 
         if task in ["add", "mul", "sub", "div"]:
@@ -131,12 +131,12 @@ if __name__ == "__main__":
         if task in ["index_add", "sort", "unique", "gather", "scatter"]:
             task_mapping["index_ops"].append(task)
 
-        if task in ["allgather", "allreduce", "alltoall", "broadcast", "p2p", "reduce_scatter"]:
-            task_mapping["ccl_ops"].append(task)
-        
         if task in ["host2device", "device2host", "device2device"]:
             task_mapping["h2d_ops"].append(task)
-    
+
+        if task in ["allgather", "allreduce", "alltoall", "broadcast", "p2p", "reduce_scatter"]:
+            task_mapping["ccl_ops"].append(task)
+
 
     if args.show_task_list:
         logger.info("******************* Supported Task *******************")
@@ -226,15 +226,16 @@ if __name__ == "__main__":
         if args.activate_venv:
             cmds.append("--activate_venv")
 
+        print(f"******************************************* Start to test op: [{task}]. *******************************************")
         process = subprocess.Popen(cmds)
         subprocess_pid = process.pid
-        logger.info(f"start subprocess: {subprocess_pid}")
 
         ret = process.wait()
         if ret != 0:
             failed_ops.append(task)
-        
-        subprocess_pid = -1
+        print("")
+
+
     
     if failed_ops:
         logger.error(f"Failed ops: {failed_ops}")
