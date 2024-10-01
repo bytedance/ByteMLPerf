@@ -16,7 +16,7 @@
   "dtype": [
     "float32",
     "bfloat16",
-    "half", 
+    "float16", 
     "int8"
   ]
 }
