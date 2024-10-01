@@ -17,12 +17,12 @@ import rocmKernels as moe_kernels
 import logging
 logger = logging.getLogger(__name__)
 # logger = init_logger(__name__)
-# padding_size = 128 if envs.VLLM_MOE_PADDING else 0
-padding_size = 128
+VLLM_MOE_PADDING = bool(int(os.getenv("VLLM_MOE_PADDING", "0")))
 FUSED_MOE_PERSISTENT = bool(int(os.getenv("FUSED_MOE_PERSISTENT", "0")))
-ENABLE_MOE_LDS_BYPASS = bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1")))
-print(f'{FUSED_MOE_PERSISTENT=}, {ENABLE_MOE_LDS_BYPASS=}')
+ENABLE_MOE_LDS_BYPASS = bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "0")))
+print(f'{FUSED_MOE_PERSISTENT=}, {ENABLE_MOE_LDS_BYPASS=}, , {VLLM_MOE_PADDING=}')
 VLLM_FUSED_MOE_CHUNK_SIZE = 65536
+padding_size = 128 if VLLM_MOE_PADDING else 0
 
 
 @triton.jit
@@ -750,6 +750,7 @@ def fused_experts(hidden_states: torch.Tensor,
     else:
         out_hidden_states = torch.empty_like(hidden_states)
 
+    # print("init config:", config)
     for chunk in range((num_tokens // CHUNK_SIZE) + 1):
         begin_chunk_idx, end_chunk_idx = (chunk * CHUNK_SIZE,
                                           min((chunk + 1) * CHUNK_SIZE,
@@ -769,6 +770,7 @@ def fused_experts(hidden_states: torch.Tensor,
             intermediate_cache2 = intermediate_cache2[:tokens_in_chunk]
             intermediate_cache3 = intermediate_cache3[:tokens_in_chunk]
             config = get_config_func(tokens_in_chunk)
+            # print("inside config:", config)
 
         curr_topk_ids = topk_ids[begin_chunk_idx:end_chunk_idx]
         curr_topk_weights = topk_weights[begin_chunk_idx:end_chunk_idx]
