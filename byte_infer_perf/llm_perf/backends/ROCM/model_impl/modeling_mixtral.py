@@ -57,6 +57,7 @@ from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 
 from ..rocm_kernels.fused_moe import fused_moe
 import rocmKernels as ops
+from ..rocm_kernels.tuned_gemm import tgemm
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -300,6 +301,27 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+class Linear(nn.Module):
+    def __init__(self, in_features, out_features, bias=True, dtype=None):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
+        if bias:
+            self.bias = nn.Parameter(torch.empty(out_features, dtype=dtype))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.weight)
+        if self.bias is not None:
+            nn.init.zeros_(self.bias)
+
+    def forward(self, x):
+        # return F.linear(x, self.weight, self.bias)
+        return tgemm.mm(x, self.weight, self.bias)
+
 # Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Mixtral
 class MixtralAttention(nn.Module):
     """
@@ -337,10 +359,10 @@ class MixtralAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim // self.mp_size, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim // self.mp_size, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim // self.mp_size, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim // self.mp_size, self.hidden_size, bias=False)
+        self.q_proj = Linear(self.hidden_size, self.num_heads * self.head_dim // self.mp_size, bias=False)
+        self.k_proj = Linear(self.hidden_size, self.num_key_value_heads * self.head_dim // self.mp_size, bias=False)
+        self.v_proj = Linear(self.hidden_size, self.num_key_value_heads * self.head_dim // self.mp_size, bias=False)
+        self.o_proj = Linear(self.num_heads * self.head_dim // self.mp_size, self.hidden_size, bias=False)
 
         self.rotary_emb = MixtralRotaryEmbedding(
             self.head_dim,
@@ -877,9 +899,9 @@ class MixtralBlockSparseTop2MLP(nn.Module):
         self.ffn_dim = config.intermediate_size
         self.hidden_dim = config.hidden_size
 
-        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim // self.mp_size, bias=False)
-        self.w2 = nn.Linear(self.ffn_dim // self.mp_size, self.hidden_dim, bias=False)
-        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim // self.mp_size, bias=False)
+        self.w1 = Linear(self.hidden_dim, self.ffn_dim // self.mp_size, bias=False)
+        self.w2 = Linear(self.ffn_dim // self.mp_size, self.hidden_dim, bias=False)
+        self.w3 = Linear(self.hidden_dim, self.ffn_dim // self.mp_size, bias=False)
 
         self.act_fn = ACT2FN[config.hidden_act]
 
@@ -917,7 +939,7 @@ class MixtralSparseMoeBlock(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         # gating
-        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.gate = Linear(self.hidden_dim, self.num_experts, bias=False)
 
         # self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
@@ -1081,7 +1103,7 @@ class MixtralPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -1262,7 +1284,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
         self.model = MixtralModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
