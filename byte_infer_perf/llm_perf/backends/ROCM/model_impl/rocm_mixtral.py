@@ -21,9 +21,9 @@ from .modeling_mixtral import MixtralForCausalLM
 
 class GPUMixtralLoader(GpuCkptLoader):
     def __init__(
-        self, 
-        model : MixtralForCausalLM, 
-        model_config : MixtralConfig, 
+        self,
+        model : MixtralForCausalLM,
+        model_config : MixtralConfig,
         ckpt_path : str = ""
     ):
         mp_size = int(os.environ.get("WORLD_SIZE", "1"))
@@ -40,7 +40,7 @@ class GPUMixtralLoader(GpuCkptLoader):
             if self.mp_rank == 0:
                 print(f"{model_dir} not exists or is not a directory")
             return
-        
+
         split_model_dir = model_dir.joinpath(f"TP{self.mp_size}")
         if not split_model_dir.exists() or not split_model_dir.is_dir():
             if self.mp_rank == 0:
@@ -49,7 +49,7 @@ class GPUMixtralLoader(GpuCkptLoader):
 
         model_loader = Mixtral_ModelLoader(split_model_dir / f"device_{self.mp_rank}")
         self.state_dict = model_loader.load_weight()
-        
+
     def infusion_to_model(self):
         self.model.model.embed_tokens.weight = self.to_parameter(self.state_dict["model.embed_tokens.weight"])
         for i in range(self.model_config.num_hidden_layers):
@@ -87,9 +87,11 @@ class GPUMixtralLoader(GpuCkptLoader):
             if bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1"))):
                 w13_weight = permute_weight(w13_weight)
                 w2_weight = permute_weight(w2_weight)
-            w13_weight = F.pad(w13_weight, (0, 128), "constant", 0)
-            w2_weight = F.pad(w2_weight, (0, 128), "constant", 0)
-            torch.cuda.empty_cache()
+            if bool(int(os.getenv("VLLM_MOE_PADDING", "1"))):
+                w13_weight = F.pad(w13_weight, (0, 128), "constant", 0)
+                torch.cuda.empty_cache()
+                w2_weight = F.pad(w2_weight, (0, 128), "constant", 0)
+                torch.cuda.empty_cache()
             self.model.model.layers[i].block_sparse_moe.w13_weight = self.to_parameter(w13_weight)
             self.model.model.layers[i].block_sparse_moe.w2_weight = self.to_parameter(w2_weight)
 
@@ -129,7 +131,7 @@ class GPUMixtral(nn.Module):
 
         self.transformer_model : MixtralForCausalLM = None
 
-    
+
     def init_inference(self):
         torch.cuda.set_device(self.local_rank)
 
@@ -151,7 +153,7 @@ class GPUMixtral(nn.Module):
         check_memory_usage("After build model")
 
         self.load_weight(self.model_path)
-        
+
         check_memory_usage("After load_weight")
 
         self.transformer_model.cuda()
@@ -190,11 +192,11 @@ class GPUMixtral(nn.Module):
             value_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
             past_key_values += ((key_cache, value_cache),)
         return past_key_values
-    
+
 
     def forward(self, inputs : Dict[str, torch.Tensor]):
         model_outputs = self.transformer_model.forward(
-            **inputs, 
+            **inputs,
             past_key_values=self.kv_cache
         )
 
