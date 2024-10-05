@@ -17,7 +17,7 @@ import rocmKernels as moe_kernels
 import logging
 logger = logging.getLogger(__name__)
 # logger = init_logger(__name__)
-VLLM_MOE_PADDING = bool(int(os.getenv("VLLM_MOE_PADDING", "0")))
+VLLM_MOE_PADDING = bool(int(os.getenv("VLLM_MOE_PADDING", "1")))
 FUSED_MOE_PERSISTENT = bool(int(os.getenv("FUSED_MOE_PERSISTENT", "0")))
 ENABLE_MOE_LDS_BYPASS = bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1")))
 print(f'{FUSED_MOE_PERSISTENT=}, {ENABLE_MOE_LDS_BYPASS=}, {VLLM_MOE_PADDING=}')
