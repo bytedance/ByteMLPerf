@@ -87,7 +87,7 @@ class GPUMixtralLoader(GpuCkptLoader):
             if bool(int(os.getenv("ENABLE_MOE_LDS_BYPASS", "1"))):
                 w13_weight = permute_weight(w13_weight)
                 w2_weight = permute_weight(w2_weight)
-            if bool(int(os.getenv("VLLM_MOE_PADDING", "0"))):
+            if bool(int(os.getenv("VLLM_MOE_PADDING", "1"))):
                 w13_weight = F.pad(w13_weight, (0, 128), "constant", 0)
                 torch.cuda.empty_cache()
                 w2_weight = F.pad(w2_weight, (0, 128), "constant", 0)
