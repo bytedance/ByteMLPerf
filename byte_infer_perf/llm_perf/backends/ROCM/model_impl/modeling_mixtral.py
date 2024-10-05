@@ -58,6 +58,7 @@ from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 from ..rocm_kernels.fused_moe import fused_moe
 import rocmKernels as ops
 from ..rocm_kernels.tuned_gemm import tgemm
+from ..rocm_kernels.rotary_embedding import get_rope
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -368,6 +369,13 @@ class MixtralAttention(nn.Module):
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
+        )
+        self.rotary_emb_fused = get_rope(
+            self.head_dim,
+            rotary_dim=self.head_dim,
+            max_position=self.max_position_embeddings,
+            base=int(self.rope_theta),
+            is_neox_style=True,
         )
 
         self.num_heads = self.num_heads // self.mp_size
@@ -794,9 +802,6 @@ class MixtralSdpaAttention(MixtralAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         is_context = kwargs.get("is_context")
         valid_slot_ids = kwargs.get("valid_slot_ids")
@@ -808,9 +813,15 @@ class MixtralSdpaAttention(MixtralAttention):
         # kv_seq_len = key_states.shape[-2]
         # if past_key_value is not None:
         #     kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-        cos, sin = self.rotary_emb(value_states, seq_len=max_kv_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        # fused rope
+        query_states, key_states = self.rotary_emb_fused(position_ids, query_states, key_states)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        # # old rope
+        # cos, sin = self.rotary_emb(value_states, seq_len=max_kv_len)
+        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         # if past_key_value is not None:
         #     cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
