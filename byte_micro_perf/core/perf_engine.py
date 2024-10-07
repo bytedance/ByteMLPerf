@@ -29,6 +29,7 @@ from typing import Any, Dict, List
 import itertools
 from collections import namedtuple
 
+import torch.distributed
 import torch.multiprocessing as mp
 import virtualenv
 
@@ -116,36 +117,6 @@ def load_workload(task: str, task_dir: str) -> Dict[str, Any]:
 
 def parse_workload(workload):
     shape_list = []
-    if "input_shape_list" in workload:
-        shape_list.extend(workload["input_shape_list"])
-    # gemm or batch_gemm
-    elif "M/K/N" in workload:
-        if "batch_size" in workload:
-            for batch_size in workload["batch_size"]:
-                for M, K, N in workload["M/K/N"]:
-                    shape_list.append([
-                        [batch_size, M, K],
-                        [batch_size, K, N]
-                    ])
-        else:
-            for M, K, N in workload["M/K/N"]:
-                shape_list.append([[M, K], [K, N]])
-    # group_gemm
-    elif "MKN_choices" in workload:
-        seed = workload["seed"]
-        MKN_list = workload["MKN_choices"]
-        problems_list = workload["problems"]
-
-        random.seed(seed)
-        for problems in problems_list:
-            cur_inputs = []
-            for _ in range(problems):
-                M, K, N = [random.choice(MKN_list) for _ in range(3)]
-                cur_shapes = [[M, K], [K, N]]
-                cur_inputs.append(cur_shapes)
-        shape_list.append(cur_inputs)
-
-
     if "input_shape_groups" in workload:
         input_shape_groups = workload["input_shape_groups"] if isinstance(workload["input_shape_groups"], list) else [workload["input_shape_groups"]]
 
@@ -211,7 +182,7 @@ def parse_workload(workload):
 
 
 
-ConfigInstance = namedtuple("ConfigInstance", ["dtype", "tensor_shapes", "index"])
+ConfigInstance = namedtuple("ConfigInstance", ["dtype", "tensor_shapes", "index", "total"])
 ResultItem = namedtuple("ResultItem", ["config", "report"])
 
 
@@ -257,13 +228,6 @@ class PerfEngine:
         self.backend_class = getattr(backend_module, "Backend" + hardware_type)
         self.backend = self.backend_class(self.workload, self.args.vendor_path)
 
-        # start process task
-        logger.info(
-            "******************************************* Start to test op: [{}]. *******************************************".format(
-                self.workload["operator"]
-            )
-        )
-
         # create output dir based on task
         # {BYTEMLPERF_ROOT}/byte_micro_perf/reports/{backend_type}/{task_name}
         hardware_reports_dir = BYTE_MLPERF_ROOT.joinpath(
@@ -297,7 +261,7 @@ class PerfEngine:
         case_index = 0
         for dtype in dtype_list:
             for shape in shape_list:
-                test_list.append(ConfigInstance(dtype, shape, case_index))
+                test_list.append(ConfigInstance(dtype, shape, case_index + 1, len(dtype_list) * len(shape_list)))
                 case_index = case_index + 1
 
         try:
@@ -341,24 +305,60 @@ class PerfEngine:
                 )
 
                 subprocess_pids = _subprocesses.pids()
-                logger.info(f"subprocess pids: {subprocess_pids}")
-
-
-
-                logger.info("waiting for ranks to be ready")
                 for _ in range(instance_num):
                     assert "ready" == output_queues.get()
                 logger.info("all ranks are ready and listening, init done")
 
-
                 start_time = time.perf_counter_ns()
-
                 if group == 1:
                     for test_instance in test_list:
-                        input_queues.put(test_instance, True)
-
+                        input_queues.put(test_instance, False)
                     for _ in range(instance_num):
-                        input_queues.put("end", True)
+                        input_queues.put(None, False)
+
+
+
+                result_list = []
+                if group == 1:
+                    for _ in range(instance_num):
+                        result_list.extend(output_queues.get())
+                elif group > 1:
+                    result_list.extend(output_queues.get())
+                result_list = sorted(result_list, key=lambda x: x.config.index)
+
+
+                dtype_results_mapping = {}
+                for result in result_list:
+                    if result.config.dtype not in dtype_results_mapping:
+                        dtype_results_mapping[result.config.dtype] = []
+                    dtype_results_mapping[result.config.dtype].append(result)
+
+                for dtype, results in dtype_results_mapping.items():
+                    dtype_results_mapping[dtype] = sorted(results, key=lambda x: x.config.index)
+                    
+                    base_report = {
+                        "Operator": self.workload["operator"].upper(),
+                        "Backend": self.backend_type,
+                        "Host Info": self.get_cpu_name(),
+                        "Device Info": getattr(self.backend, "get_device_name")(),
+                        "Version": self.version,
+                        "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "Performance": [result.report for result in dtype_results_mapping[dtype]]
+                    }
+
+                    filename = (
+                        f"result-{str(dtype)}"
+                        + (
+                            f"-group{group}"
+                            if group > 1
+                            else ""
+                        )
+                        + ".json"
+                    )
+                    filepath = output_dir.joinpath(filename)
+                    with open(filepath, "w") as f:
+                        json.dump(base_report, f, indent=4)
+
 
                 for process in _subprocesses.processes:
                     process.join()
@@ -386,9 +386,9 @@ class PerfEngine:
                 traceback.print_exc()
                 logger.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
 
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
-                    print(f"[error] {self.args.task}, group_size={group}, {current_time}, {duration} s", file=f)
-
+                    print(f"[error] {self.args.task}, group_size={group}, {current_time}", file=f)
 
             subprocess_pids = []
             time.sleep(1)
@@ -396,25 +396,22 @@ class PerfEngine:
         if self.args.activate_venv:
             self.deactivate_venv()
 
+
+
     def perf_func(self, rank: int, *args):
-        backend_instance = self.backend_class(self.workload, self.args.vendor_path)
-        op_name = self.workload["operator"]
-        
         world_size, group_size, output_dir, test_list, input_queues, output_queues = args
+        
+        backend_instance = self.backend_class(self.workload, self.args.vendor_path)
+        backend_instance.rank = rank
+        backend_instance.world_size = world_size
 
-        # set device accroding to local_rank
-        set_device_func = getattr(backend_instance, "set_device")
-        set_device_func(rank)
+        backend_instance.set_device(rank)
 
-        if world_size > 1:
-            init_ccl_func = getattr(backend_instance, "initialize_ccl")
-            init_ccl_func(rank, world_size)
+        if group_size > 1:
+            backend_instance.initialize_ccl(rank, world_size)
 
-        op = getattr(backend_instance, op_name.lower(), None)
-        if op is not None and callable(op):
-            op()
-        else:
-            raise ValueError(f"Unknown operation: {op_name.lower()}")
+        op_name = self.workload["operator"]
+        backend_instance.get_op_instance()
 
         output_queues.put("ready")
 
@@ -422,14 +419,12 @@ class PerfEngine:
         if group_size == 1:
             while True:
                 test_instance = input_queues.get()
-                if test_instance == "end":
+                if test_instance is None:
                     break           
-                
-
-                start_time = time.perf_counter_ns()
 
                 test_dtype = test_instance.dtype
                 test_shape = test_instance.tensor_shapes
+
                 """
                 input_shape could be:
                     List[int]: single shape. cos
@@ -448,28 +443,21 @@ class PerfEngine:
                 if reports and "Error" not in reports:
                     result_list.append(ResultItem(test_instance, reports))
 
-                duration = (time.perf_counter_ns() - start_time) / 1e9
-                duration = round(duration, 3)
-                print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}, duration: {duration} s")
+                    latency = reports.get("Avg latency(us)", 0)
+                    kernel_bw = reports.get("Kernel bandwidth(GB/s)", 0)
+                    bus_bw = reports.get("Bus bandwidth(GB/s)", 0)
 
-            output_result_list = []
-            if world_size > 1:
-                all_gather_object_func = getattr(backend_instance, "all_gather_object")
-                all_result_list = all_gather_object_func(result_list)
-                for data in all_result_list:
-                    output_result_list.extend(data)
-            else:
-                output_result_list = result_list
+                    print(f"rank {rank}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
+                else:
+                    print(f"rank {rank}, {test_instance}, error")
 
-            result_list = sorted(output_result_list, key=lambda x: x.config.index)
+            output_queues.put(result_list)
 
         elif group_size > 1:
-            for i, test_instance in enumerate(test_list):
-                
-                start_time = time.perf_counter_ns()
-
+            for test_instance in test_list:
                 test_dtype = test_instance.dtype
                 test_shape = test_instance.tensor_shapes
+
                 """
                 input_shape could be:
                     List[int]: single shape. cos
@@ -485,55 +473,24 @@ class PerfEngine:
                     logger.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
                     reports = {}
 
-                result_list.append(ResultItem(test_instance, reports))
+                if reports and "Error" not in reports:
+                    result_list.append(ResultItem(test_instance, reports))
 
-                end_time = time.perf_counter_ns()
-                duration = (end_time - start_time) / 1e9
-                duration = round(duration, 3)
+                    latency = reports.get("Avg latency(us)", 0)
+                    kernel_bw = reports.get("Kernel bandwidth(GB/s)", 0)
+                    bus_bw = reports.get("Bus bandwidth(GB/s)", 0)
+                    if rank == 0:
+                        print(f"rank {rank}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
+                else:
+                    if rank == 0:
+                        print(f"rank {rank}, {test_instance}, error")
+            if rank == 0:
+                output_queues.put(result_list)
 
-                if rank == 0:
-                    print(f"rank {rank}: {test_instance.index + 1} / {len(test_list)}, duration: {duration} s")
+        if group_size > 1:
+            backend_instance.destroy_process_group()
 
-        if rank == 0:
-            print(f"{len(result_list)} tasks finished.")
 
-            dtype_results_mapping = {}
-            for result in result_list:
-                if result.config.dtype not in dtype_results_mapping:
-                    dtype_results_mapping[result.config.dtype] = []
-                dtype_results_mapping[result.config.dtype].append(result)
-
-            for dtype, results in dtype_results_mapping.items():
-                dtype_results_mapping[dtype] = sorted(results, key=lambda x: x.config.index)
-                
-                base_report = {
-                    "Operator": op_name.upper(),
-                    "Backend": self.backend_type,
-                    "Host Info": self.get_cpu_name(),
-                    "Device Info": getattr(self.backend, "get_device_name")(),
-                    "Version": self.version,
-                    "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "Performance": [result.report for result in dtype_results_mapping[dtype]]
-                }
-
-                filename = (
-                    f"result-{str(dtype)}"
-                    + (
-                        f"-group{group_size}"
-                        if group_size > 1
-                        else ""
-                    )
-                    + ".json"
-                )
-                filepath = output_dir.joinpath(filename)
-                with open(filepath, "w") as f:
-                    json.dump(base_report, f, indent=4)
-        
-        if world_size > 1:
-            destroy_group_func = getattr(backend_instance, "destroy_process_group")
-            destroy_group_func()
-
-        return True
 
     def activate_venv(self, hardware_type: str) -> bool:
         if os.path.exists("backends/" + hardware_type + "/requirements.txt"):
