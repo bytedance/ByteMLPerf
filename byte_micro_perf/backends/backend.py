@@ -132,17 +132,6 @@ class Backend(ABC):
         if dist.is_initialized():
             dist.barrier()
 
-    def all_gather_object(self, obj):
-        dist = self.get_dist_module()
-        if dist.is_initialized():
-            gather_object_list = [None for _ in range(self.world_size)]
-            dist.all_gather_object(
-                object_list=gather_object_list,
-                obj=obj
-            )
-            return gather_object_list         
-
-
 
 
     def _run_operation(self, operation, inputs):

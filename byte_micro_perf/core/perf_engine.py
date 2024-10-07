@@ -316,6 +316,50 @@ class PerfEngine:
                     for _ in range(instance_num):
                         input_queues.put(None, False)
 
+
+
+                result_list = []
+                if group == 1:
+                    for _ in range(instance_num):
+                        result_list.extend(output_queues.get())
+                elif group > 1:
+                    result_list.extend(output_queues.get())
+                result_list = sorted(result_list, key=lambda x: x.config.index)
+
+
+                dtype_results_mapping = {}
+                for result in result_list:
+                    if result.config.dtype not in dtype_results_mapping:
+                        dtype_results_mapping[result.config.dtype] = []
+                    dtype_results_mapping[result.config.dtype].append(result)
+
+                for dtype, results in dtype_results_mapping.items():
+                    dtype_results_mapping[dtype] = sorted(results, key=lambda x: x.config.index)
+                    
+                    base_report = {
+                        "Operator": self.workload["operator"].upper(),
+                        "Backend": self.backend_type,
+                        "Host Info": self.get_cpu_name(),
+                        "Device Info": getattr(self.backend, "get_device_name")(),
+                        "Version": self.version,
+                        "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "Performance": [result.report for result in dtype_results_mapping[dtype]]
+                    }
+
+                    filename = (
+                        f"result-{str(dtype)}"
+                        + (
+                            f"-group{group}"
+                            if group > 1
+                            else ""
+                        )
+                        + ".json"
+                    )
+                    filepath = output_dir.joinpath(filename)
+                    with open(filepath, "w") as f:
+                        json.dump(base_report, f, indent=4)
+
+
                 for process in _subprocesses.processes:
                     process.join()
 
@@ -361,8 +405,9 @@ class PerfEngine:
         backend_instance.rank = rank
         backend_instance.world_size = world_size
 
-        # init dist
-        if world_size > 1:
+        backend_instance.set_device(rank)
+
+        if group_size > 1:
             backend_instance.initialize_ccl(rank, world_size)
 
         op_name = self.workload["operator"]
@@ -406,15 +451,8 @@ class PerfEngine:
                 else:
                     print(f"rank {rank}, {test_instance}, error")
 
+            output_queues.put(result_list)
 
-            output_result_list = []
-            if world_size > 1:
-                all_result_list = backend_instance.all_gather_object(result_list)
-                for data in all_result_list:
-                    output_result_list.extend(data)
-            else:
-                output_result_list = result_list
-            result_list = sorted(output_result_list, key=lambda x: x.config.index)
         elif group_size > 1:
             for test_instance in test_list:
                 test_dtype = test_instance.dtype
@@ -446,46 +484,11 @@ class PerfEngine:
                 else:
                     if rank == 0:
                         print(f"rank {rank}, {test_instance}, error")
+            if rank == 0:
+                output_queues.put(result_list)
 
-
-        # destroy dist
-        if world_size > 1:
+        if group_size > 1:
             backend_instance.destroy_process_group()
-
-        if rank == 0:
-            dtype_results_mapping = {}
-            for result in result_list:
-                if result.config.dtype not in dtype_results_mapping:
-                    dtype_results_mapping[result.config.dtype] = []
-                dtype_results_mapping[result.config.dtype].append(result)
-
-            for dtype, results in dtype_results_mapping.items():
-                dtype_results_mapping[dtype] = sorted(results, key=lambda x: x.config.index)
-                
-                base_report = {
-                    "Operator": op_name.upper(),
-                    "Backend": self.backend_type,
-                    "Host Info": self.get_cpu_name(),
-                    "Device Info": getattr(self.backend, "get_device_name")(),
-                    "Version": self.version,
-                    "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "Performance": [result.report for result in dtype_results_mapping[dtype]]
-                }
-
-                filename = (
-                    f"result-{str(dtype)}"
-                    + (
-                        f"-group{group_size}"
-                        if group_size > 1
-                        else ""
-                    )
-                    + ".json"
-                )
-                filepath = output_dir.joinpath(filename)
-                with open(filepath, "w") as f:
-                    json.dump(base_report, f, indent=4)
-        
-
 
 
 
