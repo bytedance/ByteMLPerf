@@ -35,6 +35,24 @@ log = logging.getLogger("PerfEngine")
 
 
 class BackendNPU(Backend):
+    def get_device_count(self):
+        return torch.npu.device_count()
+
+    def set_device(self, device_index):
+        torch.npu.set_device(device_index)
+    
+    def get_device(self):
+        return torch.npu.current_device()
+
+    def all_gather_object(self, obj):
+        gather_object_list = [None for _ in range(self.world_size)]
+        dist.all_gather_object(
+            object_list=gather_object_list,
+            obj=obj,
+            group=self.group
+        )
+        return gather_object_list
+    
     def get_device_name(self):
         return torch.npu.get_device_name(0)
 
@@ -273,3 +291,9 @@ class BackendNPU(Backend):
         dist_c10d._store_based_barrier = origin_store_based_barrier
         # wait for all ranks finish group initializing
         torch.distributed.barrier()
+
+    def destroy_process_group(self):
+        dist.destroy_process_group()
+
+    def barier(self):
+        dist.barrier(self.group)
