@@ -180,7 +180,12 @@ class GPUChatGLM2(nn.Module):
 
         logger.info(f"cuda model {self.model_path} loaded {self.transformer_model}")
 
+        if self.mp_size > 1:
+            dist.barrier()
 
+    def finalize_inference(self):
+        if self.mp_size > 1 and dist.is_initialized():
+            dist.destroy_process_group()
 
     def load_weight(self, ckpt_path):
         p_loader = GPUChatGLM2Loader(
@@ -190,8 +195,6 @@ class GPUChatGLM2(nn.Module):
         )
         p_loader.parallel_loader()
         p_loader.infusion_to_model()
-
-
 
 
     def init_kvcache(self, dtype):

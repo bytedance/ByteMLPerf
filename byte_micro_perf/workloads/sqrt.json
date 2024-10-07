@@ -1,5 +1,5 @@
 {
-  "operator": "cos",
+  "operator": "sqrt",
   "iterations": 100,
   "input_shape_groups": {
     "inputs": [

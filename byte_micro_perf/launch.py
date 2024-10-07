@@ -12,21 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import sys
 import argparse
 import pathlib
-import json
 import logging
-import os
-import random
-import socket
 import subprocess
-import sys
+import signal
 
-BYTE_MLPERF_ROOT = pathlib.Path(__file__).parent.absolute()
+# directory config
 CUR_DIR = pathlib.Path.cwd().absolute()
-os.chdir(str(BYTE_MLPERF_ROOT))
-sys.path.insert(0, BYTE_MLPERF_ROOT)
+FILE_DIR = pathlib.Path(__file__).parent.absolute()
+BYTE_MLPERF_ROOT = FILE_DIR
+sys.path.insert(0, str(BYTE_MLPERF_ROOT))
 
+# logger config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lanuch")
 
@@ -42,7 +42,6 @@ def parse_task(task_dir):
 
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -54,7 +53,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--vendor_path",
-        required=False, 
         help="The hardware configs need to be loaded, refs to vendor_zoo/",
     )
 
@@ -81,12 +79,65 @@ if __name__ == "__main__":
         action="store_true",
         help="Print all hardware bytemlperf supported",
     )
+
+    # feature control
+    parser.add_argument(
+        "--parallel", 
+        type=int, default=1, 
+        help="Run all tasks in parallel if available"
+    )
+    parser.add_argument(
+        "--install_requirements", action="store_true", 
+        help="Install all required packages"
+    )
+    parser.add_argument(
+        "--activate_venv", action="store_true",
+        help="Enable python virtual environment"
+    )
     args = parser.parse_args()
+
+    args.vendor_path = pathlib.Path(args.vendor_path).absolute() if args.vendor_path else None
+    args.task_dir = pathlib.Path(args.task_dir).absolute()
+    os.chdir(str(BYTE_MLPERF_ROOT))
 
 
     # show tasks
-    task_list = [file.stem for file in pathlib.Path(args.task_dir).iterdir()]
+    task_list = [file.stem for file in args.task_dir.iterdir()]
     task_list.sort()
+
+    task_mapping = {
+        "all": task_list, 
+        "gemm_ops": [], 
+        "unary_ops": [], 
+        "binary_ops": [], 
+        "reduction_ops": [], 
+        "index_ops": [], 
+        "h2d_ops": [], 
+        "ccl_ops": []
+    }
+    for task in task_list:
+        if task in ["gemm", "gemv", "batch_gemm", "group_gemm"]:
+            task_mapping["gemm_ops"].append(task)
+
+        if task in ["sin", "cos", "exp", "exponential", "log", "sqrt", "cast", "silu", "gelu", "swiglu"]:
+            task_mapping["unary_ops"].append(task)
+
+        if task in ["add", "mul", "sub", "div"]:
+            task_mapping["binary_ops"].append(task)
+
+        if task in ["layernorm", "softmax", "reduce_sum", "reduce_max", "reduce_min"]:
+            task_mapping["reduction_ops"].append(task)
+        
+        if task in ["index_add", "sort", "unique", "gather", "scatter"]:
+            task_mapping["index_ops"].append(task)
+
+        if task in ["host2device", "device2host", "device2device"]:
+            task_mapping["h2d_ops"].append(task)
+
+        if task in ["allgather", "allreduce", "alltoall", "broadcast", "p2p", "reduce_scatter"]:
+            task_mapping["ccl_ops"].append(task)
+
+
     if args.show_task_list:
         logger.info("******************* Supported Task *******************")
         print(task_list)        
@@ -103,14 +154,20 @@ if __name__ == "__main__":
         exit(0)
 
     # check task
-    tasks = task_list if args.task == "all" else args.task.split(",")
-    for task in tasks:
-        if task not in task_list:
-            logger.error(f"Task {task} not found in {args.task_dir}")
-            exit(1)
+    test_cases = []
+    if args.task in task_mapping.keys():
+        test_cases = task_mapping[args.task]
+    else:
+        specified_tasks = args.task.split(",")
+        for task in specified_tasks:
+            if task not in task_list:
+                logger.error(f"Task {task} not found in {args.task_dir}")
+                exit(1)
+            test_cases.append(task)
 
     logger.info(f"******************* Tasks: *****************")
-    logger.info(f"{tasks}\n")
+    logger.info(f"{test_cases}\n")
+
 
     # check hardware
     hardware = args.hardware_type
@@ -121,21 +178,67 @@ if __name__ == "__main__":
     logger.info(f"******************* hardware: *****************")
     logger.info(f"{hardware}\n")
 
-
-    logger.info("******************* Pip Package Installing *******************")
-    subprocess.run(
-        ["python3", "-m", "pip", "install", "-r", "requirements.txt", "--quiet"],
-        capture_output=True
-    )
-    subprocess.run(
-        ["python3", "-m", "pip", "install", "-r", "requirements.txt", "--quiet"], 
-        capture_output=True
-    )
-
-    for task in tasks:
-        cmd = "python3 core/perf_engine.py --hardware_type {} --task {} --vendor_path {} --task_dir {}".format(
-            args.hardware_type, task, args.vendor_path, args.task_dir
+    if args.install_requirements:
+        logger.info("******************* Pip Package Installing *******************")
+        subprocess.run(
+            ["python3", "-m", "pip", "install", "pip", "--upgrade", "--quiet"]
         )
-        exit_code = subprocess.call(cmd, shell=True)
+        subprocess.run(
+            ["python3", "-m", "pip", "install", "-r", "requirements.txt", "--quiet"]
+        )
+        if not args.activate_venv:
+            subprocess.run(
+                ["python3", "-m", "pip", "install", "-r", f"backends/{hardware}/requirements.txt", "--quiet"]
+            )
 
-    sys.exit(exit_code)
+
+    outputs_dir = pathlib.Path(BYTE_MLPERF_ROOT).joinpath("reports", args.hardware_type)
+    if not outputs_dir.exists():
+        outputs_dir.mkdir(parents=True)
+    with open(f"{BYTE_MLPERF_ROOT}/reports/{args.hardware_type}/_run_report.log", "w") as file:
+        pass
+
+
+    # terminate task perf process
+    subprocess_pid = -1
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, exiting...")
+        if subprocess_pid != -1:
+            logger.info(f"terminate subprocess: {subprocess_pid}")
+            os.kill(subprocess_pid, signal.SIGTERM)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+
+    failed_ops = []
+    for task in test_cases:
+        cmds = [
+            "python3", 
+            "./core/perf_engine.py", 
+            "--hardware_type", args.hardware_type,
+            "--vendor_path", str(args.vendor_path),
+            "--task", task,
+            "--task_dir", str(args.task_dir), 
+            "--parallel", str(args.parallel)
+        ]
+        if args.activate_venv:
+            cmds.append("--activate_venv")
+
+        print(f"******************************************* Start to test op: [{task}]. *******************************************")
+        process = subprocess.Popen(cmds)
+        subprocess_pid = process.pid
+
+        ret = process.wait()
+        if ret != 0:
+            failed_ops.append(task)
+        print("")
+
+
+    
+    if failed_ops:
+        logger.error(f"Failed ops: {failed_ops}")
+        exit(1)
+    else:
+        logger.info("All ops passed")

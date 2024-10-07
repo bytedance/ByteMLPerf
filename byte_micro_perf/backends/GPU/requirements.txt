@@ -1,2 +1,2 @@
-torch==2.1.0
-nvidia-cutlass
+-i https://download.pytorch.org/whl/cu121
+torch==2.3.1
