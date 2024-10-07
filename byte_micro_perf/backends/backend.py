@@ -187,15 +187,19 @@ class Backend(ABC):
                 prefer_iterations = self.iterations
 
                 # warmup
+                self.device_synchronize()
+                self.barrier()
                 for _ in range(warm_iterations):
                     self._run_operation(self.op, random.choice(tensor_list))
 
                 # test perf
                 self.device_synchronize()
+                self.barrier()
                 start_time = time.perf_counter_ns()
                 for i in range(test_iterations):
                     self._run_operation(self.op, random.choice(tensor_list))
                 self.device_synchronize()
+                self.barrier()
                 end_time = time.perf_counter_ns()
                 avg_op_duration = (end_time - start_time) / 1e9 / test_iterations
 
@@ -207,10 +211,12 @@ class Backend(ABC):
 
                 # perf
                 self.device_synchronize()
+                self.barrier()
                 start_time = time.perf_counter_ns()
                 for i in range(prefer_iterations):
                     self._run_operation(self.op, tensor_list[i % len(tensor_list)])
                 self.device_synchronize()
+                self.barrier()
                 end_time = time.perf_counter_ns()
 
                 # time in us
