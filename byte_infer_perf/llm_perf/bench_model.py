@@ -170,10 +170,11 @@ def perf_engine(xpu_config, workspace):
             for seq_len in seq_len_list:
                 input_template = update_template("context", 1, seq_len)
 
+                total_test_iter = 20
                 start_iters = 2
                 test_iter = 0
                 duration_ms = 0.
-                while duration_ms < 5000. and test_iter < 100:
+                while test_iter < total_test_iter:
                     result = engine.mp_forward(input_template)
                     if start_iters > 0:
                         start_iters -= 1
@@ -206,10 +207,12 @@ def perf_engine(xpu_config, workspace):
             for seq_len in seq_len_list:
                 input_template = update_template("decode", batch_size, seq_len)
 
+                total_test_iter = 20
                 start_iters = 2
                 test_iter = 0
+
                 duration_ms = 0.
-                while duration_ms < 5000. and test_iter < 100:
+                while test_iter < total_test_iter:
                     result = engine.mp_forward(input_template)
                     if start_iters > 0:
                         start_iters -= 1
