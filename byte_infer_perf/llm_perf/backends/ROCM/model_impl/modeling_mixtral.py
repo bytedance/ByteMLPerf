@@ -56,6 +56,8 @@ from transformers.utils.import_utils import is_torch_fx_available
 from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 
 from ..rocm_kernels.fused_moe import fused_moe
+from ..rocm_kernels import paged_attn
+from ..rocm_kernels.paged_attn import PagedAttention
 import rocmKernels as ops
 from ..rocm_kernels.tuned_gemm import tgemm
 from ..rocm_kernels.rotary_embedding import get_rope
@@ -769,7 +771,6 @@ class MixtralSdpaAttention(MixtralAttention):
     `MixtralAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
-
     # Adapted from MixtralAttention.forward
     def forward(
         self,
@@ -807,12 +808,7 @@ class MixtralSdpaAttention(MixtralAttention):
         valid_slot_ids = kwargs.get("valid_slot_ids")
         all_q_len = kwargs.get("all_q_len")
         all_kv_len = kwargs.get("all_kv_len")
-
         max_kv_len = max(all_kv_len) if is_context else max(all_q_len) + max(all_kv_len)
-
-        # kv_seq_len = key_states.shape[-2]
-        # if past_key_value is not None:
-        #     kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
 
         # fused rope
         query_states, key_states = self.rotary_emb_fused(position_ids, query_states, key_states)
@@ -823,35 +819,22 @@ class MixtralSdpaAttention(MixtralAttention):
         # cos, sin = self.rotary_emb(value_states, seq_len=max_kv_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        # if past_key_value is not None:
-        #     cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-        #     key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # past_key_value: [max_batch_size, kv_head_num, max_seq_len, head_dim]
+        block_tables, kv_caches = past_key_value
+        slot_mapping = kwargs.get("slot_mapping")
+        key_cache, value_cache = kv_caches[self.layer_idx]
+        key_states_cache = key_states.view(-1, self.num_key_value_heads, self.head_dim).contiguous()
+        value_states_cache = value_states.view(-1, self.num_key_value_heads, self.head_dim).contiguous()
+        PagedAttention.write_to_paged_cache(key_states_cache, 
+                                            value_states_cache, 
+                                            key_cache,
+                                            value_cache,
+                                            slot_mapping.view(-1),
+                                            "auto", 1.0, 1.0)
+        
         if is_context:
-            slot_id = valid_slot_ids[0]
-            q_len = all_q_len[0]
-            past_key_value[self.layer_idx][0][slot_id:slot_id+1, :, :q_len, :] = key_states
-            past_key_value[self.layer_idx][1][slot_id:slot_id+1, :, :q_len, :] = value_states
-        else:
-            batch_size, _, q_len, _ = key_states.shape
-            max_qkv_len = q_len + max(all_kv_len)
-            for i, slot_id in enumerate(valid_slot_ids):
-                q_len = all_q_len[i]
-                kv_len = all_kv_len[i]
-                past_key_value[self.layer_idx][0][slot_id:slot_id+1, :, kv_len:kv_len+q_len, :] = key_states[i, :, :, :]
-                past_key_value[self.layer_idx][1][slot_id:slot_id+1, :, kv_len:kv_len+q_len, :] = value_states[i, :, :, :]
-
-            cur_k_cache = past_key_value[self.layer_idx][0][:, :, :max_qkv_len, :]
-            cur_v_cache = past_key_value[self.layer_idx][1][:, :, :max_qkv_len, :]
-            select_slots = torch.tensor(valid_slot_ids, device=key_states.device)
-            key_states = torch.index_select(cur_k_cache, 0, select_slots)
-            value_states = torch.index_select(cur_v_cache, 0, select_slots)
-
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+        
         # if attention_mask is not None:
         #     if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
         #         raise ValueError(
@@ -867,27 +850,33 @@ class MixtralSdpaAttention(MixtralAttention):
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        # attn_output = torch.nn.functional.scaled_dot_product_attention(
-        #     query_states,
-        #     key_states,
-        #     value_states,
-        #     attn_mask=attention_mask,
-        #     dropout_p=self.attention_dropout if self.training else 0.0,
-        #     # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-        #     is_causal=self.is_causal and attention_mask is None and q_len > 1,
-        # )
+        if is_context:
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=~attention_mask,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+            ).transpose(1, 2).contiguous()
+        else:
+            query_states = query_states.view(-1, self.num_heads, self.head_dim)
+            seq_lens = torch.tensor( [x + y for x, y in zip(all_q_len, all_kv_len)], dtype=torch.int, device=query_states.device)
+            attn_output = PagedAttention.forward_decode(
+                query_states,
+                key_cache,
+                value_cache,
+                block_tables[0:bsz],
+                seq_lens,
+                int(self.max_position_embeddings),
+                "auto",
+                self.num_key_value_heads,
+                float(1.0 / (self.head_dim**0.5)),
+                None,
+                1.0,
+                1.0,
+            ).contiguous()
 
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=~attention_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, self.num_heads * self.head_dim)
-
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
@@ -1243,6 +1232,19 @@ class MixtralModel(MixtralPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         residual = None
+        bsz = input_ids.shape[0]
+        is_context = kwargs.get("is_context")
+        valid_slot_ids = kwargs.get("valid_slot_ids")
+        batch_offset = kwargs.get("cache_batch_offset")
+        if is_context:
+            slot_offset = torch.tensor([valid_slot_ids[0] * batch_offset],
+                                        device = position_ids.device,
+                                        dtype = position_ids.dtype).unsqueeze(1)
+        else:
+            slot_offset = torch.arange(0, bsz * batch_offset, batch_offset,
+                                       device = position_ids.device,
+                                       dtype = position_ids.dtype).unsqueeze(1)
+        kwargs["slot_mapping"] = position_ids + slot_offset
         if kwargs.pop("override_hidden_states", False):
             random_seed = kwargs.pop("random_seed", 1)
             layer_index = kwargs.pop("fixed_layer_index", -1)
@@ -1253,6 +1255,7 @@ class MixtralModel(MixtralPreTrainedModel):
             random_input_ids = torch.randint(10, self.vocab_size, input_ids.shape, dtype=torch.int64, device="cpu").to(input_ids.device)
 
             hidden_states = self.embed_tokens(random_input_ids)
+            
             for _ in self.layers:
                 layer_outputs, residual = self.layers[layer_index](
                     hidden_states,

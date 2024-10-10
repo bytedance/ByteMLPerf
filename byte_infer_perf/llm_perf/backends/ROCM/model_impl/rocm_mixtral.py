@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from llm_perf.utils.logger import logger
 from llm_perf.utils.ps_utils import check_memory_usage
 from llm_perf.utils.dist_utils import check_dist
@@ -160,7 +160,7 @@ class GPUMixtral(nn.Module):
 
         check_memory_usage("After model to device")
 
-        self.kv_cache = self.init_kvcache(self.mixtral_config.torch_dtype)
+        self.block_tables, self.kv_cache = self.init_kvcache(self.mixtral_config.torch_dtype)
 
         if self.mp_size > 1:
             dist.barrier()
@@ -185,19 +185,33 @@ class GPUMixtral(nn.Module):
 
         cur_device = self.transformer_model.device
 
+        self.block_size = 32
+        max_num_blocks = 4096
+        while max_num_blocks * self.block_size < max_seq_len * max_batch_size:
+            max_num_blocks += 4096
+        self.max_num_blocks_per_seq = (max_seq_len + self.block_size - 1) // self.block_size
+        block_tables_lst: List[List[int]] = []
+        for batch_idx in range(max_batch_size):
+            block_start = self.max_num_blocks_per_seq * batch_idx
+            block_table = [i + block_start for i in range(self.max_num_blocks_per_seq)]
+            block_tables_lst.append(block_table)
+        block_tables = torch.tensor(block_tables_lst, dtype=torch.int, device = cur_device)
+        x = 16 // torch.tensor([], dtype=dtype).element_size()
+        k_cache_shape = (max_num_blocks, kv_head_num // self.mp_size, head_dim // x, self.block_size, x)
+        v_cache_shape = (max_num_blocks, kv_head_num // self.mp_size, head_dim, self.block_size)
+        
         past_key_values = ()
         for i in range(num_layers):
-            kv_shape = (max_batch_size, kv_head_num // self.mp_size, max_seq_len, head_dim)
-            key_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
-            value_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
-            past_key_values += ((key_cache, value_cache),)
-        return past_key_values
-
+            k_cache = torch.zeros(size=k_cache_shape, dtype=dtype, device=cur_device)
+            v_cache = torch.zeros(size=v_cache_shape, dtype=dtype, device=cur_device)
+            past_key_values += ((k_cache, v_cache),)
+        return block_tables, past_key_values
 
     def forward(self, inputs : Dict[str, torch.Tensor]):
+        inputs["cache_batch_offset"] = self.block_size * self.max_num_blocks_per_seq
         model_outputs = self.transformer_model.forward(
             **inputs,
-            past_key_values=self.kv_cache
+            past_key_values=(self.block_tables, self.kv_cache)
         )
 
         # context: [1, seq_len] --> [1, seq_len, vocab_size] or [1, 1, vocab_size]
