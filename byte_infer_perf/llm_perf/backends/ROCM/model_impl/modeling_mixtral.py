@@ -771,10 +771,6 @@ class MixtralSdpaAttention(MixtralAttention):
     `MixtralAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
     SDPA API.
     """
-    def __init__(self, config: MixtralConfig, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
-        self.cache_inited = False
-
     # Adapted from MixtralAttention.forward
     def forward(
         self,
