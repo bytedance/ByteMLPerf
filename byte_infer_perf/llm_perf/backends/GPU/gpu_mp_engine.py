@@ -133,7 +133,7 @@ class GpuMpEngine(CoreMpEngine):
                 logger.info(f"rank {local_rank} received signal {signum}, exiting...")
                 if hasattr(model, 'finalize_inference'):
                     model.finalize_inference()
-                os._exit(0)
+                sys.exit(0)
 
             signal.signal(signal.SIGINT, signal_handler)
             signal.signal(signal.SIGTERM, signal_handler)
