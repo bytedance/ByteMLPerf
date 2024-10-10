@@ -827,52 +827,15 @@ class MixtralSdpaAttention(MixtralAttention):
         # cos, sin = self.rotary_emb(value_states, seq_len=max_kv_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-
-        ##################### init caches ##################
-        # todo: move tables out of layer, only one per model
-        block_size = 32
-        max_num_blocks = 16384
-        # max_seq_len_supported = max_kv_len
-        max_seq_len_supported = 10240
-        if max_kv_len > max_seq_len_supported or bsz >32:
-            raise ValueError("unsupport kv_len for current hack, too long or bsz too big")
-        max_num_blocks_per_seq = (max_seq_len_supported + block_size - 1) //block_size
-        if not self.cache_inited:
-            self.block_tables_lst: List[List[int]] = []
-            for batch_idx in range(32):
-                block_start = max_num_blocks_per_seq * batch_idx
-                block_table = [i + block_start for i in range(max_num_blocks_per_seq)]
-                self.block_tables_lst.append(block_table)
-            self.block_tables = torch.tensor(self.block_tables_lst, dtype=torch.int,
-                            device = query_states.device)
-            x = 16 // torch.tensor([], dtype=query_states.dtype).element_size()
-            key_cache_shape = (max_num_blocks, self.num_key_value_heads, self.head_dim // x, block_size, x)
-            self.key_cache = torch.zeros(size=key_cache_shape,
-                                    dtype=query_states.dtype,
-                                    device=query_states.device)
-
-            value_cache_shape = (max_num_blocks, self.num_key_value_heads, self.head_dim, block_size)
-            self.value_cache = torch.zeros(size=value_cache_shape,
-                                    dtype=query_states.dtype,
-                                    device=query_states.device)
-            self.cache_inited = True
-        ##################### init caches ##################
-        
-        if is_context:
-            slot_offset = torch.tensor([valid_slot_ids[0] * max_num_blocks_per_seq * block_size],
-                                   device = position_ids.device,
-                                   dtype = position_ids.dtype).unsqueeze(1)
-        else:
-            slot_offset = torch.arange(0, bsz * max_num_blocks_per_seq * block_size, 
-                                   block_size * max_num_blocks_per_seq,
-                                   device = position_ids.device).unsqueeze(1)
-        slot_mapping = position_ids + slot_offset
+        block_tables, kv_caches = past_key_value
+        slot_mapping = kwargs.get["slot_mapping"]
+        key_cache, value_cache = kv_caches[self.layer_idx]
         key_states_cache = key_states.view(-1, self.num_key_value_heads, self.head_dim).contiguous()
         value_states_cache = value_states.view(-1, self.num_key_value_heads, self.head_dim).contiguous()
         PagedAttention.write_to_paged_cache(key_states_cache, 
                                             value_states_cache, 
-                                            self.key_cache,
-                                            self.value_cache,
+                                            key_cache,
+                                            value_cache,
                                             slot_mapping.view(-1),
                                             "auto", 1.0, 1.0)
         
@@ -908,11 +871,11 @@ class MixtralSdpaAttention(MixtralAttention):
             seq_lens = torch.tensor( [x + y for x, y in zip(all_q_len, all_kv_len)], dtype=torch.int, device=query_states.device)
             attn_output = PagedAttention.forward_decode(
                 query_states,
-                self.key_cache,
-                self.value_cache,
-                self.block_tables[0:bsz],
+                key_cache,
+                value_cache,
+                block_tables[0:bsz],
                 seq_lens,
-                int(max_seq_len_supported),
+                int(self.max_position_embeddings),
                 "auto",
                 self.num_key_value_heads,
                 float(1.0 / (self.head_dim**0.5)),
@@ -922,7 +885,6 @@ class MixtralSdpaAttention(MixtralAttention):
             ).contiguous()
 
         attn_output = attn_output.view(bsz, q_len, self.num_heads * self.head_dim)
-
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
@@ -1288,6 +1250,20 @@ class MixtralModel(MixtralPreTrainedModel):
             random_input_ids = torch.randint(10, self.vocab_size, input_ids.shape, dtype=torch.int64, device="cpu").to(input_ids.device)
 
             hidden_states = self.embed_tokens(random_input_ids)
+            
+            bsz, _, _ = hidden_states.size()
+            is_context = kwargs.get("is_context")
+            valid_slot_ids = kwargs.get("valid_slot_ids")
+            batch_offset = kwargs.get("cache_batch_offset")
+            if is_context:
+                slot_offset = torch.tensor([valid_slot_ids[0] * batch_offset],
+                                    device = position_ids.device,
+                                    dtype = position_ids.dtype).unsqueeze(1)
+            else:
+                slot_offset = torch.arange(0, bsz * batch_offset, 
+                                            batch_offset,
+                                            device = position_ids.device).unsqueeze(1)
+            kwargs["slot_mapping"] = position_ids + slot_offset
             for _ in self.layers:
                 layer_outputs, residual = self.layers[layer_index](
                     hidden_states,
