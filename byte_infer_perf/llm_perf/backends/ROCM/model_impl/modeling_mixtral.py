@@ -814,10 +814,6 @@ class MixtralSdpaAttention(MixtralAttention):
         all_kv_len = kwargs.get("all_kv_len")
         max_kv_len = max(all_kv_len) if is_context else max(all_q_len) + max(all_kv_len)
 
-        # kv_seq_len = key_states.shape[-2]
-        # if past_key_value is not None:
-        #     kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
         # fused rope
         query_states, key_states = self.rotary_emb_fused(position_ids, query_states, key_states)
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
