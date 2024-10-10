@@ -31,3 +31,5 @@ void batched_rotary_embedding(torch::Tensor &positions, torch::Tensor &query,
                               torch::Tensor &cos_sin_cache, bool is_neox,
                               int64_t rot_dim,
                               torch::Tensor &cos_sin_cache_offsets);
+
+void moe_sum(torch::Tensor &input, torch::Tensor &output);
