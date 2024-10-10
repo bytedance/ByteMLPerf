@@ -189,7 +189,6 @@ class GPUMixtral(nn.Module):
         max_num_blocks = 4096
         while max_num_blocks * self.block_size < max_seq_len * max_batch_size:
             max_num_blocks += 4096
-        print(f"max_num_blocks:{max_num_blocks}, num_layers {num_layers}")
         self.max_num_blocks_per_seq = (max_seq_len + self.block_size - 1) // self.block_size
         block_tables_lst: List[List[int]] = []
         for batch_idx in range(max_batch_size):

@@ -828,7 +828,7 @@ class MixtralSdpaAttention(MixtralAttention):
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         block_tables, kv_caches = past_key_value
-        slot_mapping = kwargs.get["slot_mapping"]
+        slot_mapping = kwargs.get("slot_mapping")
         key_cache, value_cache = kv_caches[self.layer_idx]
         key_states_cache = key_states.view(-1, self.num_key_value_heads, self.head_dim).contiguous()
         value_states_cache = value_states.view(-1, self.num_key_value_heads, self.head_dim).contiguous()
@@ -1240,6 +1240,19 @@ class MixtralModel(MixtralPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         residual = None
+        bsz = input_ids.shape[0]
+        is_context = kwargs.get("is_context")
+        valid_slot_ids = kwargs.get("valid_slot_ids")
+        batch_offset = kwargs.get("cache_batch_offset")
+        if is_context:
+            slot_offset = torch.tensor([valid_slot_ids[0] * batch_offset],
+                                        device = position_ids.device,
+                                        dtype = position_ids.dtype).unsqueeze(1)
+        else:
+            slot_offset = torch.arange(0, bsz * batch_offset, batch_offset,
+                                       device = position_ids.device,
+                                       dtype = position_ids.dtype).unsqueeze(1)
+        kwargs["slot_mapping"] = position_ids + slot_offset
         if kwargs.pop("override_hidden_states", False):
             random_seed = kwargs.pop("random_seed", 1)
             layer_index = kwargs.pop("fixed_layer_index", -1)
@@ -1251,19 +1264,6 @@ class MixtralModel(MixtralPreTrainedModel):
 
             hidden_states = self.embed_tokens(random_input_ids)
             
-            bsz, _, _ = hidden_states.size()
-            is_context = kwargs.get("is_context")
-            valid_slot_ids = kwargs.get("valid_slot_ids")
-            batch_offset = kwargs.get("cache_batch_offset")
-            if is_context:
-                slot_offset = torch.tensor([valid_slot_ids[0] * batch_offset],
-                                    device = position_ids.device,
-                                    dtype = position_ids.dtype).unsqueeze(1)
-            else:
-                slot_offset = torch.arange(0, bsz * batch_offset, 
-                                            batch_offset,
-                                            device = position_ids.device).unsqueeze(1)
-            kwargs["slot_mapping"] = position_ids + slot_offset
             for _ in self.layers:
                 layer_outputs, residual = self.layers[layer_index](
                     hidden_states,
