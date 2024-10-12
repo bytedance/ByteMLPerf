@@ -7,7 +7,9 @@ from llm_perf.backends.GPU.gpu_inferencer import GpuInferencer
 from llm_perf.backends.GPU.gpu_sampler import GpuSampler
 from llm_perf.backends.GPU.gpu_scheduler import GpuScheduler
 from llm_perf.backends.GPU.gpu_mp_engine import GpuMpEngine
+from llm_perf.backends.GPU.gpu_mp_engine import GpuMpEngineWithGraph
 from llm_perf.utils.logger import logger
+import os
 
 def get_device_name():
     return torch.cuda.get_device_name(0)
@@ -25,14 +27,22 @@ def get_engine(xpu_cfg) -> CoreScheduler:
     )
     vendor_model = vendor_model_impl.__all__[model_name]
 
-    # create mp engine
-    mp_engine = GpuMpEngine(
-        world_size=xpu_cfg["tp_size"],
-        model_impl=vendor_model,
-        xpu_cfg=xpu_cfg
-    )
+    is_graph = int(os.environ.get("ENABLE_GRAPH", "0"))
 
-    return mp_engine
+    if is_graph:
+        mp_engine = GpuMpEngineWithGraph(
+            world_size=xpu_cfg["tp_size"],
+            model_impl=vendor_model,
+            xpu_cfg=xpu_cfg
+        )
+        return mp_engine
+    else:
+        mp_engine = GpuMpEngine(
+            world_size=xpu_cfg["tp_size"],
+            model_impl=vendor_model,
+            xpu_cfg=xpu_cfg
+        )
+        return mp_engine
 
 
 def setup_scheduler(xpu_cfg) -> CoreScheduler:
