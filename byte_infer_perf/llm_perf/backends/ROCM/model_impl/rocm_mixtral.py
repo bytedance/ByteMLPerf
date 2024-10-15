@@ -25,7 +25,7 @@ from ..rocm_kernels.dist.parallel_state import (ensure_model_parallel_initialize
 from ..rocm_kernels.dist.utils import (get_open_port,
                                        get_distributed_init_method,
                                        get_ip)
-setup_logger('info')
+# setup_logger('info')
 
 class GPUMixtralLoader(GpuCkptLoader):
     def __init__(
@@ -146,14 +146,12 @@ class GPUMixtral(nn.Module):
         if self.mp_size > 1:
             set_custom_all_reduce(True)
 
-            print('init_distributed_environment')
             init_distributed_environment(
                 world_size=self.mp_size, 
                 rank=self.local_rank, 
                 distributed_init_method=get_distributed_init_method("127.0.0.1", get_open_port()))
                 # distributed_init_method=get_distributed_init_method(get_ip(), get_open_port()))
 
-            print('ensure_model_parallel_initialized')
             ensure_model_parallel_initialized(self.mp_size, 1)
             logger.info(f"RANK: {self.local_rank} {self.mp_size} init_process_group...")
             # dist.init_process_group(

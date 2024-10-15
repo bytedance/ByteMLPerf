@@ -3,10 +3,10 @@ import importlib
 from typing import Any, Dict
 
 from llm_perf.core.scheduler import CoreScheduler
-from llm_perf.backends.GPU.gpu_inferencer import GpuInferencer
+from llm_perf.backends.ROCM.gpu_inferencer import GpuInferencer
 from llm_perf.backends.GPU.gpu_sampler import GpuSampler
 from llm_perf.backends.GPU.gpu_scheduler import GpuScheduler
-from llm_perf.backends.GPU.gpu_mp_engine import GpuMpEngine
+from llm_perf.backends.ROCM.gpu_mp_engine import GpuMpEngine
 from llm_perf.backends.GPU.gpu_mp_engine import GpuMpEngineWithGraph
 from llm_perf.utils.logger import logger
 import os
