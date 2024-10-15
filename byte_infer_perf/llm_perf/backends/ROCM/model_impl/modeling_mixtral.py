@@ -61,6 +61,7 @@ from ..rocm_kernels.paged_attn import PagedAttention
 import rocmKernels as ops
 from ..rocm_kernels.tuned_gemm import tgemm
 from ..rocm_kernels.rotary_embedding import get_rope
+from ..rocm_kernels.dist.communication_op import tensor_model_parallel_all_reduce
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -1047,7 +1048,8 @@ class MixtralDecoderLayer(nn.Module):
             **kwargs, 
         )
         if self.mp_size > 1:
-            dist.all_reduce(hidden_states)
+            hidden_states = tensor_model_parallel_all_reduce(hidden_states)
+            # dist.all_reduce(hidden_states)
             
 
         # Fully Connected
@@ -1060,7 +1062,8 @@ class MixtralDecoderLayer(nn.Module):
         # print(f'{os.environ.get("LOCAL_RANK", "0")}:{self.layer_idx} {hidden_states.shape=}')
         # print(f'{os.environ.get("LOCAL_RANK", "0")}:{self.layer_idx} {hidden_states=}')
         if self.mp_size > 1:
-            dist.all_reduce(hidden_states)
+            hidden_states = tensor_model_parallel_all_reduce(hidden_states)
+            # dist.all_reduce(hidden_states)
 
         # hidden_states = residual + hidden_states
         # outputs = (hidden_states,)

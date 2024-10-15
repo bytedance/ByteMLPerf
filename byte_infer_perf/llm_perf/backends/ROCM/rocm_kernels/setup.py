@@ -98,10 +98,11 @@ def rename_cpp_to_cu(pth):
     ret=[]
     dst=pth.replace('csrc','build')
     for entry in os.listdir(pth):
+        newName=entry
         if entry.endswith(".cpp") or entry.endswith(".cu"):
             newName=entry.replace(".cpp", ".cu")
-            shutil.copy(f'{pth}/{entry}', f'{dst}/{newName}')
             ret.append(f'{dst}/{newName}')
+        shutil.copy(f'{pth}/{entry}', f'{dst}/{newName}')
     return ret
 
 
@@ -159,6 +160,7 @@ if IS_ROCM:
                 "-DUSE_PROF_API=1",
                 "-D__HIP_PLATFORM_HCC__=1",
                 "-D__HIP_PLATFORM_AMD__=1",
+                # "-DLEGACY_HIPBLAS_DIRECT",
                 "-U__HIP_NO_HALF_CONVERSIONS__",
                 "-U__HIP_NO_HALF_OPERATORS__"
             ]
@@ -168,7 +170,7 @@ if IS_ROCM:
     }
 
     include_dirs = [
-        f"{this_dir}/csrc",
+        f"{this_dir}/build",
     ]
 
     ext_modules.append(

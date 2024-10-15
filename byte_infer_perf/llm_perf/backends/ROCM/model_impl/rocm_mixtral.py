@@ -7,7 +7,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 
 from typing import Dict, Any, List
-from llm_perf.utils.logger import logger
+from llm_perf.utils.logger import logger, setup_logger
 from llm_perf.utils.ps_utils import check_memory_usage
 from llm_perf.utils.dist_utils import check_dist
 
@@ -17,7 +17,15 @@ from llm_perf.backends.GPU.gpu_ckpt_loader import GpuCkptLoader
 from llm_perf.core.ckpt_loader import Mixtral_ModelLoader
 from transformers import MixtralConfig
 from .modeling_mixtral import MixtralForCausalLM
-
+from ..rocm_kernels.dist.parallel_state import (ensure_model_parallel_initialized,
+                                                init_distributed_environment,
+                                                set_custom_all_reduce,
+                                                destroy_model_parallel,
+                                                destroy_distributed_environment)
+from ..rocm_kernels.dist.utils import (get_open_port,
+                                       get_distributed_init_method,
+                                       get_ip)
+setup_logger('info')
 
 class GPUMixtralLoader(GpuCkptLoader):
     def __init__(
@@ -136,12 +144,23 @@ class GPUMixtral(nn.Module):
         torch.cuda.set_device(self.local_rank)
 
         if self.mp_size > 1:
+            set_custom_all_reduce(True)
+
+            print('init_distributed_environment')
+            init_distributed_environment(
+                world_size=self.mp_size, 
+                rank=self.local_rank, 
+                distributed_init_method=get_distributed_init_method("127.0.0.1", get_open_port()))
+                # distributed_init_method=get_distributed_init_method(get_ip(), get_open_port()))
+
+            print('ensure_model_parallel_initialized')
+            ensure_model_parallel_initialized(self.mp_size, 1)
             logger.info(f"RANK: {self.local_rank} {self.mp_size} init_process_group...")
-            dist.init_process_group(
-                backend="nccl",
-                world_size=self.mp_size,
-                rank=self.local_rank
-            )
+            # dist.init_process_group(
+            #     backend="nccl",
+            #     world_size=self.mp_size,
+            #     rank=self.local_rank
+            # )
             check_dist()
 
         check_memory_usage("Begin")
@@ -167,7 +186,10 @@ class GPUMixtral(nn.Module):
 
     def finalize_inference(self):
         if self.mp_size > 1 and dist.is_initialized():
-            dist.destroy_process_group()
+            # dist.destroy_process_group()
+            destroy_model_parallel()
+            destroy_distributed_environment()
+            torch.cuda.empty_cache()
 
     def load_weight(self, ckpt_path):
         p_loader = GPUMixtralLoader(self.transformer_model, self.mixtral_config, ckpt_path)
