@@ -1249,12 +1249,14 @@ class MixtralModel(MixtralPreTrainedModel):
                                        dtype = position_ids.dtype).unsqueeze(1)
         kwargs["slot_mapping"] = position_ids + slot_offset
         if kwargs.pop("override_hidden_states", False):
-            random_seed = kwargs.pop("random_seed", 1)
+            random_seed = kwargs.pop("random_seed", None)
             layer_index = kwargs.pop("fixed_layer_index", -1)
             layer_index = layer_index % len(self.layers)
 
             # create random input ids on cpu and copy to device
-            torch.manual_seed(random_seed)
+            if random_seed is not None:
+                # RuntimeError: Cannot call CUDAGeneratorImpl::set_current_seed during CUDA graph capture.
+                torch.manual_seed(random_seed)
             random_input_ids = torch.randint(10, self.vocab_size, input_ids.shape, dtype=torch.int64, device="cpu").to(input_ids.device)
 
             hidden_states = self.embed_tokens(random_input_ids)
