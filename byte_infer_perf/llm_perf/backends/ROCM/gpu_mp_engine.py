@@ -52,19 +52,21 @@ def get_decode_masks(
     batch_size, q_len = input_ids.shape
     max_qkv_len = q_len + max(all_kv_len)
     
-    # [batch_size, 1, max_qkv_len]
-    padding_mask = []
-    for i in range(batch_size):
-        cur_qkv_len = q_len + all_kv_len[i]
-        mask_per_batch = [1] * cur_qkv_len + [0] * (max_qkv_len - cur_qkv_len)
-        padding_mask.append(mask_per_batch)
-    full_attention_mask = torch.tensor(
-        padding_mask, 
-        device=input_ids.device
-    ).unsqueeze_(1)
-    full_attention_mask = (full_attention_mask < 0.5).bool()
-    full_attention_mask.unsqueeze_(1)
-    return full_attention_mask
+    # # [batch_size, 1, max_qkv_len]
+    # padding_mask = []
+    # for i in range(batch_size):
+    #     cur_qkv_len = q_len + all_kv_len[i]
+    #     mask_per_batch = [1] * cur_qkv_len + [0] * (max_qkv_len - cur_qkv_len)
+    #     padding_mask.append(mask_per_batch)
+    # full_attention_mask = torch.tensor(
+    #     padding_mask, 
+    #     device=input_ids.device
+    # ).unsqueeze_(1)
+    # full_attention_mask = (full_attention_mask < 0.5).bool()
+    # full_attention_mask.unsqueeze_(1)
+    seq_lens = torch.tensor([1 + y for y in all_kv_len],
+                            dtype=torch.int, device=input_ids.device)
+    return seq_lens
 
 
 
@@ -98,7 +100,7 @@ class GpuMpEngine(CoreMpEngine):
                 forward_inputs["attention_mask"]
             )
         else:
-            forward_inputs["full_attention_mask"] = get_decode_masks(
+            forward_inputs["seq_lens_tensor"] = get_decode_masks(
                 forward_inputs["input_ids"],
                 forward_inputs["all_kv_len"]
             )
@@ -195,7 +197,7 @@ class GpuMpEngine(CoreMpEngine):
         output_dict = self._output_queues.get(block=True)
 
         return output_dict
-
+    
 # ROCM_HIPGRAPH modify
 class GpuMpEngineWithGraph(GpuMpEngine):
     def __init__(self, world_size: int, model_impl: nn.Module, xpu_cfg) -> None:
@@ -251,7 +253,11 @@ class GpuMpEngineWithGraph(GpuMpEngine):
                 if 'capture' in forward_inputs:
                     graph.reset()   # reset cuda graph each time
                     inputs_dict = self.build_inputs(forward_inputs)
-                    # model.forward(inputs_dict)
+
+                    random_seed = inputs_dict.pop("random_seed", 1)
+                    torch.manual_seed(random_seed)
+                    # for i in range(5):
+                    #     model.forward(inputs_dict)
                     torch.cuda.synchronize()
                     with torch.cuda.graph(graph):
                         model.forward(inputs_dict)
