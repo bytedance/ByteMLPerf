@@ -205,6 +205,9 @@ class GPUMixtral(nn.Module):
 
         cur_device = self.transformer_model.device
 
+        if self.xpu_cfg.get("perf_config", None) is not None:
+            max_seq_len = min(max_seq_len, 
+                              max(self.xpu_cfg["perf_config"]["seq_len_list"])*2)
         self.block_size = 32
         max_num_blocks = 4096
         while max_num_blocks * self.block_size < max_seq_len * max_batch_size:
