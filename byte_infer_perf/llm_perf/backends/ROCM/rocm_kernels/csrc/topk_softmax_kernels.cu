@@ -111,7 +111,7 @@ __launch_bounds__(TPB) __global__
 
 template <int TPB>
 __launch_bounds__(TPB) __global__ void moeTopK(const float* inputs_after_softmax, const bool* finished, float* output,
-    int* indices, int* source_rows, const int num_experts, const int k, const int start_expert, const int end_expert)
+    int* indices, int* source_rows, const int num_experts, const int k, const int start_expert, const int end_expert, const bool need_renorm)
 {
 
     using cub_kvp = cub::KeyValuePair<int, float>;
@@ -124,6 +124,7 @@ __launch_bounds__(TPB) __global__ void moeTopK(const float* inputs_after_softmax
     const int num_rows = gridDim.x;
     const int block_row = blockIdx.x;
 
+    float renorm_value = 0.0f;
     const bool row_is_active = finished ? !finished[block_row] : true;
     const int thread_read_offset = blockIdx.x * num_experts;
     for (int k_idx = 0; k_idx < k; ++k_idx)
@@ -164,8 +165,23 @@ __launch_bounds__(TPB) __global__ void moeTopK(const float* inputs_after_softmax
             indices[idx] = should_process_row ? (expert - start_expert) : num_experts;
             assert(indices[idx] >= 0);
             source_rows[idx] = k_idx * num_rows + block_row;
+
+            if (need_renorm)
+            {
+                renorm_value += result_kvp.value;
+            }
         }
         __syncthreads();
+    }
+
+    if (need_renorm && threadIdx.x == 0 && renorm_value != 0.f)
+    {
+        renorm_value = 1 / renorm_value;
+        for (int k_idx = 0; k_idx < k; k_idx++)
+        {
+            int64_t const idx = k * block_row + k_idx;
+            output[idx] *= renorm_value;
+        }
     }
 }
 
@@ -487,7 +503,7 @@ void topkGatingSoftmaxKernelLauncher(
                 gating_output, nullptr, softmax_workspace, num_experts);
             moeTopK<TPB><<<num_tokens, TPB, 0, stream>>>(
                 softmax_workspace, nullptr, topk_weights, topk_indicies, token_expert_indices,
-                num_experts, topk, 0, num_experts);
+                num_experts, topk, 0, num_experts, need_renorm);
         }
     }
 }
