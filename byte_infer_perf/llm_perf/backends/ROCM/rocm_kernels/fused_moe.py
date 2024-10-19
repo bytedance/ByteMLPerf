@@ -631,11 +631,12 @@ def fused_topk(
         topk_ids,
         token_expert_indicies,
         gating_output.float(),  # TODO(woosuk): Optimize this.
+        renormalize
     )
     del token_expert_indicies  # Not used. Will be used in the future.
 
-    if renormalize:
-        topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
+    # if renormalize:
+    #     topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
 
     return topk_weights, topk_ids
 
