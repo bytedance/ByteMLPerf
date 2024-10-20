@@ -961,7 +961,6 @@ class MixtralSparseMoeBlock(nn.Module):
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
         log_file = kwargs.get("log_file", None)
-        final_hidden_states=hidden_states
 
         final_hidden_states = fused_moe(hidden_states,
                                         self.w13_weight,
