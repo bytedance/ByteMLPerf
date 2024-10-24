@@ -345,6 +345,7 @@ def fused_moe_persistent_kernel(
         # advance tile_id
         tile_id += NUM_SMS
 
+@triton.jit
 def _abs_max(val1, val2):
     val1_abs = tl.abs(val1)
     val2_abs = tl.abs(val2)
@@ -526,7 +527,7 @@ def invoke_fused_moe_int8_a8w8_kernel(A: torch.Tensor, B: torch.Tensor, C: torch
 
     assert B_scale is not None
     B_scale = B_scale.view(-1, B.shape[1])
-    print("llm Bscale shape:",A_scale)
+  #  print("llm Bscale shape:",A_scale)
 
     if not FUSED_MOE_PERSISTENT:
         grid = lambda META: (triton.cdiv(sorted_token_ids.shape[0], META[
@@ -897,8 +898,8 @@ def fused_experts_int8_a8w8(hidden_states: torch.Tensor,
         triton_dynamic_quantize(
             intermediate_cache2_quant, intermediate_cache2, intermediate_cache2_scales
         )
-        print("llm: cache2:", intermediate_cache2_quant)
-        print("llm: cache2_sclae:", intermediate_cache2_scales)
+#        print("llm: cache2:", intermediate_cache2_quant)
+#        print("llm: cache2_sclae:", intermediate_cache2_scales)
 
         invoke_fused_moe_int8_a8w8_kernel(intermediate_cache2_quant,
                                 w2,
