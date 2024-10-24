@@ -2,7 +2,6 @@ import triton
 import triton.language as tl
 
 from triton.triton_utils import compile_and_cache_kernels
-#from blade_llm.module.kernel_backend import get_autotune_triton_kernel
 
 
 @triton.jit
