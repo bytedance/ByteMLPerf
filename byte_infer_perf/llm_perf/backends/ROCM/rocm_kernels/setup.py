@@ -26,8 +26,10 @@ from torch.utils.cpp_extension import (
 )
 
 
+ck_dir = os.environ.get("CK_DIR", "/mnt/raid0/ljin1/dk/composable_kernel")
 this_dir = os.path.dirname(os.path.abspath(__file__))
-PACKAGE_NAME='rocmKernels'
+bd_dir = f"{this_dir}/build"
+PACKAGE_NAME = 'rocmKernels'
 BUILD_TARGET = os.environ.get("BUILD_TARGET", "auto")
 
 if BUILD_TARGET == "auto":
@@ -41,7 +43,8 @@ else:
     elif BUILD_TARGET == "rocm":
         IS_ROCM = True
 
-FORCE_CXX11_ABI=False
+FORCE_CXX11_ABI = False
+
 
 def get_platform():
     """
@@ -59,7 +62,8 @@ def get_platform():
 
 
 def get_cuda_bare_metal_version(cuda_dir):
-    raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
+    raw_output = subprocess.check_output(
+        [cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
     output = raw_output.split()
     release_idx = output.index("release") + 1
     bare_metal_version = parse(output[release_idx].split(",")[0])
@@ -94,21 +98,25 @@ def append_nvcc_threads(nvcc_extra_args):
     return nvcc_extra_args + ["--threads", nvcc_threads]
 
 
-def rename_cpp_to_cu(pth):
-    ret=[]
-    dst=pth.replace('csrc','build')
-    for entry in os.listdir(pth):
-        newName=entry
-        if entry.endswith(".cpp") or entry.endswith(".cu"):
-            newName=entry.replace(".cpp", ".cu")
-            ret.append(f'{dst}/{newName}')
-        shutil.copy(f'{pth}/{entry}', f'{dst}/{newName}')
+def rename_cpp_to_cu(pths):
+    ret = []
+    dst = bd_dir
+    for pth in pths:
+        if not os.path.exists(pth):
+            continue
+        for entry in os.listdir(pth):
+            newName = entry
+            if entry.endswith(".cpp") or entry.endswith(".cu"):
+                newName = entry.replace(".cpp", ".cu")
+                ret.append(f'{dst}/{newName}')
+            shutil.copy(f'{pth}/{entry}', f'{dst}/{newName}')
     return ret
 
 
 def validate_and_update_archs(archs):
     # List of allowed architectures
-    allowed_archs = ["native", "gfx90a", "gfx940", "gfx941", "gfx942", "gfx1100"]
+    allowed_archs = ["native", "gfx90a",
+                     "gfx940", "gfx941", "gfx942", "gfx1100"]
 
     # Validate if each element in archs is in allowed_archs
     assert all(
@@ -120,9 +128,9 @@ cmdclass = {}
 ext_modules = []
 
 if IS_ROCM:
-    #use codegen get code dispatch
-    if not os.path.exists(f"{this_dir}/build"):
-        os.makedirs(f"{this_dir}/build")
+    # use codegen get code dispatch
+    if not os.path.exists(bd_dir):
+        os.makedirs(bd_dir)
 
     print(f"\n\ntorch.__version__  = {torch.__version__}\n\n")
     TORCH_MAJOR = int(torch.__version__.split(".")[0])
@@ -133,7 +141,9 @@ if IS_ROCM:
     generator_flag = []
     torch_dir = torch.__path__[0]
     if os.path.exists(os.path.join(torch_dir, "include", "ATen", "CUDAGeneratorImpl.h")):
-        generator_flag = ["-DOLD_GENERATOR_PATH"]
+        generator_flag.append("-DOLD_GENERATOR_PATH")
+    if os.path.exists(ck_dir):
+        generator_flag.append("-DFIND_CK")
 
     cc_flag = []
 
@@ -148,41 +158,47 @@ if IS_ROCM:
     if FORCE_CXX11_ABI:
         torch._C._GLIBCXX_USE_CXX11_ABI = True
 
-
-    renamed_sources=rename_cpp_to_cu(f"{this_dir}/csrc")
+    renamed_sources = rename_cpp_to_cu([f"{this_dir}/csrc"])
+    renamed_ck_srcs = rename_cpp_to_cu(
+        [f"{ck_dir}/example/ck_tile/02_layernorm2d/instances",
+         # f'for other kernels'
+         ])
 
     extra_compile_args = {
         "cxx": ["-O3", "-std=c++17"] + generator_flag,
         "nvcc":
             [
-                "-O3","-std=c++17",
+                "-O3", "-std=c++17",
                 "-mllvm", "-enable-post-misched=0",
                 "-DUSE_PROF_API=1",
                 "-D__HIP_PLATFORM_HCC__=1",
                 "-D__HIP_PLATFORM_AMD__=1",
                 # "-DLEGACY_HIPBLAS_DIRECT",
                 "-U__HIP_NO_HALF_CONVERSIONS__",
-                "-U__HIP_NO_HALF_OPERATORS__"
-            ]
+                "-U__HIP_NO_HALF_OPERATORS__",
+        ]
             + generator_flag
-            + cc_flag
-        ,
+            + cc_flag,
     }
 
     include_dirs = [
         f"{this_dir}/build",
+        f"{ck_dir}/include",
+        f"{ck_dir}/library/include",
+        f"{ck_dir}/example/ck_tile/02_layernorm2d",
     ]
 
     ext_modules.append(
         CUDAExtension(
             name=PACKAGE_NAME,
-            sources=renamed_sources,
+            sources=renamed_sources+renamed_ck_srcs,
             extra_compile_args=extra_compile_args,
             include_dirs=include_dirs,
         )
     )
 else:
     raise NotImplementedError("Only ROCM is supported")
+
 
 class NinjaBuildExtension(BuildExtension):
     def __init__(self, *args, **kwargs) -> None:
@@ -194,8 +210,10 @@ class NinjaBuildExtension(BuildExtension):
             max_num_jobs_cores = max(1, os.cpu_count() // 2)
 
             # calculate the maximum allowed NUM_JOBS based on free memory
-            free_memory_gb = psutil.virtual_memory().available / (1024 ** 3)  # free memory in GB
-            max_num_jobs_memory = int(free_memory_gb / 9)  # each JOB peak memory cost is ~8-9GB when threads = 4
+            free_memory_gb = psutil.virtual_memory().available / \
+                (1024 ** 3)  # free memory in GB
+            # each JOB peak memory cost is ~8-9GB when threads = 4
+            max_num_jobs_memory = int(free_memory_gb / 9)
 
             # pick lower value of jobs based on cores vs memory metric to minimize oom and swap usage during compilation
             max_jobs = max(1, min(max_num_jobs_cores, max_num_jobs_memory))
@@ -206,7 +224,7 @@ class NinjaBuildExtension(BuildExtension):
 
 setup(
     name=PACKAGE_NAME,
-    version= "0.1.0",
+    version="0.1.0",
     packages=find_packages(
         exclude=(
             "build",
@@ -236,8 +254,8 @@ setup(
         "ninja",
     ],
 )
-if os.path.exists(f"{this_dir}/build"):
-    shutil.rmtree(f"{this_dir}/build")
+if os.path.exists(bd_dir):
+    shutil.rmtree(bd_dir)
     shutil.rmtree(f"./.eggs")
-    shutil.rmtree(f"./build")
+    # shutil.rmtree(f"./build")
     shutil.rmtree(f"./{PACKAGE_NAME}.egg-info")

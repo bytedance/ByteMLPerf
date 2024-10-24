@@ -21,6 +21,10 @@ void rms_norm(torch::Tensor &out, torch::Tensor &input, torch::Tensor &weight,
 void fused_add_rms_norm(torch::Tensor &input, torch::Tensor &residual,
                         torch::Tensor &weight, double epsilon);
 
+// ck kernel
+void layernorm2d(torch::Tensor &out, torch::Tensor &input, torch::Tensor &weight, torch::Tensor &bias,
+                 double epsilon);
+
 void wvSpltK(at::Tensor &in_a, at::Tensor &in_b, at::Tensor &out_c,
              const int64_t N_in, const int64_t CuCount);
 

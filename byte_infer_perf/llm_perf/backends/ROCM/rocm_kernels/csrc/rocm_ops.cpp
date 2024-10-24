@@ -3,7 +3,8 @@
 #include "cache.h"
 #include <torch/extension.h>
 
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
+{
       m.def("topk_softmax", &topk_softmax,
             "Apply topk softmax to the gating outputs.");
       m.def("moe_align_block_size", &moe_align_block_size,
@@ -39,8 +40,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             "    str kv_cache_dtype, float k_scale, float v_scale,"
             "    int tp_rank, int blocksparse_local_blocks,"
             "    int blocksparse_vert_stride, int blocksparse_block_size,"
-            "    int blocksparse_head_sliding_step) -> ()"
-      );
+            "    int blocksparse_head_sliding_step) -> ()");
       m.def("paged_attention_v2", &paged_attention_v2,
             "paged_attention_v2("
             "    Tensor! out, Tensor! exp_sums, Tensor! max_logits,"
@@ -51,9 +51,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
             "    str kv_cache_dtype, float k_scale, float v_scale,"
             "    int tp_rank, int blocksparse_local_blocks,"
             "    int blocksparse_vert_stride, int blocksparse_block_size,"
-            "    int blocksparse_head_sliding_step) -> ()"
-      );
-        
+            "    int blocksparse_head_sliding_step) -> ()");
+
       m.def("swap_blocks", &swap_blocks,
             "swap_blocks(Tensor src, Tensor! dst, Tensor block_mapping) -> ()");
       m.def("copy_blocks", &copy_blocks,
@@ -101,5 +100,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 #ifdef USE_ROCM
       m.def("allocate_meta_buffer", &allocate_meta_buffer);
       m.def("get_meta_buffer_ipc_handle", &get_meta_buffer_ipc_handle);
+#endif
+
+#if defined(FIND_CK)
+      // ck staff start
+      m.def("layernorm2d_fwd", &layernorm2d);
+      // ck staff end
 #endif
 }
