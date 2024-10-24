@@ -257,5 +257,7 @@ setup(
 if os.path.exists(bd_dir):
     shutil.rmtree(bd_dir)
     shutil.rmtree(f"./.eggs")
-    # shutil.rmtree(f"./build")
     shutil.rmtree(f"./{PACKAGE_NAME}.egg-info")
+
+if os.path.exists('./build'):
+    shutil.rmtree(f"./build")
