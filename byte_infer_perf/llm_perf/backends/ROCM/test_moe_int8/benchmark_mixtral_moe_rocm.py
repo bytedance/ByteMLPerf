@@ -12,6 +12,8 @@ _path = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, f'{_path}/../')
 #import vllm._moe_C as moe_kernels
 import rocmKernels as ops
+# print(ops.__file__)
+# exit()
 from rocm_kernels.fused_moe_int8_a8w8 import (fused_moe_int8_a8w8,
                                     get_config_file_name,
                                     scaled_int8_quant)
@@ -24,24 +26,24 @@ def main(args):
     os.environ["OPTIMIZE_EPILOGUE"] = "1"
 
     for bs in [
-           1,
-           2,
-           4,
-           8,
-           16,
-           24,
+#           1,
+#           2,
+#           4,
+#           8,
+#           16,
+#           24,
            32,
-           48,
-           64,
-           96,
-           128,
-           256,
-           512,
-           1024,
-           1536,
-           2048,
-           3072,
-           4096,
+#           48,
+#           64,
+#           96,
+#           128,
+#           256,
+#           512,
+#           1024,
+#           1536,
+#           2048,
+#           3072,
+#           4096,
     ]:
         run_grid(bs, model=args.model, TP=args.TP)
 

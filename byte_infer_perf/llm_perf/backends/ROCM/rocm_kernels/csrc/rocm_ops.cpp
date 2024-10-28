@@ -1,5 +1,6 @@
 #include "moe_ops.h"
 #include "paged_attn_ops.h"
+#include "gemm_a8w8.h"
 #include "cache.h"
 #include <torch/extension.h>
 
@@ -53,6 +54,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
             "    int blocksparse_vert_stride, int blocksparse_block_size,"
             "    int blocksparse_head_sliding_step) -> ()");
 
+      m.def("gemm_a8w8", &gemm_a8w8, "gemm_a8w8"); 
       m.def("swap_blocks", &swap_blocks,
             "swap_blocks(Tensor src, Tensor! dst, Tensor block_mapping) -> ()");
       m.def("copy_blocks", &copy_blocks,

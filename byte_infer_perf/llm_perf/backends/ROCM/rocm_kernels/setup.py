@@ -26,7 +26,7 @@ from torch.utils.cpp_extension import (
 )
 
 
-ck_dir = os.environ.get("CK_DIR", "/mnt/raid0/ljin1/dk/composable_kernel")
+ck_dir = os.environ.get("CK_DIR", "/mnt/md0/shengnan/ck_upstream/composable_kernel")
 this_dir = os.path.dirname(os.path.abspath(__file__))
 bd_dir = f"{this_dir}/build"
 PACKAGE_NAME = 'rocmKernels'
@@ -105,6 +105,8 @@ def rename_cpp_to_cu(pths):
         if not os.path.exists(pth):
             continue
         for entry in os.listdir(pth):
+            if os.path.isdir(f'{pth}/{entry}'):
+                continue
             newName = entry
             if entry.endswith(".cpp") or entry.endswith(".cu"):
                 newName = entry.replace(".cpp", ".cu")
@@ -161,6 +163,7 @@ if IS_ROCM:
     renamed_sources = rename_cpp_to_cu([f"{this_dir}/csrc"])
     renamed_ck_srcs = rename_cpp_to_cu(
         [f"{ck_dir}/example/ck_tile/02_layernorm2d/instances",
+         f"{this_dir}/csrc/impl/",
          # f'for other kernels'
          ])
 

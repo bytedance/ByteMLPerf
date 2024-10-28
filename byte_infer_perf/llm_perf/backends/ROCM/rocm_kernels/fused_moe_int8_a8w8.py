@@ -468,8 +468,11 @@ def moe_align_block_size(
     num_tokens_post_pad = torch.empty((1),
                                       dtype=torch.int32,
                                       device=topk_ids.device)
+    token_num = torch.empty((1),
+                                      dtype=torch.int32,
+                                      device=topk_ids.device)
     moe_kernels.moe_align_block_size(topk_ids, num_experts, block_size, sorted_ids,
-                             expert_ids, num_tokens_post_pad)
+                             expert_ids, token_num, num_tokens_post_pad)
     return sorted_ids, expert_ids, num_tokens_post_pad
 
 # int8
@@ -724,6 +727,7 @@ def fused_topk(
         topk_ids,
         token_expert_indicies,
         gating_output.float(),  # TODO(woosuk): Optimize this.
+        renormalize
     )
     del token_expert_indicies  # Not used. Will be used in the future.
 
