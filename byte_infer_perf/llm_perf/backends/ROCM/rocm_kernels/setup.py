@@ -26,7 +26,7 @@ from torch.utils.cpp_extension import (
 )
 
 
-ck_dir = os.environ.get("CK_DIR", "/mnt/md0/shengnan/ck_upstream/composable_kernel")
+ck_dir = os.environ.get("CK_DIR", "/mnt/raid0/shengnxu/composable_kernel")
 this_dir = os.path.dirname(os.path.abspath(__file__))
 bd_dir = f"{this_dir}/build"
 PACKAGE_NAME = 'rocmKernels'
