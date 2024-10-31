@@ -101,7 +101,7 @@ def main():
         print("self m",m,"n",n,"k",k)
         with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA, ], on_trace_ready=torch.profiler.tensorboard_trace_handler("./"), with_modules=False, with_stack=False) as p:
             for i in range(num_calls):
-                gemm_a8w8(a_s[i],b_s[i],alpha_row,alpha_col,out_gemm)
+               out_gemm = gemm_a8w8(a_s[i],b_s[i],alpha_row,alpha_col,out_gemm)
         print(p.key_averages().table(sort_by="self_cuda_time_total", row_limit=20))
         #end_event.record()
         #end_event.synchronize()

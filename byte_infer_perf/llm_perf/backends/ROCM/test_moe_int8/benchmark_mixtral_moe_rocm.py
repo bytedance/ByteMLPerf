@@ -32,11 +32,11 @@ def main(args):
 #           8,
 #           16,
 #           24,
-           32,
+#           32,
 #           48,
 #           64,
 #           96,
-#           128,
+           128,
 #           256,
 #           512,
 #           1024,
@@ -198,17 +198,17 @@ def dynamic_quan_torch_impl(input):
     return out.to(torch.int8), scale.half().squeeze(-1)
 def run_grid(bs, model, TP):
     if model == '8x7B':
-        d_model = 4096
+        d_model = 8192
         #d_model = 32
-        model_intermediate_size = 14336
+        model_intermediate_size = 8192
     elif model == '8x22B':
         d_model = 6144
         model_intermediate_size = 16384
     else:
         raise ValueError(f'Unsupported Mixtral model {model}')
 
-    num_total_experts = 8
-    top_k = 2
+    num_total_experts = 32
+    top_k = 5
     tp_size = TP
     num_calls = 100
 
@@ -266,7 +266,6 @@ def run_grid(bs, model, TP):
 
             kernel_dur_us = 1000 * kernel_dur_ms
             # model_dur_ms = kernel_dur_ms * num_layers
-
             if kernel_dur_us < best_time_us:
                 best_config = config
                 best_time_us = kernel_dur_us
@@ -328,7 +327,7 @@ def run_timing(
     )
 
     ###### Stuff from fused moe ######
-    hidden_states_quant,hidden_states_scales = dynamic_quan_torch_impl(hidden_states)
+    #hidden_states_quant,hidden_states_scales = dynamic_quan_torch_impl(hidden_states)
     w1_quant, w1_scales = dynamic_quan_torch_impl(w1)
     w2_quant, w2_scales = dynamic_quan_torch_impl(w2)
     assert (hidden_states.shape[0] == gating_output.shape[0]
@@ -344,21 +343,30 @@ def run_timing(
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
     start_event.record()
-    output = fused_moe_int8_a8w8(hidden_states_quant,
+    #output = fused_moe_int8_a8w8(hidden_states_quant,
+    output = fused_moe_int8_a8w8(hidden_states,
             w1_quant,
             w2_quant,
             gating_output,
             w1_scales,
             w2_scales,
-            hidden_states_scales,
+            #hidden_states_scales,
+            None,
             a2_scales,
             top_k,
             renormalize=False,
             inplace=False)
-    hidden_states_dequant = hidden_states_quant * hidden_states_scales[:, None]
+    
+    end_event.record()
+    end_event.synchronize()
+
+    dur_ms = start_event.elapsed_time(end_event) / num_calls
+    print("kernel dur ms:", dur_ms)
+    #hidden_states_dequant = hidden_states_quant * hidden_states_scales[:, None]
     w1_dequant = w1_quant * w1_scales[:, :, None]
     w2_dequant = w2_quant * w2_scales[:, :, None]
-    out_ref = torch_moe(hidden_states_dequant,
+    #out_ref = torch_moe(hidden_states_dequant,
+    out_ref = torch_moe(hidden_states,
             w1_dequant,
             w2_dequant,
             gating_output,
@@ -371,10 +379,6 @@ def run_timing(
     #print("out_ref:",out_ref)
     assert(diff.sum() < 10)
     #print("diff sum :",diff.sum())
-    end_event.record()
-    end_event.synchronize()
-
-    dur_ms = start_event.elapsed_time(end_event) / num_calls
     return dur_ms
 
 
@@ -387,7 +391,7 @@ if __name__ == "__main__":
         type=int,
         choices=[8, 4, 2, 1],
         help="Specify the TP value that the actual model will run on",
-        required=True,
+        default="8",
     )
     parser.add_argument(
         "--GPUID",
@@ -398,6 +402,7 @@ if __name__ == "__main__":
     parser.add_argument('--model',
                         type=str,
                         choices=['8x7B', '8x22B'],
+                        default="8x7B",
                         help='The Mixtral model to benchmark')
 
     args = parser.parse_args()
