@@ -26,9 +26,10 @@ from torch.utils.cpp_extension import (
 )
 
 
-ck_dir = os.environ.get("CK_DIR", "/mnt/raid0/shengnxu/composable_kernel")
+ck_dir = os.environ.get("CK_DIR", "/mnt/raid0/ljin1/dk/composable_kernel")
 this_dir = os.path.dirname(os.path.abspath(__file__))
 bd_dir = f"{this_dir}/build"
+blob_dir = f"{this_dir}/blob"
 PACKAGE_NAME = 'rocmKernels'
 BUILD_TARGET = os.environ.get("BUILD_TARGET", "auto")
 
@@ -133,6 +134,8 @@ if IS_ROCM:
     # use codegen get code dispatch
     if not os.path.exists(bd_dir):
         os.makedirs(bd_dir)
+    if not os.path.exists(blob_dir):
+        os.makedirs(blob_dir)
 
     print(f"\n\ntorch.__version__  = {torch.__version__}\n\n")
     TORCH_MAJOR = int(torch.__version__.split(".")[0])
@@ -146,6 +149,8 @@ if IS_ROCM:
         generator_flag.append("-DOLD_GENERATOR_PATH")
     if os.path.exists(ck_dir):
         generator_flag.append("-DFIND_CK")
+        os.system(
+            f'python {ck_dir}/example/ck_tile/02_layernorm2d/generate.py --api fwd --gen_blobs --working_path {blob_dir}')
 
     cc_flag = []
 
@@ -162,10 +167,10 @@ if IS_ROCM:
 
     renamed_sources = rename_cpp_to_cu([f"{this_dir}/csrc"])
     renamed_ck_srcs = rename_cpp_to_cu(
-        [f"{ck_dir}/example/ck_tile/02_layernorm2d/instances",
-         f"{this_dir}/csrc/impl/",
-         # f'for other kernels'
-         ])
+        [  # f'for other kernels'
+            f"{blob_dir}",
+            f"{this_dir}/csrc/impl/",
+        ])
 
     extra_compile_args = {
         "cxx": ["-O3", "-std=c++17"] + generator_flag,
@@ -205,13 +210,10 @@ else:
 
 class NinjaBuildExtension(BuildExtension):
     def __init__(self, *args, **kwargs) -> None:
-        # do not override env MAX_JOBS if already exists
-        if not os.environ.get("MAX_JOBS"):
+        # calculate the maximum allowed NUM_JOBS based on cores
+        max_num_jobs_cores = max(1, os.cpu_count()*0.8)
+        if int(os.environ.get("MAX_JOBS", '1')) < max_num_jobs_cores:
             import psutil
-
-            # calculate the maximum allowed NUM_JOBS based on cores
-            max_num_jobs_cores = max(1, os.cpu_count() // 2)
-
             # calculate the maximum allowed NUM_JOBS based on free memory
             free_memory_gb = psutil.virtual_memory().available / \
                 (1024 ** 3)  # free memory in GB
@@ -259,8 +261,11 @@ setup(
 )
 if os.path.exists(bd_dir):
     shutil.rmtree(bd_dir)
+if os.path.exists(blob_dir):
+    shutil.rmtree(blob_dir)
+if os.path.exists(f"./.eggs"):
     shutil.rmtree(f"./.eggs")
+if os.path.exists(f"./{PACKAGE_NAME}.egg-info"):
     shutil.rmtree(f"./{PACKAGE_NAME}.egg-info")
-
 if os.path.exists('./build'):
     shutil.rmtree(f"./build")
