@@ -593,6 +593,13 @@ void moe_sum(
             });
         break;
 
+    case 5:
+        VLLM_DISPATCH_FLOATING_TYPES(
+            input.scalar_type(), "moe_sum_kernel", [&]
+            { vllm::moe::moe_sum_kernel<scalar_t, 5>
+                  <<<grid, block, 0, stream>>>(output.data_ptr<scalar_t>(),
+                                               input.data_ptr<scalar_t>(), hidden_size); });
+        break;
     default:
         at::sum_out(output, input, 1);
         break;
