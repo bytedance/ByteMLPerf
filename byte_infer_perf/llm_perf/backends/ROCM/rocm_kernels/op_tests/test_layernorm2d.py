@@ -78,7 +78,13 @@ def run_ck(input, weight, bias, eps, residual=None):
 def checkAllclose(a, b, rtol=1e-2, atol=1e-2):
     assert torch.allclose(
         a, b, rtol, atol), f'''torch and ck results are not close\ntorch: {a.shape}\n{a}\nck: {b.shape}\n{b}\nmax delta:{(a-b).max()}
-        detail delta: {(a-b)}'''
+        delta details: 
+          a: 
+            {a[(a-b)>atol]}
+          b: 
+            {b[(a-b)>atol]}
+      dtlta: 
+            {(a-b)[(a-b)>atol]}'''
 
 
 def test_layernorm2d(dtype, m, n):
@@ -105,7 +111,7 @@ def test_layernorm2d_fuseAdd(dtype, m, n):
 
     print(
         f"[perf] dim: {dim}, dtype: {dtype}, torch avg: {avg_a:.2f} us, ck avg: {avg_b:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
-    checkAllclose(a, b, rtol=1e-2, atol=1e-1)
+    checkAllclose(a, b, atol=0.03)
     checkAllclose(res_a, res_b)
     print(f" [passed~]")
 
