@@ -3,6 +3,7 @@
 #include "gemm_a8w8.h"
 #include "cache.h"
 #include <torch/extension.h>
+#include "ck_py_interface.h"
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
@@ -108,6 +109,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
       // ck staff start
       m.def("layernorm2d_fwd", &layernorm2d);
       m.def("layernorm2d_fwd_with_add", &layernorm2d_with_add);
+      m.def("layernorm2d_fwd_with_smoothquant", &layernorm2d_with_smoothquant);
+      m.def("layernorm2d_fwd_with_add_smoothquant", &layernorm2d_with_add_smoothquant);
+      m.def("layernorm2d_fwd_with_dynamicquant", &layernorm2d_with_dynamicquant);
+      m.def("layernorm2d_fwd_with_add_dynamicquant", &layernorm2d_with_add_dynamicquant);
       // ck staff end
 #endif
 }

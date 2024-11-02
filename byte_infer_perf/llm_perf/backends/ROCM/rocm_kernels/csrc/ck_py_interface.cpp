@@ -20,7 +20,8 @@
 #define FOREACH_BUFFER_TORCH_TYPE_MAP(F) \
     F("fp32", torch::kFloat)             \
     F("fp16", torch::kHalf)              \
-    F("bf16", torch::kBFloat16)
+    F("bf16", torch::kBFloat16)          \
+    F("int8", torch::kInt8)
 
 inline std::string torchDTypeToStr(caffe2::TypeMeta dtype)
 {
@@ -115,6 +116,190 @@ void layernorm2d_with_add(torch::Tensor &out,          // [m ,n]
                      out.data_ptr(),          // p_y
                      residual_out.data_ptr(), // p_y_residual
                      nullptr,                 // p_y_scale
+                     nullptr,                 // p_mean
+                     nullptr,                 // p_invStd
+                     static_cast<float>(epsilon), m, n, stride},
+                    {stream});
+}
+
+void layernorm2d_with_smoothquant(torch::Tensor &out,    // [m ,n]
+                                  torch::Tensor &input,  // [m ,n]
+                                  torch::Tensor &xscale, // [1 ,n]
+                                  torch::Tensor &yscale, // [m ,1]
+                                  torch::Tensor &weight, // [1 ,n]
+                                  torch::Tensor &bias,   // [1 ,n]
+                                  double epsilon)
+{
+    auto dtype = input.dtype();
+    TORCH_CHECK(dtype == torch::kFloat16 || dtype == torch::kBFloat16,
+                "ck layernorm2d only support fp16 and bf16 data type");
+
+    std::string dtype_str = torchDTypeToStr(input.dtype());
+    std::string out_dtype_str = torchDTypeToStr(out.dtype());
+    std::string xscale_dtype_str = torchDTypeToStr(xscale.dtype());
+    std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
+    int n = input.size(-1);
+    int m = input.numel() / n;
+    int stride = n;
+    bool SaveMeanVar = false;
+    const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    layernorm2d_fwd({
+                        dtype_str,        // input precision
+                        out_dtype_str,    // output precision
+                        xscale_dtype_str, // x-scale, used for [1*N] input smooth quant
+                        yscale_dtype_str, // y-scale, used for [M*1] output for next layer
+                        SaveMeanVar,
+                        0, // fused_add
+                        1  // fused_quant
+                    },
+                    {input.data_ptr(),  // p_x
+                     nullptr,           // p_x_residual
+                     xscale.data_ptr(), // p_x_scale
+                     weight.data_ptr(), // p_gamma
+                     bias.data_ptr(),   // p_beta
+
+                     out.data_ptr(),    // p_y
+                     nullptr,           // p_y_residual
+                     yscale.data_ptr(), // p_y_scale
+                     nullptr,           // p_mean
+                     nullptr,           // p_invStd
+                     static_cast<float>(epsilon), m, n, stride},
+                    {stream});
+}
+
+void layernorm2d_with_add_smoothquant(torch::Tensor &out,          // [m ,n]
+                                      torch::Tensor &input,        // [m ,n]
+                                      torch::Tensor &residual_in,  // [m ,n]
+                                      torch::Tensor &residual_out, // [m ,n]
+                                      torch::Tensor &xscale,       // [1 ,n]
+                                      torch::Tensor &yscale,       // [m ,1]
+                                      torch::Tensor &weight,       // [1 ,n]
+                                      torch::Tensor &bias,         // [1 ,n]
+                                      double epsilon)
+{
+    auto dtype = input.dtype();
+    TORCH_CHECK(dtype == torch::kFloat16 || dtype == torch::kBFloat16,
+                "ck layernorm2d only support fp16 and bf16 data type");
+
+    std::string dtype_str = torchDTypeToStr(input.dtype());
+    std::string out_dtype_str = torchDTypeToStr(out.dtype());
+    std::string xscale_dtype_str = torchDTypeToStr(xscale.dtype());
+    std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
+    int n = input.size(-1);
+    int m = input.numel() / n;
+    int stride = n;
+    bool SaveMeanVar = false;
+    const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    layernorm2d_fwd({
+                        dtype_str,        // input precision
+                        out_dtype_str,    // output precision
+                        xscale_dtype_str, // x-scale, used for [1*N] input smooth quant
+                        yscale_dtype_str, // y-scale, used for [M*1] output for next layer
+                        SaveMeanVar,
+                        1, // fused_add
+                        1  // fused_quant
+                    },
+                    {input.data_ptr(),       // p_x
+                     residual_in.data_ptr(), // p_x_residual
+                     xscale.data_ptr(),      // p_x_scale
+                     weight.data_ptr(),      // p_gamma
+                     bias.data_ptr(),        // p_beta
+
+                     out.data_ptr(),          // p_y
+                     residual_out.data_ptr(), // p_y_residual
+                     yscale.data_ptr(),       // p_y_scale
+                     nullptr,                 // p_mean
+                     nullptr,                 // p_invStd
+                     static_cast<float>(epsilon), m, n, stride},
+                    {stream});
+}
+
+void layernorm2d_with_dynamicquant(torch::Tensor &out,    // [m ,n]
+                                   torch::Tensor &input,  // [m ,n]
+                                   torch::Tensor &yscale, // [m ,1]
+                                   torch::Tensor &weight, // [1 ,n]
+                                   torch::Tensor &bias,   // [1 ,n]
+                                   double epsilon)
+{
+    auto dtype = input.dtype();
+    TORCH_CHECK(dtype == torch::kFloat16 || dtype == torch::kBFloat16,
+                "ck layernorm2d only support fp16 and bf16 data type");
+
+    std::string dtype_str = torchDTypeToStr(input.dtype());
+    std::string out_dtype_str = torchDTypeToStr(out.dtype());
+    std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
+    int n = input.size(-1);
+    int m = input.numel() / n;
+    int stride = n;
+    bool SaveMeanVar = false;
+    const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    layernorm2d_fwd({
+                        dtype_str,        // input precision
+                        out_dtype_str,    // output precision
+                        dtype_str,        // x-scale, used for [1*N] input smooth quant
+                        yscale_dtype_str, // y-scale, used for [M*1] output for next layer
+                        SaveMeanVar,
+                        0, // fused_add
+                        2  // fused_quant
+                    },
+                    {input.data_ptr(),  // p_x
+                     nullptr,           // p_x_residual
+                     nullptr,           // p_x_scale
+                     weight.data_ptr(), // p_gamma
+                     bias.data_ptr(),   // p_beta
+
+                     out.data_ptr(),    // p_y
+                     nullptr,           // p_y_residual
+                     yscale.data_ptr(), // p_y_scale
+                     nullptr,           // p_mean
+                     nullptr,           // p_invStd
+                     static_cast<float>(epsilon), m, n, stride},
+                    {stream});
+}
+
+void layernorm2d_with_add_dynamicquant(torch::Tensor &out,          // [m ,n]
+                                       torch::Tensor &input,        // [m ,n]
+                                       torch::Tensor &residual_in,  // [m ,n]
+                                       torch::Tensor &residual_out, // [m ,n]
+                                       torch::Tensor &yscale,       // [m ,1]
+                                       torch::Tensor &weight,       // [1 ,n]
+                                       torch::Tensor &bias,         // [1 ,n]
+                                       double epsilon)
+{
+    auto dtype = input.dtype();
+    TORCH_CHECK(dtype == torch::kFloat16 || dtype == torch::kBFloat16,
+                "ck layernorm2d only support fp16 and bf16 data type");
+
+    std::string dtype_str = torchDTypeToStr(input.dtype());
+    std::string out_dtype_str = torchDTypeToStr(out.dtype());
+    std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
+    int n = input.size(-1);
+    int m = input.numel() / n;
+    int stride = n;
+    bool SaveMeanVar = false;
+    const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    layernorm2d_fwd({
+                        dtype_str,        // input precision
+                        out_dtype_str,    // output precision
+                        dtype_str,        // x-scale, used for [1*N] input smooth quant
+                        yscale_dtype_str, // y-scale, used for [M*1] output for next layer
+                        SaveMeanVar,
+                        1, // fused_add
+                        2  // fused_quant
+                    },
+                    {input.data_ptr(),       // p_x
+                     residual_in.data_ptr(), // p_x_residual
+                     nullptr,                // p_x_scale
+                     weight.data_ptr(),      // p_gamma
+                     bias.data_ptr(),        // p_beta
+
+                     out.data_ptr(),          // p_y
+                     residual_out.data_ptr(), // p_y_residual
+                     yscale.data_ptr(),       // p_y_scale
                      nullptr,                 // p_mean
                      nullptr,                 // p_invStd
                      static_cast<float>(epsilon), m, n, stride},
