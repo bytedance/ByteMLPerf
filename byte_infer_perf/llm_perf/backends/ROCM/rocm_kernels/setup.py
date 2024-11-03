@@ -204,6 +204,53 @@ if IS_ROCM:
             include_dirs=include_dirs,
         )
     )
+
+    # ########## gradlib for tuned GEMM start here
+    renamed_sources = rename_cpp_to_cu([f"{this_dir}/gradlib/csrc"])
+    gpus = ['gfx90a', 'gfx940', 'gfx941', 'gfx942']
+    extra_args = ["--offload-arch=" + g for g in gpus]
+    include_dirs = []
+    ext_modules.append(
+        CUDAExtension(
+            name='rocsolidxgemm',
+            sources=[f'{bd_dir}/rocsolgemm.cu'],
+            include_dirs=include_dirs,
+            # add additional libraries argument for hipblaslt
+            libraries=['rocblas'],
+            extra_compile_args={
+                'cxx': [
+                    '-O3',
+                    '-DLEGACY_HIPBLAS_DIRECT=ON',
+                ],
+                'nvcc': [
+                    '-O3',
+                    '-U__CUDA_NO_HALF_OPERATORS__',
+                    '-U__CUDA_NO_HALF_CONVERSIONS__',
+                    "-ftemplate-depth=1024",
+                    '-DLEGACY_HIPBLAS_DIRECT=ON',
+                ] + extra_args
+            }))
+    ext_modules.append(
+        CUDAExtension(
+            name='hipbsolidxgemm',
+            sources=[f'{bd_dir}/hipbsolgemm.cu'],
+            include_dirs=include_dirs,
+            # add additional libraries argument for hipblaslt
+            libraries=['hipblaslt'],
+            extra_compile_args={
+                'cxx': [
+                    '-O3',
+                    '-DLEGACY_HIPBLAS_DIRECT=ON',
+                ],
+                'nvcc': [
+                    '-O3',
+                    '-U__CUDA_NO_HALF_OPERATORS__',
+                    '-U__CUDA_NO_HALF_CONVERSIONS__',
+                    "-ftemplate-depth=1024",
+                    '-DLEGACY_HIPBLAS_DIRECT=ON',
+                ] + extra_args
+            }))
+    # ########## gradlib for tuned GEMM end here
 else:
     raise NotImplementedError("Only ROCM is supported")
 
@@ -251,7 +298,7 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "torch",
-        "einops",
+        # "einops",
     ],
     setup_requires=[
         "packaging",
