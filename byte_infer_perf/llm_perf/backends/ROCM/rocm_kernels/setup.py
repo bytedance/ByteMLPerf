@@ -158,6 +158,8 @@ if IS_ROCM:
     validate_and_update_archs(archs)
 
     cc_flag = [f"--offload-arch={arch}" for arch in archs]
+    cc_flag.append("-mllvm")
+    cc_flag.append("--amdgpu-kernarg-preload-count=16")
 
     # HACK: The compiler flag -D_GLIBCXX_USE_CXX11_ABI is set to be the same as
     # torch._C._GLIBCXX_USE_CXX11_ABI
@@ -209,6 +211,8 @@ if IS_ROCM:
     renamed_sources = rename_cpp_to_cu([f"{this_dir}/gradlib/csrc"])
     gpus = ['gfx90a', 'gfx940', 'gfx941', 'gfx942']
     extra_args = ["--offload-arch=" + g for g in gpus]
+    extra_args.append("-mllvm")
+    extra_args.append("--amdgpu-kernarg-preload-count=16")
     include_dirs = []
     ext_modules.append(
         CUDAExtension(

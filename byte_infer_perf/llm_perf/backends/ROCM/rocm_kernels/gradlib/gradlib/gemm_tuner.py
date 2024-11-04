@@ -8,7 +8,7 @@ import hipbsolidxgemm
 import pandas as pd
 import rocsolidxgemm
 
-from gradlib.GemmTuner import GemmTuner
+from GemmTuner import GemmTuner
 
 rocsolidxgemm.rocb_create_extension()
 hipbsolidxgemm.hipb_create_extension()

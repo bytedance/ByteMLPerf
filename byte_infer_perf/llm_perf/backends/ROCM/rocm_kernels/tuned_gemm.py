@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from hipbsolidxgemm import hipb_create_extension, hipb_mm
 from rocsolidxgemm import rocb_create_extension, rocb_mm
 
-import rocmKernels as ops
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -67,6 +66,7 @@ class TunedGemm:
         return self.solids.get((m, n, k, bias, str(dtype)), (0, 0))
 
     def apply_skinny(self, inp, weights, solidx, bias=None):
+        import rocmKernels as ops
         if solidx == 0:
             out = torch.empty(inp.shape[0],
                               weights.shape[0],
