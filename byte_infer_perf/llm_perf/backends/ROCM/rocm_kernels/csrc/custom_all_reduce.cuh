@@ -455,7 +455,7 @@ class CustomAllreduce {
    */
   template <typename T>
   void allreduce(cudaStream_t stream, T* input, T* output, int size,
-                 int threads = 512, int block_limit = 36) {
+                 int threads = 512, int block_limit = 20) {
     auto d = packed_t<T>::P::size;
     if (size % d != 0)
       throw std::runtime_error(
