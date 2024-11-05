@@ -35,7 +35,7 @@
 template <ck::index_t... Is>
 using S = ck::Sequence<Is...>;
 
-using I8  = int8_t;
+using I8 = int8_t;
 using I32 = int;
 using F16 = ck::half_t;
 using B16 = ck::bhalf_t;
@@ -67,11 +67,11 @@ struct RowwiseScale
 {
     template <typename E, typename C, typename D0, typename D1>
     __host__ __device__ constexpr void
-    operator()(E& e, const C& c, const D0& d0, const D1& d1) const;
+    operator()(E &e, const C &c, const D0 &d0, const D1 &d1) const;
 
     template <>
     __host__ __device__ constexpr void operator()<F16, AccDataType, F16, F16>(
-        F16& e, const AccDataType& c, const F16& d0, const F16& d1) const
+        F16 &e, const AccDataType &c, const F16 &d0, const F16 &d1) const
     {
         const F32 x0_f =
             ck::type_convert<F32>(c) * ck::type_convert<F32>(d0) * ck::type_convert<F32>(d1);
@@ -81,10 +81,30 @@ struct RowwiseScale
 
     template <>
     __host__ __device__ constexpr void operator()<B16, AccDataType, B16, B16>(
-        B16& e, const AccDataType& c, const B16& d0, const B16& d1) const
+        B16 &e, const AccDataType &c, const B16 &d0, const B16 &d1) const
     {
         const F32 x0_f =
             ck::type_convert<F32>(c) * ck::type_convert<F32>(d0) * ck::type_convert<F32>(d1);
+
+        e = ck::type_convert<B16>(x0_f);
+    }
+
+    template <>
+    __host__ __device__ constexpr void operator()<F16, AccDataType, F32, F32>(
+        F16 &e, const AccDataType &c, const F32 &d0, const F32 &d1) const
+    {
+        const F32 x0_f =
+            ck::type_convert<F32>(c) * d0 * d1;
+
+        e = ck::type_convert<F16>(x0_f);
+    }
+
+    template <>
+    __host__ __device__ constexpr void operator()<B16, AccDataType, F32, F32>(
+        B16 &e, const AccDataType &c, const F32 &d0, const F32 &d1) const
+    {
+        const F32 x0_f =
+            ck::type_convert<F32>(c) * d0 * d1;
 
         e = ck::type_convert<B16>(x0_f);
     }
@@ -92,11 +112,11 @@ struct RowwiseScale
 
 using CDEElementOp = RowwiseScale;
 
-template <typename DEDataType>
-using DsDataType = ck::Tuple<DEDataType, DEDataType>;
+template <typename DDataType>
+using DsDataType = ck::Tuple<DDataType, DDataType>;
 
 #if 0
-template <typename DEDataType>
+template <typename DDataType, typename EDataType=DDataType>
 using DeviceOpInstance = ck::tensor_operation::device::DeviceGemmMultiD_Xdl_CShuffle_V3
 // clang-format off
 ///######|  ALayout|  BLayout| DsLayout| ELayout|      AData|      BData|               DsData|                 EData|     AccData|         CShuffle|           A|           B|          CDE|           GEMM| Block|  MPer|  NPer|  KPer| AK1| BK1| MPer| NPer| MXdl| NXdl|  ABlockTransfer| ABlockTransfer| ABlockTransfer| ABlockTransfer| ABlockTransfer| ABlockTransfer| ABlockLds|  BBlockTransfer| BBlockTransfer| BBlockTransfer| BlockTransfer| BBlockTransfer| BBlockTransfer| BBlockLds|    CShuffle|    CShuffle| CBlockTransferClusterLengths|  CBlockTransfer|
@@ -104,14 +124,14 @@ using DeviceOpInstance = ck::tensor_operation::device::DeviceGemmMultiD_Xdl_CShu
 ///######|         |         |         |        |           |           |                     |                      |            |                 |   Operation|   Operation|    Operation|               |      |      |      |      |    |    |     |     | Wave| Wave| Lengths_K0_M_K1|   ArrangeOrder|               |               |      PerVector|   PerVector_K1|          | Lengths_K0_N_K1|   ArrangeOrder|               |              |      PerVector|   PerVector_K1|          |  PerShuffle|  PerShuffle|         _NBlock_NWaveNPerXdl|   _NWaveNPerXdl|
 ///######|         |         |         |        |           |           |                     |                      |            |                 |            |            |             |               |      |      |      |      |    |    |     |     |     |     |                |               |               |               |               |               |          |                |               |               |              |               |               |          |            |            |                             |    S<C, D0, D1>|
 ///###### RRR
-///      <      Row,      Row, DsLayout, ELayout, ADataType, BDataType, DsDataType<DEDataType>, DEDataType, AccDataType, CShuffleDataType,  AElementOp,  BElementOp, CDEElementOp,       GemmSpec,   256,   256,   128,    64,  16,   4,  32,   32,    4,    2,     S<4, 64, 1>,     S<1, 0, 2>,    S<1, 0, 2>,               2,             16,             16,          0,    S<16, 16, 1>,    S<0, 2, 1>,     S<0, 2, 1>,             1,               8,              4,          0,          1,           1,               S<1, 32, 1, 8>,      S<8, 8, 1>,  ck::BlockGemmPipelineScheduler::Interwave, ck::BlockGemmPipelineVersion::v1, I8>;
+///      <      Row,      Row, DsLayout, ELayout, ADataType, BDataType, DsDataType<DDataType>, EDataType, AccDataType, CShuffleDataType,  AElementOp,  BElementOp, CDEElementOp,       GemmSpec,   256,   256,   128,    64,  16,   4,  32,   32,    4,    2,     S<4, 64, 1>,     S<1, 0, 2>,    S<1, 0, 2>,               2,             16,             16,          0,    S<16, 16, 1>,    S<0, 2, 1>,     S<0, 2, 1>,             1,               8,              4,          0,          1,           1,               S<1, 32, 1, 8>,      S<8, 8, 1>,  ck::BlockGemmPipelineScheduler::Interwave, ck::BlockGemmPipelineVersion::v1, I8>;
 ///###### RCR
-         <      Row,      Col, DsLayout, ELayout, ADataType, BDataType, DsDataType<DEDataType>, DEDataType, AccDataType, CShuffleDataType,  AElementOp,  BElementOp, CDEElementOp,       GemmSpec,   256,   256,   128,    64,  16,  16,  32,   32,    4,    2,     S<4, 64, 1>,     S<1, 0, 2>,    S<1, 0, 2>,               2,             16,             16,          0,     S<4, 64, 1>,    S<1, 0, 2>,     S<1, 0, 2>,             2,              16,             16,          0,          1,           1,               S<1, 32, 1, 8>,      S<8, 8, 1>,  ck::BlockGemmPipelineScheduler::Interwave, ck::BlockGemmPipelineVersion::v1, I8>;
+         <      Row,      Col, DsLayout, ELayout, ADataType, BDataType, DsDataType<DDataType>, EDataType, AccDataType, CShuffleDataType,  AElementOp,  BElementOp, CDEElementOp,       GemmSpec,   256,   256,   128,    64,  16,  16,  32,   32,    4,    2,     S<4, 64, 1>,     S<1, 0, 2>,    S<1, 0, 2>,               2,             16,             16,          0,     S<4, 64, 1>,    S<1, 0, 2>,     S<1, 0, 2>,             2,              16,             16,          0,          1,           1,               S<1, 32, 1, 8>,      S<8, 8, 1>,  ck::BlockGemmPipelineScheduler::Interwave, ck::BlockGemmPipelineVersion::v1, I8>;
 // clang-format on
 #endif
 
 template <
-    typename DEDataType,
+    typename DDataType, typename EDataType,
     int BLOCK_SIZE,
     int MBLOCK,
     int NBLOCK,
@@ -130,7 +150,7 @@ template <
     ck::BlockGemmPipelineVersion PIPELINE_VERSION,
     auto GEMM_SPEC =
         ck::tensor_operation::device::GemmSpecialization::MNPadding>
-    using DeviceGemmHelper =
+using DeviceGemmHelper =
     ck::tensor_operation::device::DeviceGemmMultiD_Xdl_CShuffle_V3<
         ALayout,
         BLayout,
@@ -138,24 +158,24 @@ template <
         ELayout,
         ADataType,
         BDataType,
-        DsDataType<DEDataType>,
-        DEDataType,
+        DsDataType<DDataType>,
+        EDataType,
         AccDataType,
         CShuffleDataType,
         AElementOp,
         BElementOp,
         CDEElementOp,
         GEMM_SPEC,
-        BLOCK_SIZE, // Block Size
-        MBLOCK, // M per Block
-        NBLOCK, // N per Block
-        KBLOCK, // K per Block
-        16, // AK1
-        16, // BK1
+        BLOCK_SIZE,  // Block Size
+        MBLOCK,      // M per Block
+        NBLOCK,      // N per Block
+        KBLOCK,      // K per Block
+        16,          // AK1
+        16,          // BK1
         WAVE_TILE_M, // M per Xdl
         WAVE_TILE_N, // N per Xdl
-        WAVE_MAP_M, // Mxdl per Wave
-        WAVE_MAP_N, // Nxdl per Wave
+        WAVE_MAP_M,  // Mxdl per Wave
+        WAVE_MAP_N,  // Nxdl per Wave
         ABLOCK_TRANSFER,
         S<1, 0, 2>,
         S<1, 0, 2>,
@@ -178,15 +198,14 @@ template <
         PIPELINE_VERSION,
         ComputeDataType>;
 
-
-template <typename DEDataType,
+template <typename DDataType, typename EDataType,
           typename DeviceGemmInstance>
 __forceinline__ torch::Tensor gemm_a8w8_rowwise_impl(
-    torch::Tensor& XQ,
-    torch::Tensor& WQ,
-    torch::Tensor& x_scale,
-    torch::Tensor& w_scale,
-    torch::Tensor& Y)
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y)
 {
     int M = XQ.size(0);
     int N = WQ.size(0);
@@ -204,14 +223,14 @@ __forceinline__ torch::Tensor gemm_a8w8_rowwise_impl(
     auto cde_element_op = CDEElementOp{};
 
     constexpr ck::index_t NumDTensor = DeviceGemmInstance::NumDTensor;
-    
+
     auto argument = device_gemm.MakeArgument(
-        reinterpret_cast<ADataType*>(XQ.data_ptr()),
-        reinterpret_cast<BDataType*>(WQ.data_ptr()),
-        std::array<const void*, NumDTensor>{
-            reinterpret_cast<DEDataType*>(w_scale.data_ptr()),
-            reinterpret_cast<DEDataType*>(x_scale.data_ptr())},
-        reinterpret_cast<DEDataType*>(Y.data_ptr()),
+        reinterpret_cast<ADataType *>(XQ.data_ptr()),
+        reinterpret_cast<BDataType *>(WQ.data_ptr()),
+        std::array<const void *, NumDTensor>{
+            reinterpret_cast<DDataType *>(w_scale.data_ptr()),
+            reinterpret_cast<DDataType *>(x_scale.data_ptr())},
+        reinterpret_cast<EDataType *>(Y.data_ptr()),
         M,
         N,
         K,
@@ -222,10 +241,9 @@ __forceinline__ torch::Tensor gemm_a8w8_rowwise_impl(
         1,
         a_element_op,
         b_element_op,
-        cde_element_op
-    );
+        cde_element_op);
     TORCH_CHECK(device_gemm.IsSupportedArgument(argument), "This GEMM is not supported!");
-    
+
     invoker.Run(argument, StreamConfig{at::cuda::getCurrentCUDAStream().stream()});
     return Y;
 }

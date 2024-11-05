@@ -3,25 +3,27 @@
 
 #include "gemm_a8w8_common.cuh"
 
-template <typename DEDataType>
+template <typename DDataType, typename EDataType = DDataType>
 torch::Tensor
 a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave_v1(
-    torch::Tensor& XQ,
-    torch::Tensor& WQ,
-    torch::Tensor& x_scale,
-    torch::Tensor& w_scale,
-    torch::Tensor& Y) {
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y)
+{
   // A small kernel for small but not tiny shapes.
 
-    // Check if this input needs to be padded.
+  // Check if this input needs to be padded.
   int M = size_to_dim_(XQ.dim() - 1, XQ.sizes());
   int N = WQ.size(0);
   int K = WQ.size(1);
   bool pad = (M % 256 != 0) || (N % 128 != 0) || (K % 64 != 0);
 
-  if (pad) {
+  if (pad)
+  {
     using DeviceGemmInstance = DeviceGemmHelper<
-      DEDataType,
+        DDataType, EDataType,
         256,
         256,
         128,
@@ -39,10 +41,12 @@ a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave
         ck::BlockGemmPipelineScheduler::Interwave,
         ck::BlockGemmPipelineVersion::v1>;
     // Run kernel instance.
-    return gemm_a8w8_rowwise_impl<DEDataType, DeviceGemmInstance>(XQ, WQ, x_scale, w_scale, Y);
-  } else {
+    return gemm_a8w8_rowwise_impl<DDataType, EDataType, DeviceGemmInstance>(XQ, WQ, x_scale, w_scale, Y);
+  }
+  else
+  {
     using DeviceGemmInstance = DeviceGemmHelper<
-      DEDataType,
+        DDataType, EDataType,
         256,
         256,
         128,
@@ -61,22 +65,38 @@ a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave
         ck::BlockGemmPipelineVersion::v1,
         ck::tensor_operation::device::GemmSpecialization::Default>;
     // Run kernel instance.
-    return gemm_a8w8_rowwise_impl<DEDataType, DeviceGemmInstance>(XQ, WQ, x_scale, w_scale, Y);
+    return gemm_a8w8_rowwise_impl<DDataType, EDataType, DeviceGemmInstance>(XQ, WQ, x_scale, w_scale, Y);
   }
 }
 
 template torch::Tensor
 a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave_v1<F16>(
-    torch::Tensor& XQ,
-    torch::Tensor& WQ,
-    torch::Tensor& x_scale,
-    torch::Tensor& w_scale,
-    torch::Tensor& Y);
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y);
 
 template torch::Tensor
 a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave_v1<B16>(
-    torch::Tensor& XQ,
-    torch::Tensor& WQ,
-    torch::Tensor& x_scale,
-    torch::Tensor& w_scale,
-    torch::Tensor& Y);
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y);
+
+template torch::Tensor
+a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave_v1<F32, F16>(
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y);
+
+template torch::Tensor
+a8w8_rowwise_256x256x128x64_32x32_4x2_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_interwave_v1<F32, B16>(
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y);
