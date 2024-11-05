@@ -172,6 +172,7 @@ if IS_ROCM:
         [  # f'for other kernels'
             f"{blob_dir}",
             f"{this_dir}/csrc/impl/",
+            f"{ck_dir}/example/ck_tile/12_smoothquant/instances/",
         ])
 
     extra_compile_args = {
@@ -196,6 +197,7 @@ if IS_ROCM:
         f"{ck_dir}/include",
         f"{ck_dir}/library/include",
         f"{ck_dir}/example/ck_tile/02_layernorm2d",
+        f"{ck_dir}/example/ck_tile/12_smoothquant",
     ]
 
     ext_modules.append(

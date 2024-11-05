@@ -15,6 +15,7 @@
 
 #if defined(FIND_CK)
 #include "layernorm2d_fwd.hpp"
+#include "smoothquant.hpp"
 
 // common utility functions
 #define FOREACH_BUFFER_TORCH_TYPE_MAP(F) \
@@ -305,4 +306,31 @@ void layernorm2d_with_add_dynamicquant(torch::Tensor &out,          // [m ,n]
                      static_cast<float>(epsilon), m, n, stride},
                     {stream});
 }
+
+void smoothqunat_fwd(torch::Tensor &out,     // [m ,n]
+                     torch::Tensor &input,   // [m ,n]
+                     torch::Tensor &x_scale, // [1 ,n]
+                     torch::Tensor &y_scale) // [m ,1]
+{
+    auto dtype = input.dtype();
+    TORCH_CHECK(dtype == torch::kFloat16 || dtype == torch::kBFloat16,
+                "ck layernorm2d only support fp16 and bf16 data type");
+
+    std::string dtype_str = torchDTypeToStr(input.dtype());
+    int n = input.size(-1);
+    int m = input.numel() / n;
+    int stride = n;
+    const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+    smoothquant({
+                    dtype_str // input  dtype
+                },
+                {input.data_ptr(),   // p_x
+                 x_scale.data_ptr(), // p_x_scale
+                 y_scale.data_ptr(), // p_y
+                 out.data_ptr(),     // p_y_scale
+                 m, n, stride},
+                {stream});
+}
+
 #endif //

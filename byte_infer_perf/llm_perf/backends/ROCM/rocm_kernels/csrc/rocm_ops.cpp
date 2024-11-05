@@ -113,6 +113,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
       m.def("layernorm2d_fwd_with_add_smoothquant", &layernorm2d_with_add_smoothquant);
       m.def("layernorm2d_fwd_with_dynamicquant", &layernorm2d_with_dynamicquant);
       m.def("layernorm2d_fwd_with_add_dynamicquant", &layernorm2d_with_add_dynamicquant);
+      m.def("smoothqunat_fwd", &smoothqunat_fwd);
       // ck staff end
 #endif
 }
