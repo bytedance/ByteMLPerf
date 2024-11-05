@@ -53,7 +53,7 @@ def run_ck(input, x_scale, y_scale_dtype = torch.float32):
         start_event.record()
         output = torch.empty(input.shape, device="cuda", dtype=torch.int8)
         y_scale = torch.empty(input.shape[0], 1, device="cuda", dtype=y_scale_dtype)
-        rocmKernels.smoothqunat_fwd(output,
+        rocmKernels.smoothquant_fwd(output,
                                     input,
                                     x_scale,
                                     y_scale)

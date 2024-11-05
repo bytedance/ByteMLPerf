@@ -307,7 +307,7 @@ void layernorm2d_with_add_dynamicquant(torch::Tensor &out,          // [m ,n]
                     {stream});
 }
 
-void smoothqunat_fwd(torch::Tensor &out,     // [m ,n]
+void smoothquant_fwd(torch::Tensor &out,     // [m ,n]
                      torch::Tensor &input,   // [m ,n]
                      torch::Tensor &x_scale, // [1 ,n]
                      torch::Tensor &y_scale) // [m ,1]
