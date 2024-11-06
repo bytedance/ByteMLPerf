@@ -12,38 +12,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import sys
+import json
+import time
+import datetime
+import signal
 import argparse
 import importlib
-import json
 import logging
-import math
-import os
 import subprocess
-import sys
-from typing import Any, Dict, List
+import pathlib
 import traceback
+import random
+from typing import Any, Dict, List
+import itertools
+from collections import namedtuple
 
-import torch
+import torch.distributed
 import torch.multiprocessing as mp
 import virtualenv
 
-BYTE_MLPERF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BYTE_MLPERF_ROOT)
+import torch
 
-from backends.backend import Backend
+# directory config
+CUR_DIR = pathlib.Path.cwd().absolute()
+FILE_DIR = pathlib.Path(__file__).parent.absolute()
+BYTE_MLPERF_ROOT = FILE_DIR.parent
+sys.path.insert(0, str(BYTE_MLPERF_ROOT))
 
+# logger config
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("PerfEngine")
+logger = logging.getLogger("PerfEngine")
 
 
 def get_args():
-    """Parse commandline."""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--task",
-        default="gemm",
-        help="The task going to be evaluted, refs to workloads/",
-    )
+
+    # hardware config
     parser.add_argument(
         "--hardware_type",
         default="GPU",
@@ -51,184 +57,449 @@ def get_args():
     )
     parser.add_argument(
         "--vendor_path",
-        required=False,
         help="The hardware configs need to be loaded, refs to vendor_zoo/NVIDIA/A100-PCIe.json",
     )
+
+    # task config
     parser.add_argument(
-        "--compile_only", action="store_true", help="Run compilation only"
+        "--task_dir",
+        default=str(BYTE_MLPERF_ROOT.joinpath("workloads")),
+        help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
+    )
+    parser.add_argument(
+        "--task",
+        default="gemm",
+        help="The task going to be evaluted, refs to workloads/",
     )
 
+    # feature control
+    parser.add_argument(
+        "--parallel", 
+        type=int, default=1, 
+        help="Run all tasks in parallel if available"
+    )
+    parser.add_argument(
+        "--activate_venv", 
+        action="store_true",
+        help="Enable virtual environment to run the task",
+    )
     args = parser.parse_args()
     return args
 
 
-def load_workload(task: str) -> Dict[str, Any]:
+def load_workload(task: str, task_dir: str) -> Dict[str, Any]:
     """
     Return a list of dictionary with model Configuration
     Args: List[str]
     Returns: List[dic]
     """
-    modules_dir = (
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/workloads"
-    )
-
-    for file in os.listdir(modules_dir):
-        path = os.path.join(modules_dir, file)
+    modules_dir = pathlib.Path(task_dir).absolute()
+    # create empty workload json data
+    workload_dict = {}
+    for file in modules_dir.iterdir():
         if (
-            not file.startswith("_")
-            and not file.startswith(".")
-            and (file.endswith(".json") or os.path.isdir(path))
-            and file[: file.find(".json")] == task
+            file.stem.startswith('_')
+            or file.stem.startswith('.')
+            or file.is_dir()
+            or file.suffix != '.json'
+            or file.stem != task
         ):
-            module_name = file
-            with open("workloads/" + module_name, "r") as f:
-                workload_dict = json.load(f)
-            return workload_dict
-    else:
-        log.error(
-            "Task name: [ {} ] was not found, please check your task name".format(task)
-        )
+            continue
+        workload_dict = json.loads(file.read_text())
+
+    if not workload_dict:
+        logger.error(f"could not find {task}.json in {modules_dir}.")
+        exit(1)
+
+    return workload_dict
+
+
+
+def parse_workload(workload):
+    shape_list = []
+    if "input_shape_groups" in workload:
+        input_shape_groups = workload["input_shape_groups"] if isinstance(workload["input_shape_groups"], list) else [workload["input_shape_groups"]]
+
+        for input_shape_group in input_shape_groups:
+            if "inputs" in input_shape_group:
+                input_shape_list = []
+                for input_shapes in input_shape_group["inputs"]:
+                    input_shape_list.append([list(shape) for shape in itertools.product(*input_shapes)])
+                if len(input_shape_list) == 1:
+                    shape_list.extend(input_shape_list[0])
+                else:
+                    shape_list.extend([list(input_shape) for input_shape in zip(*input_shape_list)])
+
+            else:
+                gemm_keys = ["M", "K", "N", "MN", "MK", "KN"]
+                gemm_values = [input_shape_group.get(k, []) for k in gemm_keys]
+                if any(gemm_values):
+                    m ,k, n, mn, mk, kn = gemm_values
+                    # batch gemm
+                    if "batch_size" in input_shape_group:
+                        bs = input_shape_group.get("batch_size", [])
+                        if m and n and k:
+                            for p in itertools.product(bs, m, k, n):
+                                shape_list.append([[p[0], p[1], p[2]], [p[0], p[2], p[3]]])
+                        if mn and k:
+                            for p in itertools.product(bs, mn, k):
+                                shape_list.append([[p[0], p[1][0], p[2]], [p[0], p[2], p[1][1]]])
+                        if mk and n:
+                            for p in itertools.product(bs, mk, n):
+                                shape_list.append([[p[0], p[1][0], p[1][1]], [p[0], p[1][1], p[2]]])
+                        if m and kn:
+                            for p in itertools.product(bs, m, kn):
+                                shape_list.append([[p[0], p[1], p[2][0]], [p[0], p[2][0], p[2][1]]])
+                    # group gemm
+                    elif "gemm_group" in input_shape_group:
+                        groups = input_shape_group.get("gemm_group", [])
+                        batches = input_shape_group.get("batch", [])
+                        kn = input_shape_group.get("KN", [])
+                        if k and n:
+                            kn.append([list(shape) for shape in itertools.product(k, n)])
+                        for batch in batches:
+                            for _kn in kn:
+                                group_input_shape_list = []
+                                for group in groups:
+                                    group_input_shape_list.append([[group * batch, _kn[0]], [_kn[0], _kn[1]]])
+                                shape_list.append(group_input_shape_list)
+                    # gemm
+                    else:
+                        if m and n and k:
+                            for p in itertools.product(m, k, n):
+                                shape_list.append([[p[0], p[1]], [p[1], p[2]]])
+                        if mn and k:
+                            for p in itertools.product(mn, k):
+                                shape_list.append([[p[0][0], p[1]], [p[1], p[0][1]]])
+                        if mk and n:
+                            for p in itertools.product(mk, n):
+                                shape_list.append([[p[0][0], p[0][1]], [p[0][1], p[1]]])
+                        if m and kn:
+                            for p in itertools.product(m, kn):
+                                shape_list.append([[p[0], p[1][0]], [p[1][0], p[1][1]]])
+    return shape_list
+
+
+
+
+ConfigInstance = namedtuple("ConfigInstance", ["dtype", "tensor_shapes", "index", "total"])
+ResultItem = namedtuple("ResultItem", ["config", "report"])
 
 
 class PerfEngine:
     def __init__(self) -> None:
         super().__init__()
+
         self.args = get_args()
-        self.workload = load_workload(self.args.task)
+        self.workload = load_workload(self.args.task, self.args.task_dir)
         self.backend_type = self.args.hardware_type
         self.old_os_path = os.environ["PATH"]
         self.prev_sys_path = list(sys.path)
         self.real_prefix = sys.prefix
+        self.version = self.get_version()
 
-    def init_process(self, rank: int, world_size: int):
-        """
-        Initialize the distributed environment.
-
-        """
-        initialize_func = getattr(self.backend, "initialize_ccl")
-        initialize_func(rank, world_size)
-        status = self.start_perf(self.workload)
-
-    def init_backend(self, hardware_type: str) -> Backend:
-        """
-        Load related compile backend with input hardware type
-
-        Arguments: str
-
-        Returns: Heterogeneous Backend()
-        """
-        log.info("Loading Heterogeneous Backend: {}".format(hardware_type))
-
-        backend = importlib.import_module(
-            "backends." + hardware_type + ".backend_" + hardware_type.lower()
-        )
-        backend = getattr(backend, "Backend" + hardware_type)
-        return backend(self.workload, self.args.vendor_path)
-
-    def start_engine(self) -> None:
-        status = self.activate_venv(self.backend_type)
-        if not status:
-            log.warning("Activate virtualenv Failed, Please Check...")
-
-        self.backend = self.init_backend(self.backend_type)
-        output_dir = os.path.abspath("reports/" + self.backend_type)
-        os.makedirs(output_dir, exist_ok=True)
-
-        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
-            for group in self.workload["group"]:
-                mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
-        else:
-            status = self.start_perf(self.workload)
-
-        self.deactivate_venv()
-
-    def start_perf(self, workload: Dict[str, Any]) -> bool:
-        log.info(
-            "******************************************* Start to test op: {}. *******************************************".format(
-                workload["operator"]
-            )
-        )
-
-        # Initalize Output Dir and Reports
-        output_dir = os.path.abspath(
-            "reports/" + self.backend_type + "/" + workload["operator"]
-        )
-        os.makedirs(output_dir, exist_ok=True)
-
-        op_name = workload["operator"]
-        base_report = {
-            "Operator": op_name.upper(),
-            "Backend": self.backend_type,
-            "Host Info": self.get_cpu_name(),
-            "Device Info": getattr(self.backend, "get_device_name")(),
-        }
-
-        op = getattr(self.backend, op_name.lower(), None)
-        if op is not None and callable(op):
-            op()
-        else:
-            raise ValueError(f"Unknown operation: {op_name.lower()}")
-
-        perf_reports = []
-        if "input_shape_list" in self.workload:
-            shape_list = self.workload["input_shape_list"]
-        else:
-            shape_list = []
-            for M, N, K in self.workload["M/N/K"]:
-                shape_list.append([[M, K], [K, N]])
-
-        for dtype in self.workload["dtype"]:
-            perf_reports = []
-            base_report["Performance"] = {}
-            for input_shape in shape_list:
-                if isinstance(input_shape[0], int):
-                    input_shape = [input_shape]
-                try:
-                    reports = self.backend.perf(input_shape, dtype)
-                except Exception as e:
-                    traceback.print_exc()
-                    log.error(f"Execute op: {op_name.lower()} failed, input_shape: {input_shape}, dtype: {dtype}, error msg: {e}")
-                    reports = {}
-                perf_reports.append(reports)
-            base_report["Performance"] = perf_reports
-
-            # write output to json file
-            has_group = "Group" in base_report["Performance"][0]
-            output_report_path = (
-                f"result-{str(dtype)}"
-                + (
-                    f"-group{base_report['Performance'][0]['Group']}"
-                    if has_group
-                    else ""
-                )
-                + ".json"
-            )
-            output_report_path = os.path.join(output_dir, output_report_path)
-            local_rank = int(os.environ.get("LOCAL_RANK", 0))
-            if local_rank == 0:
-                # logging.info(base_report["Performance"])
-                with open(output_report_path, "w") as file:
-                    json.dump(base_report, file, indent=4)
-        log.info(
-            "******************************************* End to test op: {}. *******************************************".format(
-                workload["operator"]
-            )
-        )
-        return True
+    def get_version(self):
+        version = ""
+        try:
+            version_file = os.path.join(str(BYTE_MLPERF_ROOT), "../VERSION")
+            with open(version_file) as f:
+                _version = f.read().splitlines()
+            version = '.'.join(v.split('=')[1] for v in _version)
+        except Exception as e:
+            traceback.print_exc()
+            logger.warning(f"get bytemlperf version failed, error msg: {e}")
+        return version
 
     def get_cpu_name(self):
         command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
         cpu_name = subprocess.check_output(command, shell=True)
         return cpu_name.decode().strip()
 
+    def start_engine(self) -> None:
+        if self.args.activate_venv:
+            self.activate_venv(self.backend_type)
+
+        # init backend
+        hardware_type = self.backend_type
+        logger.info("Loading Heterogeneous Backend: {}".format(hardware_type))
+        
+        backend_module = importlib.import_module(
+            "backends." + hardware_type + ".backend_" + hardware_type.lower())
+        self.backend_class = getattr(backend_module, "Backend" + hardware_type)
+        self.backend = self.backend_class(self.workload, self.args.vendor_path)
+
+        # create output dir based on task
+        # {BYTEMLPERF_ROOT}/byte_micro_perf/reports/{backend_type}/{task_name}
+        hardware_reports_dir = BYTE_MLPERF_ROOT.joinpath(
+            "reports", self.backend_type
+        )
+        output_dir = BYTE_MLPERF_ROOT.joinpath(
+            "reports", self.backend_type, 
+            self.workload["operator"]
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+
+        # get input shape info
+        target_group_list = self.workload.get("group", [1])
+        target_group_list.sort()
+        device_count = getattr(self.backend, "get_device_count")()
+        group_list = []
+        for group in target_group_list:
+            if group <= device_count:
+                group_list.append(group)
+            else:
+                break
+        dtype_list = self.workload.get("dtype", ["float32"])
+        shape_list = parse_workload(self.workload)
+
+        if not group_list or not dtype_list or not shape_list:
+            logger.error("empty group/dtype/shape")
+            exit(1)
+
+        test_list = []
+        case_index = 0
+        for dtype in dtype_list:
+            for shape in shape_list:
+                test_list.append(ConfigInstance(dtype, shape, case_index + 1, len(dtype_list) * len(shape_list)))
+                case_index = case_index + 1
+
+        try:
+            mp.set_start_method("spawn", force=True)
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f"Set start method failed, error msg: {e}")
+
+
+        # terminate subprocesses
+        subprocess_pids = []
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, exiting...")
+            if subprocess_pids:
+                for pid in subprocess_pids:
+                    logger.info(f"terminate subprocess: {pid}")
+                    os.kill(pid, signal.SIGTERM)
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+
+        # all operations will enter subprocess to test in parallel
+        for group in group_list:
+            logger.info(f"Start to test group size: {group}")       
+            instance_num = min(device_count, max(1, self.args.parallel)) if group == 1 else group
+            if self.workload["operator"] in ["device2host", "host2device"]:
+                instance_num = 1
+
+            input_queues = mp.Queue()
+            output_queues = mp.Queue(maxsize=1)
+
+            try:
+                _subprocesses = mp.spawn(
+                    fn=self.perf_func, 
+                    args=(instance_num, group, output_dir, test_list, input_queues, output_queues), 
+                    nprocs=instance_num, 
+                    join=False, 
+                    daemon=False
+                )
+
+                subprocess_pids = _subprocesses.pids()
+                for _ in range(instance_num):
+                    assert "ready" == output_queues.get()
+                logger.info("all ranks are ready and listening, init done")
+
+                start_time = time.perf_counter_ns()
+                if group == 1:
+                    for test_instance in test_list:
+                        input_queues.put(test_instance, False)
+                    for _ in range(instance_num):
+                        input_queues.put(None, False)
+
+
+
+                result_list = []
+                if group == 1:
+                    for _ in range(instance_num):
+                        result_list.extend(output_queues.get())
+                elif group > 1:
+                    result_list.extend(output_queues.get())
+                result_list = sorted(result_list, key=lambda x: x.config.index)
+
+
+                dtype_results_mapping = {}
+                for result in result_list:
+                    if result.config.dtype not in dtype_results_mapping:
+                        dtype_results_mapping[result.config.dtype] = []
+                    dtype_results_mapping[result.config.dtype].append(result)
+
+                for dtype, results in dtype_results_mapping.items():
+                    dtype_results_mapping[dtype] = sorted(results, key=lambda x: x.config.index)
+                    
+                    base_report = {
+                        "Operator": self.workload["operator"].upper(),
+                        "Backend": self.backend_type,
+                        "Host Info": self.get_cpu_name(),
+                        "Device Info": getattr(self.backend, "get_device_name")(),
+                        "Version": self.version,
+                        "Execution Date": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "Performance": [result.report for result in dtype_results_mapping[dtype]]
+                    }
+
+                    filename = (
+                        f"result-{str(dtype)}"
+                        + (
+                            f"-group{group}"
+                            if group > 1
+                            else ""
+                        )
+                        + ".json"
+                    )
+                    filepath = output_dir.joinpath(filename)
+                    with open(filepath, "w") as f:
+                        json.dump(base_report, f, indent=4)
+
+
+                for process in _subprocesses.processes:
+                    process.join()
+
+                end_time = time.perf_counter_ns()
+                duration = (end_time - start_time) / 1e9
+                duration = round(duration, 3)
+  
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                ret_code = 0
+                for process in _subprocesses.processes:
+                    if process.exitcode != 0:
+                        ret_code = process.exitcode
+                        break
+                
+                if ret_code != 0:
+                    with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                        print(f"[failed] {self.args.task}, group_size={group}, {current_time}, {duration} s", file=f)
+                else:
+                    with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                        print(f"[success] {self.args.task}, group_size={group}, {current_time}, {duration} s", file=f)
+            
+            except Exception as e:
+                traceback.print_exc()
+                logger.error(f"Execute task: {self.args.task} failed, group: {group}, error msg: {e}")
+
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                with open(f"{hardware_reports_dir}/_run_report.log", "a") as f:
+                    print(f"[error] {self.args.task}, group_size={group}, {current_time}", file=f)
+
+            subprocess_pids = []
+            time.sleep(1)
+
+        if self.args.activate_venv:
+            self.deactivate_venv()
+
+
+
+    def perf_func(self, rank: int, *args):
+        world_size, group_size, output_dir, test_list, input_queues, output_queues = args
+        
+        backend_instance = self.backend_class(self.workload, self.args.vendor_path)
+        backend_instance.rank = rank
+        backend_instance.world_size = world_size
+
+        backend_instance.set_device(rank)
+
+        if group_size > 1:
+            backend_instance.initialize_ccl(rank, world_size)
+
+        op_name = self.workload["operator"]
+        backend_instance.get_op_instance()
+
+        output_queues.put("ready")
+
+        result_list = []
+        if group_size == 1:
+            while True:
+                test_instance = input_queues.get()
+                if test_instance is None:
+                    break           
+
+                test_dtype = test_instance.dtype
+                test_shape = test_instance.tensor_shapes
+
+                """
+                input_shape could be:
+                    List[int]: single shape. cos
+                    List[List[int]]: multiple inputs. add
+                    List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+                """
+                if isinstance(test_shape[0], int):
+                    test_shape = [test_shape]
+                try:
+                    reports = backend_instance.perf(test_shape, test_dtype)
+                except Exception as e:
+                    traceback.print_exc()
+                    logger.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                    reports = {}
+
+                if reports and "Error" not in reports:
+                    result_list.append(ResultItem(test_instance, reports))
+
+                    latency = reports.get("Avg latency(us)", 0)
+                    kernel_bw = reports.get("Kernel bandwidth(GB/s)", 0)
+                    bus_bw = reports.get("Bus bandwidth(GB/s)", 0)
+
+                    print(f"rank {rank}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
+                else:
+                    print(f"rank {rank}, {test_instance}, error")
+
+            output_queues.put(result_list)
+
+        elif group_size > 1:
+            for test_instance in test_list:
+                test_dtype = test_instance.dtype
+                test_shape = test_instance.tensor_shapes
+
+                """
+                input_shape could be:
+                    List[int]: single shape. cos
+                    List[List[int]]: multiple inputs. add
+                    List[List[List[in]]]: multiple inputs with multiple problems. group_gemm
+                """
+                if isinstance(test_shape[0], int):
+                    test_shape = [test_shape]
+                try:
+                    reports = backend_instance.perf(test_shape, test_dtype)
+                except Exception as e:
+                    traceback.print_exc()
+                    logger.error(f"Execute op: {op_name.lower()} failed, input_shape: {test_shape}, dtype: {test_dtype}, error msg: {e}")
+                    reports = {}
+
+                if reports and "Error" not in reports:
+                    result_list.append(ResultItem(test_instance, reports))
+
+                    latency = reports.get("Avg latency(us)", 0)
+                    kernel_bw = reports.get("Kernel bandwidth(GB/s)", 0)
+                    bus_bw = reports.get("Bus bandwidth(GB/s)", 0)
+                    if rank == 0:
+                        print(f"rank {rank}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
+                else:
+                    if rank == 0:
+                        print(f"rank {rank}, {test_instance}, error")
+            if rank == 0:
+                output_queues.put(result_list)
+
+        if group_size > 1:
+            backend_instance.destroy_process_group()
+
+
+
     def activate_venv(self, hardware_type: str) -> bool:
         if os.path.exists("backends/" + hardware_type + "/requirements.txt"):
-            log.info("Activating Virtual Env for " + hardware_type)
+            logger.info("Activating Virtual Env for " + hardware_type)
 
             venv_dir = os.path.join("backends", hardware_type + "/venv")
             activate_file = os.path.join(venv_dir, "bin", "activate_this.py")
             if not os.path.exists(venv_dir):
-                log.info("venv not exist, Creating Virtual Env for " + hardware_type)
+                logger.info("venv not exist, Creating Virtual Env for " + hardware_type)
 
                 virtualenv.create_environment(venv_dir, True)
 

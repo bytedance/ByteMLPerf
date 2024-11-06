@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Tuple, Union
 import torch
 
 from llm_perf.core.generation import GenerateResult
-from llm_perf.core.engine import CoreEngine
+from llm_perf.core.inferencer import CoreInferencer
 from llm_perf.core.sampler import CoreSampler
 
 from llm_perf.utils.logger import logger
@@ -13,16 +13,20 @@ class GpuSampler(CoreSampler):
     def __init__(self) -> None:
         super().__init__()
 
-    def sample(self, packets: List[CoreEngine.Packet], logits: torch.FloatTensor) -> List[int]:
-        top_p = [p.request.generate_config.top_p for p in packets]
+    def sample(
+        self, 
+        tasks: List[CoreInferencer.Task], 
+        logits: torch.FloatTensor
+    ) -> List[int]:
+        top_p = [p.request.generate_config.top_p for p in tasks]
         if all(p == 1.0 for p in top_p):
             top_p = None
 
-        top_k = [p.request.generate_config.top_k for p in packets]
+        top_k = [p.request.generate_config.top_k for p in tasks]
         if all(k == 0 for k in top_k):
             top_k = None
 
-        temperature = [p.request.generate_config.temperature for p in packets]
+        temperature = [p.request.generate_config.temperature for p in tasks]
         if all(t == 1.0 for t in temperature):
             temperature = None
 
@@ -33,7 +37,7 @@ class GpuSampler(CoreSampler):
             repetition_penalty,
             mask_eos_token,
         ) = (None, None, 0, None, None)
-        eos_token_id = [p.request.generate_config.eos_token_id or -1 for p in packets]
+        eos_token_id = [p.request.generate_config.eos_token_id or -1 for p in tasks]
 
         next_tokens, softmax_out = self._sample(
             logits.float(),
@@ -53,6 +57,7 @@ class GpuSampler(CoreSampler):
 
         # The aux_data is softmax_out here
         return next_tokens, softmax_out
+
 
     def _sample(
         self,
@@ -89,44 +94,60 @@ class GpuSampler(CoreSampler):
             )
 
         if _is_greedy:
-            return torch.argmax(logits, dim=-1), torch.nn.functional.softmax(
-                logits, dim=-1
-            )
+            return torch.argmax(logits, dim=-1), torch.nn.functional.softmax(logits, dim=-1)
         else:
             raise NotImplementedError
 
     def postprocess(
         self,
-        packets: List[CoreEngine.Packet],
+        tasks: List[CoreInferencer.Task],
         infer_outputs: Dict[str, torch.FloatTensor],
         next_tokens: List[int],
     ) -> List[GenerateResult]:
         generate_result = []
-        for i in range(len(packets)):
+        for i in range(len(tasks)):
             token_id = next_tokens[i]
-            packet = packets[i]
+            task = tasks[i]
 
-            if token_id == packet.request.generate_config.eos_token_id:
-                finish_reason = "stop"
-            elif (
-                len(packet.generate_ids)
-                >= packet.request.generate_config.max_new_tokens
-            ):
+            # take current generated token into account
+            generate_tokens_len = len(task.generate_ids) + 1
+
+            if token_id == task.request.generate_config.eos_token_id:
+                if generate_tokens_len < task.request.generate_config.min_new_tokens:
+                    finish_reason = ""
+                    token_id = task.request.generate_config.eos_token_id
+                else:
+                    finish_reason = "stop"
+            elif generate_tokens_len >= task.request.generate_config.max_new_tokens:
                 finish_reason = "max_length"
             else:
                 finish_reason = ""
 
-            if packet.request.generate_config.get_input_logits:
-                last_logits = infer_outputs["last_logits"]
-                input_logits = infer_outputs["input_logits"]
+
+            if task.request.generate_config.get_input_logits:
                 gen_res = GenerateResult(
                     token_id=token_id,
-                    finish_reason=finish_reason,
-                    last_logits=last_logits.view(-1).tolist(),
-                    input_logits=input_logits.view(-1).tolist(),
+                    finish_reason=finish_reason, 
+
+                    wait_time=task.wait_time[-1], 
+                    model_time=task.model_time[-1], 
+                    post_process_time=task.post_process_time[-1], 
+
+                    logits=infer_outputs["logits"][i].float().cpu(), 
+                    last_logits=infer_outputs["last_logits"][i].float().cpu(), 
                 )
             else:
-                gen_res = GenerateResult(token_id=token_id, finish_reason=finish_reason)
+                gen_res = GenerateResult(
+                    token_id=token_id,
+                    finish_reason=finish_reason, 
+
+                    wait_time=task.wait_time[-1], 
+                    model_time=task.model_time[-1], 
+                    post_process_time=task.post_process_time[-1], 
+
+                    logits=None, 
+                    last_logits=None, 
+                )
 
             generate_result.append(gen_res)
 

@@ -18,37 +18,50 @@ from typing import List
 import numpy as np
 import torch
 
+from backends import module_store
+
 
 def dump_communication_ops_report(
     op_name: str,
-    dtype: str,
+    torch_dtype,
     input_shapes: List[List[int]],
-    group_size: List[int],
+    compute_size_func, 
+    group_size: int,
     bandwidth_limit: float,
     latency: float,
     error: str = ""
 ):
-    size = math.prod(input_shapes[0])
-    torch_type = getattr(torch, dtype)
-    if torch_type == torch.int32:
-        dtype_size = torch.iinfo(torch_type).bits // 8
-    else:
-        dtype_size = torch.finfo(torch_type).bits // 8
-    mb = dtype_size * size / 1024 / 1024
-    if error == "":
-        algo_bw = dtype_size * size / latency / 1e3
-        bus_bw = algo_bw * (group_size - 1) / group_size
+    # get dtype name and dtype_size
+    dtype_name = str(torch_dtype).split(".")[-1]
+    
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    element_num = math.prod(input_shapes[0])
+    tensor_size = dtype_size * element_num
 
-        if op_name == "broadcast":
+    mb = tensor_size / 1024 / 1024
+    if error == "":
+        algo_bw = tensor_size / latency / 1e3
+
+        """
+        allreduce:      2 * (group_size - 1) * (tensor_size / group_size)
+        allgather:      1 * (group_size - 1) * (tensor_size / group_size)
+        reducescatter:  1 * (group_size - 1) * (tensor_size / group_size)
+        alltoall:       1 * (group_size - 1) * (tensor_size / group_size)
+        broadcast:      tensor_size
+        p2p:            tensor_size
+        """
+        if op_name in ["allgather", "reducescatter", "alltoall"]:
+            bus_bw = algo_bw * (group_size - 1) / group_size
+        elif op_name in ["allreduce"]:
+            bus_bw = 2 * algo_bw * (group_size - 1) / group_size
+        elif op_name in ["broadcast", "p2p", "device2host", "host2device"]:
             bus_bw = algo_bw
-        if op_name == "allreduce":
-            bus_bw *= 2
 
         bandwidth_utils = None
         if bandwidth_limit is not None:
             bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype_name),
             "Tensor Shapes": input_shapes,
             "Memory Size(MB)": round(mb, 2),
             "Group": group_size,
@@ -59,7 +72,7 @@ def dump_communication_ops_report(
         }
     else:
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype_name),
             "Tensor Shapes": input_shapes,
             "Memory Size(MB)": round(mb, 2),
             "Group": group_size,
@@ -74,60 +87,46 @@ def dump_communication_ops_report(
 
 def dump_computation_ops_report(
     op_name: str,
-    dtype: str,
-    input_shapes: List[List[int]],
+    torch_dtype: str,
+    input_shapes: List[List[int]], 
+    compute_size_func, 
     bandwidth_limit: float,
     latency: float,
     error: str = ""
 ):
-    if op_name == "add":
-        # c = a + b
-        # MAC_total = MAC_a + MAC_b + MAC_c
-        size = sum(
-            [math.prod(shape) for shape in input_shapes], math.prod(input_shapes[0])
-        )
-    elif op_name == "gemm":
-        # c = gemm(a, b)
-        # MAC_total = MAC_a + MAC_b + MAC_c
-        M = input_shapes[0][0]
-        K = input_shapes[0][1]
-        N = input_shapes[1][1]
-        size = M * K + K * N + M * N
-    elif op_name in ["unique", "device2host", "host2device"]:
-        size = sum([math.prod(shape) for shape in input_shapes])
-    else:
-        # out = func(in)
-        # MAC_total = MAC_in + MAC_out
-        size = sum([math.prod(shape) for shape in input_shapes]) * 2
-
-    torch_type = getattr(torch, dtype)
-    if torch_type == torch.int32:
-        dtype_size = torch.iinfo(torch_type).bits // 8
-    else:
-        dtype_size = torch.finfo(torch_type).bits // 8
-    mb = dtype_size * size / 1024 / 1024
+    # get dtype name and dtype_size
+    dtype_name = str(torch_dtype).split(".")[-1]
+    batch_size, tensor_size, input_tensor_size, output_tensor_size = compute_size_func(input_shapes, torch_dtype)
+    
     if error == "":
-        algo_bw = dtype_size * size / latency / 1e3
+        qps = round(1e6 / latency * batch_size, 2)
+        algo_bw = tensor_size / latency / 1e3
 
         bandwidth_utils = None
         if bandwidth_limit is not None:
             bandwidth_utils = round((algo_bw / bandwidth_limit) * 1e2, 2)
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype_name),
             "Tensor Shapes": input_shapes,
-            "Memory Size(MB)": round(mb, 2),
+            "Read IO Size(MB)": round(input_tensor_size / 1024 / 1024, 2),
+            "Write IO Size(MB)": round(output_tensor_size / 1024 / 1024, 2),
+            "Memory Size(MB)": round(tensor_size / 1024 / 1024, 2),
             "Kernel bandwidth(GB/s)": round(algo_bw, 2),
             "Bandwidth Utilization(%)": bandwidth_utils,
             "Avg latency(us)": round(latency, 2),
+            "QPS": qps,
         }
     else:
         report = {
-            "Dtype": dtype,
+            "Dtype": str(dtype_name),
             "Tensor Shapes": input_shapes,
-            "Memory Size(MB)": round(mb, 2),
+            "Read IO Size(MB)": round(input_tensor_size / 1024 / 1024, 2),
+            "Write IO Size(MB)": round(output_tensor_size / 1024 / 1024, 2),
+            "Memory Size(MB)": round(tensor_size / 1024 / 1024, 2),
             "Kernel bandwidth(GB/s)": 0,
             "Bandwidth Utilization(%)": None,
             "Avg latency(us)": 0,
+            "QPS": 0,
             "Error": error,
         }
     return report

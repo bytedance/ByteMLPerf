@@ -1,0 +1,33 @@
+{
+    "model_name": "falcon", 
+    "model_path": "llm_perf/model_zoo/sota/falcon-180b", 
+    "model_interface": "FalconForCausalLM", 
+    "tokenizer": {
+        "path": "llm_perf/model_zoo/sota/falcon-180b"
+    }, 
+    "network": {
+        "alibi": false,
+        "architectures": [
+          "FalconForCausalLM"
+        ],
+        "attention_dropout": 0.0,
+        "bias": false,
+        "bos_token_id": 11,
+        "eos_token_id": 11,
+        "hidden_dropout": 0.0,
+        "hidden_size": 14848,
+        "initializer_range": 0.02,
+        "layer_norm_epsilon": 1e-05,
+        "model_type": "falcon",
+        "multi_query": true,
+        "new_decoder_architecture": true,
+        "num_attention_heads": 232,
+        "num_hidden_layers": 80,
+        "num_kv_heads": 8,
+        "parallel_attn": true,
+        "torch_dtype": "bfloat16",
+        "transformers_version": "4.32.0",
+        "use_cache": true,
+        "vocab_size": 65024
+    }      
+}

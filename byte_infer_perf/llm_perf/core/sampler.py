@@ -4,7 +4,7 @@ from typing import Dict, List
 import torch
 
 from llm_perf.core.generation import GenerateResult
-from llm_perf.core.engine import CoreEngine
+from llm_perf.core.inferencer import CoreInferencer
 
 
 class CoreSampler(ABC):
@@ -12,7 +12,11 @@ class CoreSampler(ABC):
         super().__init__()
 
     @abstractmethod
-    def sample(self, packets: List[CoreEngine.Packet], logits: torch.FloatTensor) -> List[int]:
+    def sample(
+        self, 
+        tasks: List[CoreInferencer.Task], 
+        logits: torch.FloatTensor
+    ) -> List[int]:
         """Sample next tokens
 
         Args:
@@ -27,7 +31,7 @@ class CoreSampler(ABC):
     @abstractmethod
     def postprocess(
         self,
-        packets: List[CoreEngine.Packet],
+        packets: List[CoreInferencer.Task],
         infer_outputs: Dict[str, torch.FloatTensor],
         next_tokens: List[int],
     ) -> List[GenerateResult]:

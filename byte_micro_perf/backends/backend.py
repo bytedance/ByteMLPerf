@@ -14,156 +14,248 @@
 
 import os
 import time
+import json
+import math
 import random
+import logging
+import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from datetime import timedelta
+from typing import Any, Dict, List, final
 
+import torch
+import torch.distributed as dist
+import torch.distributed.distributed_c10d as dist_c10d
+
+from backends import module_store
 from backends.utils import dump_communication_ops_report, dump_computation_ops_report
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("PerfEngine")
+
+
+default_op_registry = module_store.op_registry.copy()
+default_op_compute_size_registry = module_store.op_compute_size_funcs.copy()
+default_op_create_tensors_registry = module_store.op_create_tensors_funcs.copy()
+
 
 class Backend(ABC):
     def __init__(self, workload_dict: Dict[str, Any], vendor_path: str):
         self.op_name = workload_dict["operator"]
         self.iterations = workload_dict["iterations"]
-        self.warmup = int(0.1 * workload_dict["iterations"])
-        self.vendor_path = vendor_path
         self.op = None
+    
         # communication params
-        self.rank = None
         self.world_size = None
-        self.group = None
+        self.rank = None
+
         # hardware info
-        self.hw_info_dict = None
-        self.memory_limit = None
-        self.bandwidth_limit = None
-        self.get_backend_properties()
+        self.device_name = self.get_device_name()
 
-    @abstractmethod
+        self.memory_limit = int(
+            self.get_device_properties().total_memory / (1024**3)
+        )
+        if vendor_path is not None and os.path.exists(vendor_path) and (vendor_path).endswith(".json"):
+            with open(vendor_path, "r") as f:
+                self.hw_info_dict = json.load(f)
+                # if the vendor path does not exist, please set this param manaually
+                self.bandwidth_limit = self.hw_info_dict["内存参数"]["内存"]["内存带宽(GB/s)"]
+
+    """
+    op
+    """
+    def get_op_instance(self):
+        if self.op_name in default_op_registry:
+            self.op = default_op_registry[self.op_name]
+        else:
+            raise NotImplementedError
+
+    def get_op_compute_size_func(self):
+        if self.op_name in default_op_compute_size_registry:
+            return default_op_compute_size_registry[self.op_name]
+        else:
+            raise NotImplementedError
+        
+    def get_op_create_tensors_func(self):
+        if self.op_name in default_op_create_tensors_registry:
+            return default_op_create_tensors_registry[self.op_name]
+        else:
+            raise NotImplementedError
+
+
+
+    """
+    device management related
+    """
+    # torch.get_device_name()
     def get_device_name(self):
-        pass
+        raise NotImplementedError
+    
+    # "cuda"
+    def get_torch_device_name(self):
+        raise NotImplementedError
 
-    @abstractmethod
-    def get_backend_properties(self):
-        pass
+    def get_device_properties(self):
+        raise NotImplementedError
 
-    @abstractmethod
-    def build_tensor(self, input_shapes: List[List[int]], dtype):
-        pass
+    def get_device_count(self):
+        raise NotImplementedError
+    
+    def set_device(self, device_index : int):
+        raise NotImplementedError
 
-    @abstractmethod
-    def _run_operation(self, operation, inputs):
-        pass
+    def get_device(self):
+        raise NotImplementedError
 
-    @abstractmethod
     def device_synchronize(self):
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
+    def empty_cache(self):
+        raise NotImplementedError
+    
+    """
+    ccl related
+    """
+    def get_dist_module(self):
+        raise NotImplementedError
+
     def initialize_ccl(self, rank, world_size):
-        pass
+        raise NotImplementedError
+    
+    def destroy_process_group(self):
+        dist = self.get_dist_module()
+        if dist.is_initialized():
+            dist.destroy_process_group()
 
-    @abstractmethod
-    def setup_2d_group(self):
-        pass
+    def barrier(self):
+        dist = self.get_dist_module()
+        if dist.is_initialized():
+            dist.barrier()
 
-    def gemm(self):
-        pass
 
-    def add(self):
-        pass
 
-    def sin(self):
-        pass
+    def _run_operation(self, operation, inputs):
+        result = operation(*inputs)
+        return result
 
-    def cos(self):
-        pass
 
-    def exp(self):
-        pass
+    def build_tensor(self, input_shapes, torch_dtype):
+        # get funcs
+        compute_size_func = self.get_op_compute_size_func()
+        create_tensors_func = self.get_op_create_tensors_func()
+        _, tensor_size, _, _ = compute_size_func(input_shapes, torch_dtype)
 
-    def exponential(self):
-        pass
+        # avoid use cache, assume cache size is 1 GiB, and use 80% of device memory
+        assume_cache_size = 1 * 1024**3
+        assume_avail_bytes = self.memory_limit * 0.9 * 1024**3
 
-    def gelu(self):
-        pass
+        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p", "device2host", "host2device"]:
+            if tensor_size > assume_avail_bytes:
+                return []
+            else:
+                max_data_cnt = 1
+        else:
+            if tensor_size > assume_avail_bytes:
+                return [], 0, tensor_size
+            elif 2 * tensor_size > assume_avail_bytes:
+                max_data_cnt = 1
+            elif tensor_size > assume_cache_size:
+                max_data_cnt = 2
+            else:
+                max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), self.iterations)
 
-    def indexadd(self):
-        pass
+        # create tensor_list for each op
+        tensor_list = [
+            create_tensors_func(input_shapes, torch_dtype, self.get_torch_device_name()) for _ in range(max_data_cnt)
+        ]
+        return tensor_list
 
-    def sort(self):
-        pass
-
-    def unique(self):
-        pass
-
-    def softmax(self):
-        pass
-
-    def layernorm(self):
-        pass
-
-    def allreduce(self):
-        pass
-
-    def allgather(self):
-        pass
-
-    def reducescatter(self):
-        pass
-
-    def alltoall(self):
-        pass
-
-    def broadcast(self):
-        pass
-
-    def host2device(self):
-        pass
-
-    def device2host(self):
-        pass
 
     def perf(self, input_shapes: List[List[int]], dtype):
         error = ""
 
-        inputs_list, data_cnt = self.build_tensor(input_shapes, dtype)
+        # create necessary tensors
+        torch_dtype = getattr(torch, dtype)
+        tensor_list = self.build_tensor(input_shapes, torch_dtype)
 
-        if data_cnt > 0:
-            input_index_list = [
-                random.randint(0, data_cnt - 1) for _ in range(self.iterations)
-            ]
 
-            # warmup
-            num_warm_up = 10
-            for _ in range(num_warm_up):
-                self._run_operation(self.op, inputs_list[0])
+        if len(tensor_list) > 0:
+            try:
+                warm_iterations = 5
+                test_iterations = 5
+                max_total_duration = 10.
+                prefer_iterations = self.iterations
 
-            # perf
-            self.device_synchronize()
-            start_time = time.perf_counter_ns()
-            for i in range(self.iterations):
-                result = self._run_operation(self.op, inputs_list[input_index_list[i]])
-            self.device_synchronize()
-            end_time = time.perf_counter_ns()
+                # warmup
+                self.device_synchronize()
+                self.barrier()
+                for _ in range(warm_iterations):
+                    self._run_operation(self.op, random.choice(tensor_list))
 
-            # time in us
-            exec_time = (end_time - start_time) / 1e3
-            latency = round(exec_time / self.iterations, 2)
+                # test perf
+                self.device_synchronize()
+                self.barrier()
+                start_time = time.perf_counter_ns()
+                for i in range(test_iterations):
+                    self._run_operation(self.op, random.choice(tensor_list))
+                self.device_synchronize()
+                self.barrier()
+                end_time = time.perf_counter_ns()
+                avg_op_duration = (end_time - start_time) / 1e9 / test_iterations
+
+
+                if avg_op_duration > max_total_duration:
+                    prefer_iterations = 2
+                else:
+                    prefer_iterations = min(math.ceil(max_total_duration / avg_op_duration), self.iterations)
+
+                # perf
+                self.device_synchronize()
+                self.barrier()
+                start_time = time.perf_counter_ns()
+                for i in range(prefer_iterations):
+                    self._run_operation(self.op, tensor_list[i % len(tensor_list)])
+                self.device_synchronize()
+                self.barrier()
+                end_time = time.perf_counter_ns()
+
+                # time in us
+                total_exec_time = (end_time - start_time) / 1e3
+                latency = round(total_exec_time / prefer_iterations, 2)
+
+            except Exception as e:
+                traceback.print_exc()
+                latency = 0
+                error = "RUN_OP_ERROR"
         else:
             latency = 0
             error = "OOM"
+        
+        # clean tensors and device memory
+        del tensor_list
+        self.empty_cache()
 
-        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast"]:
+
+        # create report for communication ops and computation ops
+        if self.op_name in [
+            "allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p", 
+            "device2host", "host2device"
+        ]:
             report = dump_communication_ops_report(
-                self.op_name,
-                dtype,
-                input_shapes,
-                self.group.size(),
-                self.bandwidth_limit,
+                self.op_name, torch_dtype, input_shapes, 
+                self.get_op_compute_size_func(), 
+                self.world_size, 
+                None,
                 latency,
                 error
             )
         else:
             report = dump_computation_ops_report(
-                self.op_name, dtype, input_shapes, self.bandwidth_limit, latency, error
+                self.op_name, torch_dtype, input_shapes, 
+                self.get_op_compute_size_func(), 
+                None, 
+                latency, 
+                error
             )
         return report
+

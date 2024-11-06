@@ -46,25 +46,26 @@ Example:
     "Operator": "EXP",
     "Backend": "GPU",
     "Host Info": "Intel(R) Xeon(R) Platinum 8336C CPU @ 2.30GHz",
-    "Device Info": "A100-PCIE-40GB",
+    "Device Info": "NVIDIA A800-SXM4-80GB",
     "Performance": [
         {
             "Dtype": "float32",
             "Tensor Shapes": [
                 [
-                    2,
-                    512,
-                    512
+                    256,
+                    8192
                 ]
             ],
-            "Memory Size(MB)": 4.0,
-            "Kernel bandwidth(GB/s)": 271.83,
-            "Bandwidth Utilization(%)": 0.17,
-            "Avg latency(us)": 15.43
+            "Read IO Size(MB)": 8.0,
+            "Write IO Size(MB)": 8.0,
+            "Memory Size(MB)": 16.0,
+            "Kernel bandwidth(GB/s)": 1790.52,
+            "Bandwidth Utilization(%)": 87.81,
+            "Avg latency(us)": 9.37,
+            "QPS": 27321.24
         }
     ]
 }
-
 ```
 
 ## Trouble Shooting
