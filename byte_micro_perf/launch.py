@@ -128,7 +128,7 @@ if __name__ == "__main__":
         if task in ["layernorm", "softmax", "reduce_sum", "reduce_max", "reduce_min"]:
             task_mapping["reduction_ops"].append(task)
         
-        if task in ["index_add", "sort", "unique", "gather", "scatter"]:
+        if task in ["index_add", "sort", "unique", "gather", "scatter","embedding"]:
             task_mapping["index_ops"].append(task)
 
         if task in ["host2device", "device2host", "device2device"]:

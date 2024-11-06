@@ -266,6 +266,42 @@ def swiglu_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [input_tensor, output_tensor]
 
 
+def embedding_create_tensors(input_shapes, torch_dtype, xpu_device):
+    a_shape, b_shape = input_shapes
+    batch_size, index_size = a_shape 
+    vocab_size, hidden_size = b_shape
+
+    b_shape = [vocab_size, hidden_size]
+
+    c_shape = [batch_size, index_size, hidden_size]
+
+    # create input tensors
+    a_tensor = torch.randint(0, vocab_size, a_shape, dtype=torch.long, device=xpu_device) #index must be integer, long
+    b_tensor = torch.randint(0, vocab_size, b_shape, dtype=torch_dtype, device=xpu_device)
+
+    # create output tensors
+    c_tensor = torch.randint(0, 7, c_shape, dtype=torch_dtype, device=xpu_device)
+    return [a_tensor, b_tensor, c_tensor]  
+
+
+def embedding_compute_size(input_shapes, torch_dtype):
+    a_shape, b_shape = input_shapes
+
+    batch_size, index_size = a_shape 
+    vocab_size, hidden_size = b_shape
+
+    c_shape = [batch_size, index_size, hidden_size]
+
+
+    input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+    output_element_num = sum([math.prod(shape) for shape in [c_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
 
 def add_compute_size(input_shapes, torch_dtype):
     a_shape, b_shape = input_shapes
@@ -822,6 +858,10 @@ class GatherOp(torch.nn.Module):
     def forward(self, dst_tensor, src_tensor, index_tensor):
         torch.gather(src_tensor, 0, index_tensor, out=dst_tensor)
 
+class EmbeddingOp(torch.nn.Module):
+    def forward(self,index_tensor, src_tensor, output_tensor ):
+        output_tensor = torch.nn.functional.embedding(index_tensor, src_tensor) 
+
 
 
 """
@@ -915,6 +955,7 @@ op_registry = {
     "unique": UniqueOp(),
     "scatter": ScatterOp(),
     "gather": GatherOp(),
+    "embedding": EmbeddingOp(),
 
     # h2d_ops
     "device2host": Device2HostOp(),
@@ -968,6 +1009,7 @@ op_compute_size_funcs = {
     "unique": unique_compute_size,
     "scatter": scatter_compute_size,
     "gather": scatter_compute_size,
+    "embedding": embedding_compute_size, 
 
     # h2d_ops
     "host2device": host2device_compute_size,
@@ -1020,6 +1062,7 @@ op_create_tensors_funcs = {
     "unique": unique_create_tensors,
     "scatter": scatter_create_tensors,
     "gather": scatter_create_tensors,
+    "embedding": embedding_create_tensors,
 
     # h2d_ops
     "host2device": host2device_create_tensors,
