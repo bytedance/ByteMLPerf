@@ -242,13 +242,13 @@ a8w8_rowwise_64x16x16x512_16x16_1x1_8x8x1_8x8x1_1x16x1x4_4x4x1_1x1_interwave_v2(
     torch::Tensor &w_scale,
     torch::Tensor &Y);
 
-// template <typename DDataType, typename EDataType = DDataType>
-// torch::Tensor
-// a8w8_rowwise_64x16x16x64_16x16_1x1_4x16x1_4x16x1_1x16x1x4_4x4x1_1x1_interwave_v2(
-//     torch::Tensor &XQ,
-//     torch::Tensor &WQ,
-//     torch::Tensor &x_scale,
-//     torch::Tensor &w_scale,
-//     torch::Tensor &Y);
+template <typename DDataType, typename EDataType = DDataType>
+torch::Tensor
+a8w8_rowwise_128x16x32x128_16x16_1x1_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_intrawave_v2(
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y);
 
 #endif // USE_ROCM
