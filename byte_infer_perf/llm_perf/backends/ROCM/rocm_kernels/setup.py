@@ -181,6 +181,9 @@ if IS_ROCM:
             [
                 "-O3", "-std=c++17",
                 "-mllvm", "-enable-post-misched=0",
+                "-mllvm", "-amdgpu-coerce-illegal-types=1",
+                "-mllvm", "-amdgpu-early-inline-all=true",
+                "-mllvm", "-amdgpu-function-calls=false",
                 "-DUSE_PROF_API=1",
                 "-D__HIP_PLATFORM_HCC__=1",
                 "-D__HIP_PLATFORM_AMD__=1",
