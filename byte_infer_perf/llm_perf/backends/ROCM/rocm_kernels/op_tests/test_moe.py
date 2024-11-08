@@ -11,7 +11,7 @@ print(rocmKernels.__file__, 11111111111111)
 if 1:
     _path = os.path.abspath(os.path.dirname(__file__))
     sys.path.insert(0, f'{_path}/../../')
-    from rocm_kernels.fused_moe import fused_topk, moe_align_block_size, fused_experts
+    from rocm_kernels.fused_moe_gelu import fused_topk, moe_align_block_size, fused_experts
 
 BLOCK_SIZE_M = 32
 
@@ -81,37 +81,6 @@ def run_torch(hidden_states, w1, w2, topk_weights, topk_ids, sorted_token_ids, s
 
     moe_kernels.moe_sum(intermediate_cache3.view(*intermediate_cache3.shape),
                         out_hidden_states[begin_chunk_idx:end_chunk_idx])
-
-
-def torch_moe(hidden_states, w1, w2, topk_weight, topk_ids):
-    B, D = hidden_states.shape
-    topk = topk_weight.shape[1]
-    hidden_states = hidden_states.view(
-        B, -1, D).repeat(1, topk, 1).reshape(-1, D)
-    out = torch.zeros(
-        B * topk,
-        w2.shape[1],
-        dtype=hidden_states.dtype,
-        device=hidden_states.device,
-    )
-
-    topk_weight = topk_weight.view(-1)
-    topk_ids = topk_ids.view(-1)
-    for i in range(w1.shape[0]):
-        mask = topk_ids == i
-        if mask.sum():
-            silu_input = hidden_states[mask] @ (w1[i].transpose(0, 1))
-            d = silu_input.shape[-1] // 2
-            silu_output_shape = silu_input.shape[:-1] + (d,)
-            silu_out = torch.empty(
-                silu_output_shape, dtype=silu_input.dtype, device=silu_input.device
-            )
-            silu_out = F.gelu(silu_input)
-            out[mask] = silu_out @ (w2[i].transpose(0, 1))
-    # out = out + 2.0
-    return (
-        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
-    ).sum(dim=1)
 
 
 @perftest()
@@ -290,6 +259,58 @@ def permute_weight_b(x: torch.Tensor) -> torch.Tensor:
     return x_
 
 
+@perftest()
+def torch_moe(hidden_states, w1, w2, topk_weight, topk_ids):
+    B, D = hidden_states.shape
+    topk = topk_weight.shape[1]
+    hidden_states = hidden_states.view(
+        B, -1, D).repeat(1, topk, 1).reshape(-1, D)
+    out = torch.zeros(
+        B * topk,
+        w2.shape[1],
+        dtype=hidden_states.dtype,
+        device=hidden_states.device,
+    )
+
+    topk_weight = topk_weight.view(-1)
+    topk_ids = topk_ids.view(-1)
+    for i in range(w1.shape[0]):
+        mask = topk_ids == i
+        if mask.sum():
+            silu_input = hidden_states[mask] @ (w1[i].transpose(0, 1))
+            d = silu_input.shape[-1] // 2
+            silu_output_shape = silu_input.shape[:-1] + (d,)
+            silu_out = torch.empty(
+                silu_output_shape, dtype=silu_input.dtype, device=silu_input.device
+            )
+            silu_out = F.gelu(silu_input)
+            out[mask] = silu_out @ (w2[i].transpose(0, 1))
+    # out = out + 2.0
+    return (
+        out.view(B, -1, w2.shape[1]) * topk_weight.view(B, -1, 1).to(out.dtype)
+    ).sum(dim=1)
+
+
+@perftest()
+def asm_moe(hidden_states, w1, w2, topk_weight, topk_ids):
+    E, _, model_dim = w1.shape
+    sorted_ids_b, sorted_weights_b, sorted_expert_ids_b, num_tokens_post_padded, moe_buf = moe_sorting_ck(topk_ids, topk_weight, E,
+                                                                                                          model_dim, dtype)
+    rocmKernels.fmoe(moe_buf, hidden_states, w1, w2, sorted_ids_b,
+                     sorted_weights_b, sorted_expert_ids_b, num_tokens_post_padded)
+    return moe_buf
+
+
+@perftest()
+def vllm_moe(hidden_states, w1, w2, topk_weight, topk_ids):
+    return fused_experts(hidden_states,
+                         w1,
+                         w2,
+                         topk_weight,
+                         topk_ids,
+                         inplace=False)
+
+
 def test_fmoe(dtype, token, model_dim, hidden_dim, E, topk):
     dim = (token, model_dim, hidden_dim)
     input = torch.randn((token, model_dim), dtype=dtype, device="cuda")
@@ -299,27 +320,33 @@ def test_fmoe(dtype, token, model_dim, hidden_dim, E, topk):
     topk_weights, topk_ids = fused_topk(input, score, topk, True)
 
     # ref implement
-    w1a = permute_weight_a(w1)
-    w2a = permute_weight_a(w2)
-    out_a = fused_experts(input,
-                          w1a,
-                          w2a,
-                          topk_weights,
-                          topk_ids,
-                          inplace=False)
+    # w1a = permute_weight_a(w1)
+    # w2a = permute_weight_a(w2)
+    w1a = w1
+    w2a = w2
+    out_a, avg_a = vllm_moe(input,
+                            w1a,
+                            w2a,
+                            topk_weights,
+                            topk_ids)
     print(f'{out_a=}')
+    # ref2 implement
+    out_c, avg_c = torch_moe(input,
+                             w1,
+                             w2,
+                             topk_weights,
+                             topk_ids)
+    print(f'{out_c=}')
 
     # b implement
     w1b = permute_weight_b(w1)
     w2b = permute_weight_b(w2)
-    sorted_ids_b, sorted_weights_b, sorted_expert_ids_b, num_tokens_post_padded, moe_buf = moe_sorting_ck(topk_ids, topk_weights, E,
-                                                                                                          model_dim, dtype)
-    rocmKernels.fmoe(moe_buf, input, w1b, w2b, sorted_ids_b,
-                     sorted_weights_b, sorted_expert_ids_b, num_tokens_post_padded)
-    print(f'{moe_buf=}')
-    avg_a = avg_b = 1
+    out_b, avg_b = asm_moe(input, w1b, w2b, topk_weights, topk_ids)
+
+    print(f'{out_b=}')
     print(
-        f"[perf] {token=}, {model_dim=}, {hidden_dim=}, {E=}, {topk=}, dtype: {dtype}, torch avg: {avg_a:.2f} us, ck avg: {avg_b:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
+        f"[perf] {token=}, {model_dim=}, {hidden_dim=}, {E=}, {topk=}, dtype: {dtype}, torch_avg: {avg_a:.2f} us, asm_avg: {avg_b:.2f} us,smtorch_k_avg: {avg_c:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
+    print(f"[passed~]")
 
 
 print('test test_fmoe')
