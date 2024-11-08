@@ -116,4 +116,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
       m.def("smoothquant_fwd", &smoothquant_fwd);
       // ck staff end
 #endif
+
+      m.def("fmoe", &fmoe);
+      m.def("moe_sorting", &moe_sorting_fwd);
 }
