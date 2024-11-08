@@ -922,7 +922,7 @@ __launch_bounds__(NUM_THREADS) void paged_attention_ll4mi_reduce_kernel(
           k_scale, v_scale);
 
 template <typename T, typename KVT, vllm::Fp8KVCacheDataType KV_DTYPE,
-          int BLOCK_SIZE, int HEAD_SIZE, int PARTITION_SIZE = 512>
+          int BLOCK_SIZE, int HEAD_SIZE, int PARTITION_SIZE = 256>
 void paged_attention_custom_launcher(
     torch::Tensor& out, torch::Tensor& exp_sums, torch::Tensor& max_logits,
     torch::Tensor& tmp_out, torch::Tensor& query, torch::Tensor& key_cache,

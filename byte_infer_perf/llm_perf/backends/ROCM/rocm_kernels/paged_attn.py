@@ -11,7 +11,7 @@ def is_hip():
 
 # Should be the same as PARTITION_SIZE in `paged_attention_v2_launcher`.
 _PARTITION_SIZE = 512 if not is_hip() else 1024
-_PARTITION_SIZE_ROCM = 512
+_PARTITION_SIZE_ROCM = 256
 _DEVICE_PROPERTIES = torch.cuda.get_device_properties("cuda")
 _ON_NAVI = hasattr(_DEVICE_PROPERTIES, "gcnArchName") and \
             "gfx1" in torch.cuda.get_device_properties("cuda").gcnArchName
