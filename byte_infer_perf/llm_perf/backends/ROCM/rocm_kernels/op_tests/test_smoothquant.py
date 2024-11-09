@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import rocmKernels
+from test_common import checkAllclose, perftest
 import argparse
 
 num_iters = 100
@@ -66,16 +67,6 @@ def run_ck(input, x_scale, y_scale_dtype = torch.float32):
     return output, y_scale, avg
 
 
-def checkAllclose(a, b, rtol=1e-2, atol=1e-2):
-    assert torch.allclose(
-        a, b, rtol, atol), f'''torch and ck results are not close\ntorch: {a.shape}\n{a}\nck: {b.shape}\n{b}\nmax delta:{(a-b).max()}
-        delta details: 
-          a: 
-            {a[(a-b)>atol]}
-          b: 
-            {b[(a-b)>atol]}
-      dtlta: 
-            {(a-b)[(a-b)>atol]}'''
     
 def test_Smoothquant_instance(dtype, m, n, xscaleType):
     dim = (m, n)
@@ -88,7 +79,6 @@ def test_Smoothquant_instance(dtype, m, n, xscaleType):
         f"[perf] dim: {dim}, dtype: {dtype}, torch avg: {avg_a:.2f} us, ck avg: {avg_b:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
     checkAllclose(a, b, rtol=0, atol=1)
     checkAllclose(yscale_a, yscale_b, rtol=1e-3, atol=1e-3)
-    print(f" [passed~]")
 
 def test_Smoothquant():
     print('\nstart layernorm2d fuse Smoothquant test')

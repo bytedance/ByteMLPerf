@@ -38,16 +38,20 @@ def test_gemm(dtype, m, n, k):
 for dtype in [torch.float16, torch.bfloat16][1:]:
     # qkv_proj
     for (m, n, k) in [(4096, 1280, 8192),
-                      (128, 1280, 8192)]:
+                      (128, 1280, 8192),
+                      (128, 1024, 8192),
+                      (128, 128, 8192),
+                      ]:
         test_gemm(dtype, m, n, k)
     # attn_out
     for (m, n, k) in [(4096, 8192, 1024),
                       (128, 8192, 1024)]:
         test_gemm(dtype, m, n, k)
+    test_gemm(dtype, 128, 1024, 8192)
     test_gemm(dtype, 128, 32, 1024)
     # gating
-    for (m, n, k) in [(4096, 32, 1024),
-                      (128, 32, 1024)]:
+    for (m, n, k) in [(4096, 32, 8192),
+                      (128, 32, 8192)]:
         test_gemm(dtype, m, n, k)
     # gating
     for (m, n, k) in [(1, 19392, 8192),

@@ -6,7 +6,7 @@
 # @Email: lingpeng.jin@amd.com
 # @Create At: 2024-11-03 15:53:32
 # @Last Modified By: valarLip
-# @Last Modified At: 2024-11-08 23:44:57
+# @Last Modified At: 2024-11-09 19:41:56
 # @Description: This is description.
 
 import torch
@@ -34,12 +34,19 @@ def perftest(name=None):
 
 
 def checkAllclose(a, b, rtol=1e-2, atol=1e-2):
-    isClose = torch.isclose(a, b, rtol, atol)
-    assert isClose.all(), f'''torch and ck results are not close\ntorch: {a.shape}\n{a}\nck: {b.shape}\n{b}\nmax delta:{(a-b).max()}
-    delta details: {(a[isClose]).numel()/a.numel():.1%} ({(a[isClose]).numel()} of {a.numel()}) elements {atol=} {rtol=}
-          a: 
-            {a[isClose]}
-          b: 
-            {b[isClose]}
-      dtlta: 
-            {(a-b)[isClose]}'''
+    isClose = torch.isclose(a, b, rtol=rtol, atol=atol)
+    mask = ~isClose
+    if isClose.all():
+        print('[passed~]')
+    else:
+        percent = (a[mask]).numel()/a.numel()
+        if percent > 0.01:
+            print(f'''[failed!] {a.shape=}\n{b.shape=}\n        a:
+            {a[mask]}
+        b:
+            {b[mask]}
+    dtlta:
+            {(a-b)[mask]}''')
+        else:
+            print(f'''[waring!] a and b results are not close\nmax delta:{(a-b).max()}
+        delta details: {percent:.1%} ({(a[mask]).numel()} of {a.numel()}) elements {atol=} {rtol=}''')

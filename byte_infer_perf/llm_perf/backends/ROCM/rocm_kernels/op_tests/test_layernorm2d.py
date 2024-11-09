@@ -67,7 +67,6 @@ def test_layernorm2d(dtype, m, n):
     print(
         f"[perf] dim: {dim}, dtype: {dtype}, torch avg: {avg_a:.2f} us, ck avg: {avg_b:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
     checkAllclose(a, b)
-    print(f"[passed~]")
 
 
 def test_layernorm2d_fuseAdd(dtype, m, n):
@@ -83,7 +82,6 @@ def test_layernorm2d_fuseAdd(dtype, m, n):
         f"[perf] dim: {dim}, dtype: {dtype}, torch avg: {avg_a:.2f} us, ck avg: {avg_b:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
     checkAllclose(a, b, atol=0.03)
     checkAllclose(res_a, res_b)
-    print(f" [passed~]")
 
 
 for dtype in [torch.float16, torch.bfloat16]:

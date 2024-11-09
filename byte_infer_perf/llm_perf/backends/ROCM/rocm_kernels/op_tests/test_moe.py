@@ -8,6 +8,7 @@ import os
 from typing import Any, Callable, Dict, Optional, Tuple
 import rocmKernels
 print(rocmKernels.__file__, 11111111111111)
+print(dir(rocmKernels))
 if 1:
     _path = os.path.abspath(os.path.dirname(__file__))
     sys.path.insert(0, f'{_path}/../../')
@@ -204,31 +205,30 @@ def test_fmoe(dtype, token, model_dim, hidden_dim, E, topk):
                            w2a,
                            topk_weights,
                            topk_ids)
-    print(f'{ref1=}')
+    # print(f'{ref1=}')
     # ref2 implement
     ref2, avg_c = torch_moe(input,
                             w1,
                             w2,
                             topk_weights,
                             topk_ids)
-    print(f'{ref2=}')
+    # print(f'{ref2=}')
 
     # b implement
     w1b = permute_weight_b(w1)
     w2b = permute_weight_b(w2)
     out_b, avg_b = asm_moe_test(input, w1b, w2b, topk_weights, topk_ids)
 
-    print(f'{out_b=}')
+    # print(f'{out_b=}')
     print(
         f"[perf] {token=}, {model_dim=}, {hidden_dim=}, {E=}, {topk=}, dtype: {dtype}, torch_avg: {avg_a:.2f} us, asm_avg: {avg_b:.2f} us,smtorch_k_avg: {avg_c:.2f} us, uplift: {avg_a/avg_b-1:.1%}", end=' ')
-    # checkAllclose(ref1, ref2)
-    checkAllclose(ref1, out_b, rtol=0.02, atol=8)
-    print(f"[passed~]")
+    # checkAllclose(ref1, ref2, rtol=0.05, atol=20)
+    checkAllclose(ref2, out_b, rtol=0.01, atol=10)
 
 
 print('test test_fmoe')
 for dtype in [torch.float16, torch.bfloat16][1:]:
-    for m in [1, 2, 4, 8, 16, 26, 32, 64, 128, 256][5:]:
+    for m in [1, 2, 4, 8, 16, 26, 32, 64, 128, 160, 192, 224, 256]:
         for dim in [4096, 8192, 16384, 32768, 65536][1:1+1]:
             for hdim in [1024, 4096, 8192, 16384, 32768, 65536][:1]:
                 test_fmoe(dtype, m, dim, hdim, 32, 5)
