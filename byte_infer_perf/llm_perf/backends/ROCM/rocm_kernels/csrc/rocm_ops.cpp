@@ -22,7 +22,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
       m.def("rotary_embedding", &rotary_embedding, "rotary_embedding");
       m.def("batched_rotary_embedding", &batched_rotary_embedding, "batched_rotary_embedding");
       m.def("moe_sum", &moe_sum, "moe_sum(Tensor! input, Tensor output) -> ()");
-      m.def("paged_attention_rocm", &paged_attention_rocm,
+      m.def("paged_attention_rocm", &paged_attention,
             "paged_attention_rocm(Tensor! out, Tensor exp_sums,"
             "                Tensor max_logits, Tensor tmp_out,"
             "                Tensor query, Tensor key_cache,"

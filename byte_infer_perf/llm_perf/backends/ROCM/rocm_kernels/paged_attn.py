@@ -79,31 +79,6 @@ def paged_attention_v2(
         blocksparse_block_size, blocksparse_head_sliding_step)
 
 
-def paged_attention_rocm(
-    out: torch.Tensor,
-    exp_sum: torch.Tensor,
-    max_logits: torch.Tensor,
-    tmp_out: torch.Tensor,
-    query: torch.Tensor,
-    key_cache: torch.Tensor,
-    value_cache: torch.Tensor,
-    num_kv_heads: int,
-    scale: float,
-    block_tables: torch.Tensor,
-    seq_lens: torch.Tensor,
-    block_size: int,
-    max_seq_len: int,
-    alibi_slopes: Optional[torch.Tensor],
-    kv_cache_dtype: str,
-    k_scale: float,
-    v_scale: float,
-) -> None:
-    ops.paged_attention_rocm(out, exp_sum, max_logits, tmp_out, query,
-        key_cache, value_cache, num_kv_heads,
-        scale, block_tables, seq_lens,
-        block_size, max_seq_len, alibi_slopes,
-        kv_cache_dtype, k_scale, v_scale)
-
 @dataclass
 class PagedAttentionMetadata:
     """Metadata for PagedAttention."""
@@ -201,6 +176,7 @@ class PagedAttention:
         blocksparse_vert_stride: int = 0,
         blocksparse_block_size: int = 64,
         blocksparse_head_sliding_step: int = 0,
+        fp8_out_scale=None
     ) -> torch.Tensor:
         # Whether to use rocm custom paged attention or not
         num_seqs, num_heads, head_size = query.shape
@@ -226,7 +202,11 @@ class PagedAttention:
                 device=output.device,
             )
             max_logits = torch.empty_like(exp_sums)
-            out = output
+            cpa_fp8_out = False
+            if fp8_out_scale is not None:
+                output = torch.empty_like(output,
+                                        dtype=torch.float8_e4m3fnuz)
+                cpa_fp8_out = True
             ops.paged_attention_rocm(
                 output,
                 exp_sums,
@@ -245,7 +225,11 @@ class PagedAttention:
                 kv_cache_dtype,
                 k_scale,
                 v_scale,
+                fp8_out_scale if cpa_fp8_out else None,
+                _PARTITION_SIZE_ROCM,
             )
+            if cpa_fp8_out:
+                return output.view(num_seqs, num_heads * head_size)
         else:
             max_num_partitions = ((max_seq_len + _PARTITION_SIZE - 1) //
                                 _PARTITION_SIZE)
