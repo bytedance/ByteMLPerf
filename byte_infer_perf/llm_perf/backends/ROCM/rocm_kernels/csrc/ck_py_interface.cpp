@@ -6,7 +6,7 @@
  * @Email: lingpeng.jin@amd.com
  * @Create At: 2024-10-24 12:11:58
  * @Last Modified By: valarLip
- * @Last Modified At: 2024-11-07 21:38:45
+ * @Last Modified At: 2024-11-10 17:52:30
  * @Description: This is description.
  */
 
@@ -44,10 +44,10 @@ inline std::string torchDTypeToStr(caffe2::TypeMeta dtype)
 #undef TYPE_CASE
 }
 
-void layernorm2d(torch::Tensor &out,    // [hidden_size]
-                 torch::Tensor &input,  // [hidden_size]
-                 torch::Tensor &weight, // [hidden_size]
-                 torch::Tensor &bias,   // [hidden_size]
+void layernorm2d(torch::Tensor &out,    // [m, n]
+                 torch::Tensor &input,  // [m, n]
+                 torch::Tensor &weight, // [m, n]
+                 torch::Tensor &bias,   // [m, n]
                  double epsilon)
 {
     auto dtype = input.dtype();
@@ -57,7 +57,10 @@ void layernorm2d(torch::Tensor &out,    // [hidden_size]
     std::string dtype_str = torchDTypeToStr(dtype);
     int n = input.size(-1);
     int m = input.numel() / n;
-    int stride = n;
+    int stride = input.stride(0);
+    int xr_stride = -1;
+    int y_stride = out.stride(0);
+    int yr_stride = -1;
     bool SaveMeanVar = false;
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -78,7 +81,7 @@ void layernorm2d(torch::Tensor &out,    // [hidden_size]
                      nullptr, // p_y_scale
                      nullptr, // p_mean
                      nullptr, // p_invStd
-                     static_cast<float>(epsilon), m, n, stride},
+                     static_cast<float>(epsilon), m, n, stride, xr_stride, y_stride, yr_stride},
                     {stream});
 }
 
@@ -97,7 +100,10 @@ void layernorm2d_with_add(torch::Tensor &out,          // [m ,n]
     std::string dtype_str = torchDTypeToStr(input.dtype());
     int n = input.size(-1);
     int m = input.numel() / n;
-    int stride = n;
+    int stride = input.stride(0);
+    int xr_stride = residual_in.stride(0);
+    int y_stride = out.stride(0);
+    int yr_stride = residual_out.stride(0);
     bool SaveMeanVar = false;
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -121,7 +127,7 @@ void layernorm2d_with_add(torch::Tensor &out,          // [m ,n]
                      nullptr,                 // p_y_scale
                      nullptr,                 // p_mean
                      nullptr,                 // p_invStd
-                     static_cast<float>(epsilon), m, n, stride},
+                     static_cast<float>(epsilon), m, n, stride, xr_stride, y_stride, yr_stride},
                     {stream});
 }
 
@@ -143,7 +149,10 @@ void layernorm2d_with_smoothquant(torch::Tensor &out,    // [m ,n]
     std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
     int n = input.size(-1);
     int m = input.numel() / n;
-    int stride = n;
+    int stride = input.stride(0);
+    int xr_stride = -1;
+    int y_stride = out.stride(0);
+    int yr_stride = -1;
     bool SaveMeanVar = false;
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -167,7 +176,7 @@ void layernorm2d_with_smoothquant(torch::Tensor &out,    // [m ,n]
                      yscale.data_ptr(), // p_y_scale
                      nullptr,           // p_mean
                      nullptr,           // p_invStd
-                     static_cast<float>(epsilon), m, n, stride},
+                     static_cast<float>(epsilon), m, n, stride, xr_stride, y_stride, yr_stride},
                     {stream});
 }
 
@@ -191,7 +200,10 @@ void layernorm2d_with_add_smoothquant(torch::Tensor &out,          // [m ,n]
     std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
     int n = input.size(-1);
     int m = input.numel() / n;
-    int stride = n;
+    int stride = input.stride(0);
+    int xr_stride = residual_in.stride(0);
+    int y_stride = out.stride(0);
+    int yr_stride = residual_out.stride(0);
     bool SaveMeanVar = false;
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -215,7 +227,7 @@ void layernorm2d_with_add_smoothquant(torch::Tensor &out,          // [m ,n]
                      yscale.data_ptr(),       // p_y_scale
                      nullptr,                 // p_mean
                      nullptr,                 // p_invStd
-                     static_cast<float>(epsilon), m, n, stride},
+                     static_cast<float>(epsilon), m, n, stride, xr_stride, y_stride, yr_stride},
                     {stream});
 }
 
@@ -235,7 +247,10 @@ void layernorm2d_with_dynamicquant(torch::Tensor &out,    // [m ,n]
     std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
     int n = input.size(-1);
     int m = input.numel() / n;
-    int stride = n;
+    int stride = input.stride(0);
+    int xr_stride = -1;
+    int y_stride = out.stride(0);
+    int yr_stride = -1;
     bool SaveMeanVar = false;
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -259,7 +274,7 @@ void layernorm2d_with_dynamicquant(torch::Tensor &out,    // [m ,n]
                      yscale.data_ptr(), // p_y_scale
                      nullptr,           // p_mean
                      nullptr,           // p_invStd
-                     static_cast<float>(epsilon), m, n, stride},
+                     static_cast<float>(epsilon), m, n, stride, xr_stride, y_stride, yr_stride},
                     {stream});
 }
 
@@ -281,7 +296,10 @@ void layernorm2d_with_add_dynamicquant(torch::Tensor &out,          // [m ,n]
     std::string yscale_dtype_str = torchDTypeToStr(yscale.dtype());
     int n = input.size(-1);
     int m = input.numel() / n;
-    int stride = n;
+    int stride = input.stride(0);
+    int xr_stride = residual_in.stride(0);
+    int y_stride = out.stride(0);
+    int yr_stride = residual_out.stride(0);
     bool SaveMeanVar = false;
     const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -305,7 +323,7 @@ void layernorm2d_with_add_dynamicquant(torch::Tensor &out,          // [m ,n]
                      yscale.data_ptr(),       // p_y_scale
                      nullptr,                 // p_mean
                      nullptr,                 // p_invStd
-                     static_cast<float>(epsilon), m, n, stride},
+                     static_cast<float>(epsilon), m, n, stride, xr_stride, y_stride, yr_stride},
                     {stream});
 }
 
