@@ -155,7 +155,11 @@ public:
         int gdx = ((hidden_dim + sub_GU - 1) / sub_GU);
         int gdy = sub_X_cnt;
         int gdz = 1;
-        HIP_CALL(hipModuleLaunchKernel(kernel_func, gdx, gdy, gdz, bdx, 1, 1, 0, 0, NULL, (void **)&config));
+        const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+        HIP_CALL(hipModuleLaunchKernel(kernel_func,
+                                       gdx, gdy, gdz,
+                                       bdx, 1, 1,
+                                       0, stream, nullptr, (void **)&config));
     };
 };
 
