@@ -10,7 +10,8 @@ a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawav
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y)
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias)
 {
     // This kernel works well for many medium to large shapes.
 
@@ -19,56 +20,111 @@ a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawav
     int K = WQ.size(1);
 
     bool kpad = K % 128 != 0;
-
     if (kpad)
     {
-        using DeviceGemmInstance = DeviceGemmHelper<
-            DDataType, EDataType,
-            256,
-            224,
-            256,
-            128,
-            16,
-            16,
-            7,
-            8,
-            S<8, 32, 1>,
-            S<8, 32, 1>,
-            S<1, 32, 1, 8>,
-            S<8, 8, 1>,
-            1,
-            2,
-            ck::BlockGemmPipelineScheduler::Intrawave,
-            ck::BlockGemmPipelineVersion::v3,
-            ck::tensor_operation::device::GemmSpecialization::KPadding>;
-        // Run kernel instance.
-        return gemm_a8w8_rowwise_impl<DDataType, EDataType, DeviceGemmInstance>(
-            XQ, WQ, x_scale, w_scale, Y);
+        if (bias != std::nullopt)
+        {
+            using DeviceGemmInstance = DeviceGemmHelperMMA<
+                DDataType, EDataType,
+                256,
+                224,
+                256,
+                128,
+                16,
+                16,
+                7,
+                8,
+                S<8, 32, 1>,
+                S<8, 32, 1>,
+                S<1, 32, 1, 8>,
+                S<8, 8, 1, 1>,
+                1,
+                2,
+                ck::BlockGemmPipelineScheduler::Intrawave,
+                ck::BlockGemmPipelineVersion::v3,
+                ck::tensor_operation::device::GemmSpecialization::KPadding>;
+            // Run kernel instance.
+            return gemm_a8w8_mma_impl<DDataType, EDataType, DeviceGemmInstance>(
+                XQ, WQ, x_scale, w_scale, Y, bias);
+        }
+        else
+        {
+            using DeviceGemmInstance = DeviceGemmHelper<
+                DDataType, EDataType,
+                256,
+                224,
+                256,
+                128,
+                16,
+                16,
+                7,
+                8,
+                S<8, 32, 1>,
+                S<8, 32, 1>,
+                S<1, 32, 1, 8>,
+                S<8, 8, 1>,
+                1,
+                2,
+                ck::BlockGemmPipelineScheduler::Intrawave,
+                ck::BlockGemmPipelineVersion::v3,
+                ck::tensor_operation::device::GemmSpecialization::KPadding>;
+            // Run kernel instance.
+            return gemm_a8w8_rowwise_impl<DDataType, EDataType, DeviceGemmInstance>(
+                XQ, WQ, x_scale, w_scale, Y, bias);
+        }
     }
     else
     {
-        using DeviceGemmInstance = DeviceGemmHelper<
-            DDataType, EDataType,
-            256,
-            224,
-            256,
-            128,
-            16,
-            16,
-            7,
-            8,
-            S<8, 32, 1>,
-            S<8, 32, 1>,
-            S<1, 32, 1, 8>,
-            S<8, 8, 1>,
-            1,
-            2,
-            ck::BlockGemmPipelineScheduler::Intrawave,
-            ck::BlockGemmPipelineVersion::v3,
-            ck::tensor_operation::device::GemmSpecialization::Default>;
-        // Run kernel instance.
-        return gemm_a8w8_rowwise_impl<DDataType, EDataType, DeviceGemmInstance>(
-            XQ, WQ, x_scale, w_scale, Y);
+        if (bias != std::nullopt)
+        {
+            using DeviceGemmInstance = DeviceGemmHelperMMA<
+                DDataType, EDataType,
+                256,
+                224,
+                256,
+                128,
+                16,
+                16,
+                7,
+                8,
+                S<8, 32, 1>,
+                S<8, 32, 1>,
+                S<1, 32, 1, 8>,
+                S<8, 8, 1, 1>,
+                1,
+                2,
+                ck::BlockGemmPipelineScheduler::Intrawave,
+                ck::BlockGemmPipelineVersion::v3,
+                ck::tensor_operation::device::GemmSpecialization::Default>;
+            // Run kernel instance.
+            return gemm_a8w8_mma_impl<DDataType, EDataType, DeviceGemmInstance>(
+                XQ, WQ, x_scale, w_scale, Y, bias);
+        }
+        else
+        {
+            using DeviceGemmInstance = DeviceGemmHelper<
+                DDataType, EDataType,
+                256,
+                224,
+                256,
+                128,
+                16,
+                16,
+                7,
+                8,
+                S<8, 32, 1>,
+                S<8, 32, 1>,
+                S<1, 32, 1, 8>,
+                S<8, 8, 1>,
+                1,
+                2,
+                ck::BlockGemmPipelineScheduler::Intrawave,
+                ck::BlockGemmPipelineVersion::v3,
+                ck::tensor_operation::device::GemmSpecialization::Default>;
+            // Run kernel instance.
+            return gemm_a8w8_rowwise_impl<DDataType, EDataType, DeviceGemmInstance>(
+                XQ, WQ, x_scale, w_scale, Y, bias);
+        }
     }
 }
 
@@ -78,7 +134,8 @@ a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawav
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y);
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias);
 
 template torch::Tensor
 a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawave_v3<B16>(
@@ -86,7 +143,8 @@ a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawav
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y);
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias);
 
 template torch::Tensor
 a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawave_v3<F32, F16>(
@@ -94,7 +152,8 @@ a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawav
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y);
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias);
 
 template torch::Tensor
 a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawave_v3<F32, B16>(
@@ -102,4 +161,5 @@ a8w8_rowwise_256x224x256x128_16x16_7x8_8x32x1_8x32x1_1x32x1x8_8x8x1_1x2_intrawav
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y);
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias);

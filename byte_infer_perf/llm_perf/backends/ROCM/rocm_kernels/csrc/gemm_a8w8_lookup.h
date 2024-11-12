@@ -7,9 +7,13 @@
 #define GENERATE_LOOKUP_TABLE(DTYPE, ETYPE)                                                                                      \
    {                                                                                                                             \
        {{128, 1280, 8192},                                                                                                       \
-        a8w8_rowwise_128x16x32x128_16x16_1x1_4x64x1_4x64x1_1x32x1x8_8x8x1_1x1_intrawave_v2<DTYPE, ETYPE>},                       \
+        a8w8_rowwise_256x32x64x512_16x16_2x1_32x8x1_32x8x1_1x32x1x8_8x8x1_1x2_intrawave_v3<DTYPE, ETYPE>},                       \
        {{128, 8192, 1024},                                                                                                       \
-        a8w8_rowwise_256x128x64x128_32x32_2x1_8x32x1_8x32x1_1x32x1x8_8x8x1_1x1_intrawave_v3<DTYPE, ETYPE>}, /* QWen-57B          \
+        a8w8_rowwise_256x128x128x256_32x32_2x2_16x16x1_16x16x1_1x32x1x8_8x8x1_1x1_intrawave_v3<DTYPE, ETYPE>},                   \
+       {{4096, 1280, 8192},                                                                                                      \
+        a8w8_rowwise_256x128x128x128_32x32_2x2_8x32x1_8x32x1_1x32x1x8_8x8x1_1x1_intrawave_v3<DTYPE, ETYPE>},                     \
+       {{4096, 8192, 1024},                                                                                                      \
+        a8w8_rowwise_256x128x128x128_32x32_2x2_8x32x1_8x32x1_1x32x1x8_8x8x1_1x1_intrawave_v3<DTYPE, ETYPE>}, /* QWen-57B         \
                                                                                                             NK= 4608, 3584 */    \
        {{1, 4608, 3584},                                                                                                         \
         a8w8_rowwise_64x16x16x128_16x16_1x1_8x8x1_8x8x1_1x16x1x4_4x4x1_1x1_interwave_v2<DTYPE, ETYPE>},                          \

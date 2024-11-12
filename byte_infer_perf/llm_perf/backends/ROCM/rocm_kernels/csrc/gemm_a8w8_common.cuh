@@ -55,7 +55,9 @@ using ALayout = Row;
 using BLayout = Col;
 using D0Layout = Row;
 using D1Layout = Col;
+using D2Layout = Col;
 using DsLayout = ck::Tuple<D0Layout, D1Layout>;
+using DsLayout2 = ck::Tuple<D0Layout, D1Layout, D2Layout>;
 using ELayout = Row;
 
 using PassThrough = ck::tensor_operation::element_wise::PassThrough;
@@ -94,7 +96,7 @@ struct RowwiseScale
         F16 &e, const AccDataType &c, const F32 &d0, const F32 &d1) const
     {
         const F32 x0_f =
-            ck::type_convert<F32>(c) * d0 * d1;
+            ck::type_convert<F32>(c) * ck::type_convert<F32>(d0) * ck::type_convert<F32>(d1);
 
         e = ck::type_convert<F16>(x0_f);
     }
@@ -104,16 +106,67 @@ struct RowwiseScale
         B16 &e, const AccDataType &c, const F32 &d0, const F32 &d1) const
     {
         const F32 x0_f =
-            ck::type_convert<F32>(c) * d0 * d1;
+            ck::type_convert<F32>(c) * ck::type_convert<F32>(d0) * ck::type_convert<F32>(d1);
 
         e = ck::type_convert<B16>(x0_f);
     }
 };
 
+struct MultiplyMultiplyAdd
+{
+    template <typename E, typename C, typename D0, typename D1, typename D2>
+    __host__ __device__ constexpr void
+    operator()(E &e, const C &c, const D0 &d0, const D1 &d1, const D2 &d2) const;
+
+    template <>
+    __host__ __device__ constexpr void operator()<ck::half_t, int, float, float, ck::half_t>(
+        ck::half_t &e, const int &c, const float &d0, const float &d1, const ck::half_t &d2) const
+    {
+        const float x0_f =
+            ck::type_convert<float>(c) * ck::type_convert<F32>(d0) * ck::type_convert<F32>(d1) + ck::type_convert<F32>(d2);
+
+        e = ck::type_convert<ck::half_t>(x0_f);
+    }
+
+    template <>
+    __host__ __device__ constexpr void operator()<ck::bhalf_t, int, float, float, ck::bhalf_t>(
+        ck::bhalf_t &e, const int &c, const float &d0, const float &d1, const ck::bhalf_t &d2) const
+    {
+        const float x0_f =
+            ck::type_convert<float>(c) * ck::type_convert<F32>(d0) * ck::type_convert<F32>(d1) + ck::type_convert<F32>(d2);
+
+        e = ck::type_convert<ck::bhalf_t>(x0_f);
+    }
+
+    template <>
+    __host__ __device__ constexpr void operator()<ck::half_t, int, ck::half_t, ck::half_t, ck::half_t>(
+        ck::half_t &e, const int &c, const ck::half_t &d0, const ck::half_t &d1, const ck::half_t &d2) const
+    {
+        const float x0_f =
+            ck::type_convert<float>(c) * ck::type_convert<float>(d0) * ck::type_convert<float>(d1) + ck::type_convert<F32>(d2);
+
+        e = ck::type_convert<ck::half_t>(x0_f);
+    }
+
+    template <>
+    __host__ __device__ constexpr void operator()<ck::bhalf_t, int, ck::bhalf_t, ck::bhalf_t, ck::bhalf_t>(
+        ck::bhalf_t &e, const int &c, const ck::bhalf_t &d0, const ck::bhalf_t &d1, const ck::bhalf_t &d2) const
+    {
+        const float x0_f =
+            ck::type_convert<float>(c) * ck::type_convert<float>(d0) * ck::type_convert<float>(d1) + ck::type_convert<F32>(d2);
+
+        e = ck::type_convert<ck::bhalf_t>(x0_f);
+    }
+};
+
 using CDEElementOp = RowwiseScale;
+using CDEElementOp2 = MultiplyMultiplyAdd;
 
 template <typename DDataType>
 using DsDataType = ck::Tuple<DDataType, DDataType>;
+
+template <typename DDataType, typename D2DataType>
+using DsDataType2 = ck::Tuple<DDataType, DDataType, D2DataType>;
 
 #if 0
 template <typename DDataType, typename EDataType=DDataType>
@@ -198,6 +251,74 @@ using DeviceGemmHelper =
         PIPELINE_VERSION,
         ComputeDataType>;
 
+template <
+    typename DDataType, typename EDataType,
+    int BLOCK_SIZE,
+    int MBLOCK,
+    int NBLOCK,
+    int KBLOCK,
+    int WAVE_TILE_M,
+    int WAVE_TILE_N,
+    int WAVE_MAP_M,
+    int WAVE_MAP_N,
+    typename ABLOCK_TRANSFER,
+    typename BBLOCK_TRANSFER,
+    typename CBLOCK_TRANSFER,
+    typename CBLOCK_SPV,
+    int CSHUFFLE_MX_PER_WAVE_PERSHUFFLE,
+    int CSHUFFLE_NX_PER_WAVE_PERSHUFFLE,
+    ck::BlockGemmPipelineScheduler LOOP_SCHED,
+    ck::BlockGemmPipelineVersion PIPELINE_VERSION,
+    auto GEMM_SPEC =
+        ck::tensor_operation::device::GemmSpecialization::MNPadding>
+using DeviceGemmHelperMMA =
+    ck::tensor_operation::device::DeviceGemmMultiD_Xdl_CShuffle_V3<
+        ALayout,
+        BLayout,
+        DsLayout2,
+        ELayout,
+        ADataType,
+        BDataType,
+        DsDataType2<DDataType, EDataType>,
+        EDataType,
+        AccDataType,
+        CShuffleDataType,
+        AElementOp,
+        BElementOp,
+        CDEElementOp2,
+        GEMM_SPEC,
+        BLOCK_SIZE,  // Block Size
+        MBLOCK,      // M per Block
+        NBLOCK,      // N per Block
+        KBLOCK,      // K per Block
+        16,          // AK1
+        16,          // BK1
+        WAVE_TILE_M, // M per Xdl
+        WAVE_TILE_N, // N per Xdl
+        WAVE_MAP_M,  // Mxdl per Wave
+        WAVE_MAP_N,  // Nxdl per Wave
+        ABLOCK_TRANSFER,
+        S<1, 0, 2>,
+        S<1, 0, 2>,
+        2,
+        16,
+        16,
+        0,
+        BBLOCK_TRANSFER,
+        S<1, 0, 2>,
+        S<1, 0, 2>,
+        2,
+        16,
+        16,
+        0,
+        CSHUFFLE_MX_PER_WAVE_PERSHUFFLE,
+        CSHUFFLE_NX_PER_WAVE_PERSHUFFLE,
+        CBLOCK_TRANSFER,
+        CBLOCK_SPV,
+        LOOP_SCHED,
+        PIPELINE_VERSION,
+        ComputeDataType>;
+
 template <typename DDataType, typename EDataType,
           typename DeviceGemmInstance>
 __forceinline__ torch::Tensor gemm_a8w8_rowwise_impl(
@@ -205,7 +326,8 @@ __forceinline__ torch::Tensor gemm_a8w8_rowwise_impl(
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y)
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias)
 {
     int M = XQ.size(0);
     int N = WQ.size(0);
@@ -242,6 +364,58 @@ __forceinline__ torch::Tensor gemm_a8w8_rowwise_impl(
         a_element_op,
         b_element_op,
         cde_element_op);
+    TORCH_CHECK(device_gemm.IsSupportedArgument(argument), "This GEMM is not supported!");
+
+    invoker.Run(argument, StreamConfig{at::cuda::getCurrentCUDAStream().stream()});
+    return Y;
+}
+
+template <typename DDataType, typename EDataType,
+          typename DeviceGemmInstance>
+__forceinline__ torch::Tensor gemm_a8w8_mma_impl(
+    torch::Tensor &XQ,
+    torch::Tensor &WQ,
+    torch::Tensor &x_scale,
+    torch::Tensor &w_scale,
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias)
+{
+    int M = XQ.size(0);
+    int N = WQ.size(0);
+    int K = XQ.size(1);
+
+    int StrideA = K;
+    int StrideB = K;
+    int StrideE = N;
+
+    auto device_gemm = DeviceGemmInstance{};
+    auto invoker = device_gemm.MakeInvoker();
+
+    auto a_element_op = AElementOp{};
+    auto b_element_op = BElementOp{};
+    auto cde_element_op2 = CDEElementOp2{};
+
+    constexpr ck::index_t NumDTensor = DeviceGemmInstance::NumDTensor;
+
+    auto argument = device_gemm.MakeArgument(
+        reinterpret_cast<ADataType *>(XQ.data_ptr()),
+        reinterpret_cast<BDataType *>(WQ.data_ptr()),
+        std::array<const void *, NumDTensor>{
+            reinterpret_cast<DDataType *>(w_scale.data_ptr()),
+            reinterpret_cast<DDataType *>(x_scale.data_ptr()),
+            reinterpret_cast<EDataType *>(bias.value().data_ptr())},
+        reinterpret_cast<EDataType *>(Y.data_ptr()),
+        M,
+        N,
+        K,
+        StrideA,
+        StrideB,
+        std::array<ck::index_t, NumDTensor>{0, 0, 0},
+        StrideE,
+        1,
+        a_element_op,
+        b_element_op,
+        cde_element_op2);
     TORCH_CHECK(device_gemm.IsSupportedArgument(argument), "This GEMM is not supported!");
 
     invoker.Run(argument, StreamConfig{at::cuda::getCurrentCUDAStream().stream()});

@@ -55,7 +55,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
             "    int blocksparse_vert_stride, int blocksparse_block_size,"
             "    int blocksparse_head_sliding_step) -> ()");
 
-      m.def("gemm_a8w8", &gemm_a8w8, "gemm_a8w8");
+      m.def("gemm_a8w8", &gemm_a8w8, "gemm_a8w8", py::arg("XQ"), py::arg("WQ"),
+            py::arg("x_scale"), py::arg("w_scale"), py::arg("Out"), py::arg("bias") = std::nullopt);
       m.def("swap_blocks", &swap_blocks,
             "swap_blocks(Tensor src, Tensor! dst, Tensor block_mapping) -> ()");
       m.def("copy_blocks", &copy_blocks,

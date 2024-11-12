@@ -7,7 +7,7 @@
 
 using RowwiseKernel = std::function<
     torch::Tensor(torch::Tensor &, torch::Tensor &,
-                  torch::Tensor &, torch::Tensor &, torch::Tensor &)>;
+                  torch::Tensor &, torch::Tensor &, torch::Tensor &, std::optional<torch::Tensor>)>;
 
 // Define a custom hash function for std::tuple<int, int, int>
 struct IntTupleHash
@@ -137,12 +137,16 @@ torch::Tensor gemm_a8w8(
     torch::Tensor &WQ,
     torch::Tensor &x_scale,
     torch::Tensor &w_scale,
-    torch::Tensor &Y)
+    torch::Tensor &Y,
+    std::optional<torch::Tensor> bias)
 {
   TORCH_CHECK(XQ.dtype() == at::ScalarType::Char && XQ.dtype() == WQ.dtype(),
               "Weights and activations should both be int8!");
   TORCH_CHECK(x_scale.dtype() == w_scale.dtype(),
               "Scales should have the same dtype!");
+  if (bias != std::nullopt)
+    TORCH_CHECK(bias.value().dtype() == Y.dtype(),
+                "Out amd bias should have the same dtype!");
 
   int M = XQ.size(0);
   int N = WQ.size(0);
@@ -150,19 +154,19 @@ torch::Tensor gemm_a8w8(
 
   if (x_scale.dtype() == at::ScalarType::Float && Y.dtype() == at::ScalarType::Half)
   {
-    rowwise_dispatch<F32, F16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y);
+    rowwise_dispatch<F32, F16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y, bias);
   }
   else if (x_scale.dtype() == at::ScalarType::Float && Y.dtype() == at::ScalarType::BFloat16)
   {
-    rowwise_dispatch<F32, B16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y);
+    rowwise_dispatch<F32, B16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y, bias);
   }
   else if (Y.dtype() == at::ScalarType::Half)
   {
-    rowwise_dispatch<F16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y);
+    rowwise_dispatch<F16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y, bias);
   }
   else if (Y.dtype() == at::ScalarType::BFloat16)
   {
-    rowwise_dispatch<B16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y);
+    rowwise_dispatch<B16>(M, N, K)(XQ, WQ, x_scale, w_scale, Y, bias);
   }
   else
   {
