@@ -55,13 +55,13 @@ from transformers.utils import (
 from transformers.utils.import_utils import is_torch_fx_available
 from transformers.models.mixtral.configuration_mixtral import MixtralConfig
 
-from ..rocm_kernels.fused_moe import fused_moe
-from ..rocm_kernels import paged_attn
-from ..rocm_kernels.paged_attn import PagedAttention
-import rocmKernels as ops
-from ..rocm_kernels.tuned_gemm import tgemm
-from ..rocm_kernels.rotary_embedding import get_rope
-from ..rocm_kernels.dist.communication_op import tensor_model_parallel_all_reduce
+from ater.fused_moe import fused_moe
+from ater import paged_attn
+from ater.paged_attn import PagedAttention
+import ater as ops
+from ater.tuned_gemm import tgemm
+from ater.rotary_embedding import get_rope
+from ater.dist.communication_op import tensor_model_parallel_all_reduce
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func

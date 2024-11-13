@@ -17,12 +17,12 @@ from llm_perf.backends.GPU.gpu_ckpt_loader import GpuCkptLoader
 from llm_perf.core.ckpt_loader import Mixtral_ModelLoader
 from transformers import MixtralConfig
 from .modeling_mixtral import MixtralForCausalLM
-from ..rocm_kernels.dist.parallel_state import (ensure_model_parallel_initialized,
+from ater.dist.parallel_state import (ensure_model_parallel_initialized,
                                                 init_distributed_environment,
                                                 set_custom_all_reduce,
                                                 destroy_model_parallel,
                                                 destroy_distributed_environment)
-from ..rocm_kernels.dist.utils import (get_open_port,
+from ater.dist.utils import (get_open_port,
                                        get_distributed_init_method,
                                        get_ip)
 # setup_logger('info')
