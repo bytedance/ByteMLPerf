@@ -29,5 +29,4 @@ python3  launch.py --task resnet50-torch-fp32 --hardware_type TPU
 ```
 
 # Notes
-
-> Only support batchsize=1 and FP32 models for yolov5-onnx-fp32 and resnet50-torch-fp32 now.
+> Support FP32 and INT8 quantization for resnet50-torch-fp32 now, .

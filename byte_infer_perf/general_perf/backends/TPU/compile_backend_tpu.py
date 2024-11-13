@@ -36,6 +36,11 @@ class CompileBackendTPU(compile_backend.CompileBackend):
         self.current_dir = os.path.split(os.path.abspath(__file__))[0]
         self.model_config = None
         self.precision = "fp32"
+        self.model_precision = "F32"
+        self.mean = "0.0,0.0,0.0"
+        self.scale = "1.0,1.0,1.0"
+        self.pixel_format = "rgb"
+        self.input_num = 200
         
     def version(self) -> str:
         """
@@ -57,14 +62,25 @@ class CompileBackendTPU(compile_backend.CompileBackend):
             self.model_config = configs
         
         self.model_info = configs["model_info"]
+        self.interact_info = configs["interact_info"]
         self.model_path = self.model_info["model_path"]
         self.input_shapes = self.model_info["input_shape"][self.model_info["inputs"]]
         self.input_shapes_str = ','.join(str(num) for num in self.input_shapes)
         self.model_name = self.model_info["model"]
+        if("model_precision" in self.interact_info.keys()):
+            self.model_precision = self.interact_info["model_precision"]
+            self.mean = self.interact_info["mean"]
+            self.scale = self.interact_info["scale"]
+            self.pixel_format = self.interact_info["pixel_format"]
+            self.input_num = self.interact_info["input_num"]
 
+        self.precision=self.model_precision.upper()
         gen_mlir_commands = f'model_transform \
             --model_name {self.model_name} \
             --model_def ../../{self.model_path} \
+            --mean {self.mean} \
+            --scale {self.scale} \
+            --pixel_format {self.pixel_format}  \
             --input_shapes [[{self.input_shapes_str}]] \
             --mlir {self.model_name}.mlir'
         gen_mlir_logs = './model_transform.log'
@@ -78,13 +94,34 @@ class CompileBackendTPU(compile_backend.CompileBackend):
         os.chdir(self.compile_dir_name)
         with open(gen_mlir_logs, 'w') as logfile:
             subprocess.call(gen_mlir_commands, stdout=logfile, stderr=subprocess.STDOUT, shell=True)
+        if(self.precision == "INT8"):
+            self.dataset_path = current_dir+"/datasets/"+self.model_info["dataset_name"]+"/"+self.interact_info["dataset_path"]
+
+            run_calibration_commands = f'run_calibration {self.model_name}.mlir \
+                --dataset {self.dataset_path} \
+                --input_num {self.input_num}  \
+                -o {self.model_name}_cali_table'
+                
+            run_calibration_logs = './run_calibration.log'
+
         
-        deploy_commands = f'model_deploy \
-            --mlir {self.model_name}.mlir \
-            --quantize F32 \
-            --chip bm1690 \
-            --model {self.model_name}.bmodel'
+            with open(run_calibration_logs , 'w') as logfile:
+                subprocess.call(run_calibration_commands, stdout=logfile, stderr=subprocess.STDOUT, shell=True)
+        
+            deploy_commands = f'model_deploy \
+                --mlir {self.model_name}.mlir \
+                --quantize {self.model_precision} \
+                --chip bm1690 \
+                --calibration_table {self.model_name}_cali_table \
+                --model {self.model_name}.bmodel'
+        else:
+            deploy_commands = f'model_deploy \
+                --mlir {self.model_name}.mlir \
+                --quantize {self.model_precision} \
+                --chip bm1690 \
+                --model {self.model_name}.bmodel'
         deploy_commands_logs = './model_deploy.log'
+        
         with open(deploy_commands_logs, 'w') as logfile:
             subprocess.call(deploy_commands, stdout=logfile, stderr=subprocess.STDOUT, shell=True)
         
@@ -121,7 +158,21 @@ class CompileBackendTPU(compile_backend.CompileBackend):
         return result
     
     def get_interact_profile(self, config: Dict[str, Any]):
-        return {}
+        """Collect information for core engine to let user interactively fill in configurations."""
+        # load the interact_info by model name
+        model_profile = []
+
+        interact_info_file = os.path.join(
+            self.current_dir, "interact_infos", config["model_info"]["model"] + ".json"
+        )
+        file_path = os.path.join(self.current_dir, self.hardware_type + ".json")
+
+        with open(interact_info_file, "r") as f:
+            interact_info = json.load(f)
+
+       
+
+        return interact_info
     
     def get_best_batch_size(self) -> compile_backend.List[int] | None:
         return None

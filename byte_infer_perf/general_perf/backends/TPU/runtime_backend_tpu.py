@@ -19,7 +19,7 @@ import time
 import numpy as np
 import sophon.sail as sail
 from general_perf.backends import runtime_backend
-
+import multiprocessing
 log = logging.getLogger("RuntimeBackendTPU")
 
 class RuntimeBackendTPU(runtime_backend.RuntimeBackend):
@@ -39,7 +39,10 @@ class RuntimeBackendTPU(runtime_backend.RuntimeBackend):
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + "/compiled_models/"
         )
         self.precision = "fp32"
-        
+        self.max_time=multiprocessing.Value('d', -float('inf'))
+        self.min_time=multiprocessing.Value('d', float('inf'))
+        self.lock = multiprocessing.Lock()
+   
     def version(self) -> str:
         return sail.__version__
     
@@ -70,23 +73,54 @@ class RuntimeBackendTPU(runtime_backend.RuntimeBackend):
         outputs = {i:array for i, array in enumerate(output_arrays)}
         ret = self.net.process(input_data, outputs, self.net_name)
         return outputs
+
+    def single_chip_test(self,dev_id, iter, thread_id):
+        net = sail.nn.Engine(self.bmodel_path, dev_id)
+        stream = sail.nn.Stream(dev_id)
+        net_name = net.get_net_names()[0]
+        input_shape = net.get_input_shapes(net_name, 0)[0]
+        output_shapes = net.get_output_shapes(net_name, 0)
         
-    def _run_benchmark(self, bs, iter):
-        input = np.random.rand(*self.input_shape).astype(np.float32)
-        durations = []
-        
+        input = np.random.rand(*input_shape).astype(np.float32)
+        input_tensor = sail.nn.Tensor(input, sail.DataType.TPU_FLOAT32, dev_id)
+        input_data = {0: input_tensor}
+
+        output_arrays = [sail.nn.Tensor(output_shapes[i], sail.DataType.TPU_FLOAT32, dev_id) for i in range(len(output_shapes))]
+        outputs = {i:array for i, array in enumerate(output_arrays)}
+
+        start_time=time.time()
         for i in range(iter):
-            log.info(f'Running Predict times {i}')
-            start_time = time.time()
-            _ = self.predict(input)
-            end_time = time.time()
-            durations.append(end_time - start_time)
-        
-        total_duration = np.sum(durations)
-        avg_latency = total_duration / iter
-        tail_latency = np.percentile(durations, 95)
-    
-        qps = iter / total_duration
+            net.process_async(input_data, outputs, stream, net_name)
+        stream.sync()
+        end_time=time.time()
+
+        with self.lock:
+            self.min_time.value=min(self.min_time.value,start_time)
+            self.max_time.value=max(self.max_time.value,end_time)
+
+ 
+    def _run_benchmark(self, bs, iter):
+        chip_num, core_num, start_chip =2, 1, 0
+        thread_list = []
+        for chip_id in range(chip_num):
+            for core_id in range(core_num):
+                thread_list.append(multiprocessing.Process(target=self.single_chip_test, args=(chip_id+start_chip, iter, chip_id*core_num+core_id)))
+
+        logging.info("Predict running...")
+        for thread in thread_list:
+            thread.start()
+
+        for thread in thread_list:
+            thread.join()
+        logging.info("Predict finished")
+
+        total_time = self.max_time.value - self.min_time.value
+
+        frame_num = chip_num * core_num * iter
+        qps = frame_num / total_time
+        avg_latency = total_time / frame_num
+        tail_latency = -1
+        print(f'chip_num = {chip_num}, core_num = {core_num}, frame_num = {frame_num}, qps = {qps}')  
         
         return qps, avg_latency, tail_latency
     
@@ -97,7 +131,7 @@ class RuntimeBackendTPU(runtime_backend.RuntimeBackend):
         iterations = self.workload["iterations"]
 
         qps, avg_latency, tail_latency = self._run_benchmark(
-            self.batch_size, iterations
+            self.batch_size, iterations*100
         )
 
         report["QPS"] = int(qps)
