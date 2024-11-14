@@ -303,6 +303,59 @@ def embedding_compute_size(input_shapes, torch_dtype):
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
 
+def swiglu_create_tensors(input_shapes, torch_dtype, xpu_device):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    input_tensor_shape = [batch_size, hidden_size]
+    output_tensor_shape = [batch_size, hidden_size]
+
+    # create input tensors
+    input_tensor = torch.randint(0, 7, input_tensor_shape, dtype=torch_dtype, device=xpu_device)
+
+    # create output tensors
+    output_tensor = torch.randint(0, 7, output_tensor_shape, dtype=torch_dtype, device=xpu_device)
+
+    return [input_tensor, output_tensor]
+
+
+def embeddingbag_create_tensors(input_shapes, torch_dtype, xpu_device):
+    a_shape, b_shape = input_shapes
+    batch_size, index_size = a_shape 
+    vocab_size, hidden_size = b_shape
+
+    b_shape = [vocab_size, hidden_size]
+
+    c_shape = [batch_size, index_size, hidden_size]
+
+    # create input tensors
+    a_tensor = torch.randint(0, vocab_size, a_shape, dtype=torch.long, device=xpu_device) #index must be integer, long
+    b_tensor = torch.randint(0, vocab_size, b_shape, dtype=torch_dtype, device=xpu_device)
+
+    # create output tensors
+    c_tensor = torch.randint(0, 7, c_shape, dtype=torch_dtype, device=xpu_device)
+    return [a_tensor, b_tensor, c_tensor]  
+
+
+def embeddingbag_compute_size(input_shapes, torch_dtype):
+    a_shape, b_shape = input_shapes
+
+    batch_size, index_size = a_shape 
+    vocab_size, hidden_size = b_shape
+
+    c_shape = [batch_size, index_size, hidden_size]
+
+
+    input_element_num = sum([math.prod(shape) for shape in [a_shape, b_shape]])
+    output_element_num = sum([math.prod(shape) for shape in [c_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+
 def add_compute_size(input_shapes, torch_dtype):
     a_shape, b_shape = input_shapes
     c_shape = a_shape
@@ -862,7 +915,9 @@ class EmbeddingOp(torch.nn.Module):
     def forward(self,index_tensor, src_tensor, output_tensor ):
         output_tensor = torch.nn.functional.embedding(index_tensor, src_tensor) 
 
-
+class EmbeddingBagOp(torch.nn.Module):
+    def forward(self,index_tensor, src_tensor, output_tensor ):
+        output_tensor = torch.nn.functional.embedding_bag(index_tensor, src_tensor) 
 
 """
 h2d_ops
@@ -956,6 +1011,7 @@ op_registry = {
     "scatter": ScatterOp(),
     "gather": GatherOp(),
     "embedding": EmbeddingOp(),
+    "embeddingbag": EmbeddingBagOp(),
 
     # h2d_ops
     "device2host": Device2HostOp(),
