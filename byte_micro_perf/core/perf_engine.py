@@ -60,6 +60,31 @@ def get_args():
         help="The hardware configs need to be loaded, refs to vendor_zoo/NVIDIA/A100-PCIe.json",
     )
 
+ 
+    parser.add_argument(
+        "--dtype_list",
+        nargs="*",
+        type=str,
+        default=None,
+        help="List of data types to test"
+    )
+
+    parser.add_argument(
+        "--shape_list",
+        nargs="*",
+        type=str,
+        default=None,
+        help="List of shapes in format [[M,K],[K,N]]"
+    )
+
+    parser.add_argument(
+        "--group_list",
+        nargs="*",
+        type=str,
+        default=None,
+        help="List of group sizes for group operations"
+    )
+
     # task config
     parser.add_argument(
         "--task_dir",
@@ -186,17 +211,65 @@ ConfigInstance = namedtuple("ConfigInstance", ["dtype", "tensor_shapes", "index"
 ResultItem = namedtuple("ResultItem", ["config", "report"])
 
 
+def parse_shape_str(shape_str):
+    """Parse shape string to list of integers"""
+    try:
+        # Remove spaces and evaluate the string as Python literal
+        shape_str = shape_str.replace(' ', '')
+        return eval(shape_str)
+    except Exception as e:
+        logger.error(f"Failed to parse shape string: {shape_str}, error: {e}")
+        return None
+
+def validate_dtype(dtype):
+    """Validate if dtype is supported"""
+    valid_dtypes = ['float32', 'float16', 'bfloat16', 'int8']
+    if dtype not in valid_dtypes:
+        logger.warning(f"Unsupported dtype: {dtype}, valid dtypes are: {valid_dtypes}")
+        return False
+    return True
+
+
 class PerfEngine:
     def __init__(self) -> None:
         super().__init__()
 
         self.args = get_args()
+        self.convert_args_types()
+
         self.workload = load_workload(self.args.task, self.args.task_dir)
         self.backend_type = self.args.hardware_type
         self.old_os_path = os.environ["PATH"]
         self.prev_sys_path = list(sys.path)
         self.real_prefix = sys.prefix
         self.version = self.get_version()
+    def convert_args_types(self):
+        """Convert string arguments to their proper Python types"""
+        
+        # 1. Convert shape_list strings to nested lists
+        if self.args.shape_list:
+            try:
+                self.args.shape_list = [eval(shape_str) for shape_str in self.args.shape_list]
+            except Exception as e:
+                logger.error(f"Failed to parse shape_list: {e}")
+                sys.exit(1)
+        
+        # 2. Convert dtype_list strings (remove quotes)
+        if self.args.dtype_list:
+            try:
+                # Remove quotes and convert to proper dtype strings
+                self.args.dtype_list = [dtype.strip("'\"") for dtype in self.args.dtype_list]
+            except Exception as e:
+                logger.error(f"Failed to parse dtype_list: {e}")
+                sys.exit(1)
+        
+        # 3. Convert group_list strings to integers
+        if self.args.group_list:
+            try:
+                self.args.group_list = [int(group) for group in self.args.group_list]
+            except Exception as e:
+                logger.error(f"Failed to parse group_list: {e}")
+                sys.exit(1)
 
     def get_version(self):
         version = ""
@@ -252,6 +325,14 @@ class PerfEngine:
                 break
         dtype_list = self.workload.get("dtype", ["float32"])
         shape_list = parse_workload(self.workload)
+
+        if self.args.dtype_list is not None:
+            dtype_list = self.args.dtype_list
+        if self.args.shape_list is not None:
+            shape_list = self.args.shape_list
+        if self.args.group_list is not None:
+            group_list = self.args.group_list
+
 
         if not group_list or not dtype_list or not shape_list:
             logger.error("empty group/dtype/shape")

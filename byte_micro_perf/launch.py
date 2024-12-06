@@ -68,6 +68,32 @@ if __name__ == "__main__":
         help="The task going to be evaluted, refs to workloads/, default use all tasks in workloads/"
     )
 
+
+    parser.add_argument(
+        "--dtype_list",
+        nargs="*",
+        type=str,
+        default=None,
+        help="List of data types to test"
+    )
+
+    parser.add_argument(
+        "--shape_list",
+        nargs="*",
+        type=str,
+        default=None,
+        help="List of shapes in format [[M,K],[K,N]]"
+    )
+
+    parser.add_argument(
+        "--group_list",
+        nargs="*",
+        type=int,
+        default=None,
+        help="List of group sizes for group operations"
+    )
+        
+
     # list all supported task and hardware
     parser.add_argument(
         "--show_task_list", 
@@ -221,8 +247,19 @@ if __name__ == "__main__":
             "--vendor_path", str(args.vendor_path),
             "--task", task,
             "--task_dir", str(args.task_dir), 
-            "--parallel", str(args.parallel)
+            "--parallel", str(args.parallel),
         ]
+        # 添加shape参数
+
+        if args.dtype_list:
+            cmds.extend(["--dtype_list"] + args.dtype_list)
+
+        if args.shape_list:
+            cmds.extend(["--shape_list"] + args.shape_list)
+
+        if args.group_list:
+            cmds.extend(["--group_list"] + [str(g) for g in args.group_list])
+
         if args.activate_venv:
             cmds.append("--activate_venv")
 

@@ -6,6 +6,8 @@ __pycache__
 *.npy
 *.tar
 span.log
+byte_micro_perf/core*
+byte_micro_perf/kernel*
 byte_micro_perf/backends/*/venv/
 byte_micro_perf/reports/
 byte_infer_perf/general_perf/tools/venv/
