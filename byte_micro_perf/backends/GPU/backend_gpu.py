@@ -14,6 +14,7 @@
 
 import os
 import json
+import random
 import logging
 
 from datetime import timedelta
@@ -33,20 +34,20 @@ log = logging.getLogger("PerfEngine")
 
 
 class BackendGPU(Backend):
-    def __init__(self, workload_dict, vendor_path):
-        super().__init__(workload_dict, vendor_path)
-
-        
-
-
-    def get_device_name(self):
-        return torch.cuda.get_device_name(0)
+    def __init__(self, workload_dict):
+        super().__init__(workload_dict)
 
     def get_torch_device_name(self):
         return "cuda"
+    
+    def get_device_name(self, index = 0):
+        return torch.cuda.get_device_name(index)
 
-    def get_device_properties(self):
-        return torch.cuda.get_device_properties(0)
+    def get_device_properties(self, index = 0):
+        return torch.cuda.get_device_properties(index)
+
+    def get_mem_info(self):
+        return torch.cuda.mem_get_info()
 
     def get_device_count(self):
         return torch.cuda.device_count()
@@ -62,7 +63,6 @@ class BackendGPU(Backend):
 
     def empty_cache(self):
         torch.cuda.empty_cache()
-
 
 
     def get_dist_module(self):
@@ -85,7 +85,7 @@ class BackendGPU(Backend):
         os.environ["WORLD_SIZE"] = str(world_size)
 
         # init process group
-        self.get_dist_module().init_process_group(
+        dist.init_process_group(
             backend="nccl",
             world_size=world_size,
             rank=rank, 
@@ -93,3 +93,19 @@ class BackendGPU(Backend):
         )
         return True
 
+    def core_perf(self, prefer_iterations, tensor_list):
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
+        self.device_synchronize()
+        self.barrier()
+
+        start_event.record()
+        for i in range(prefer_iterations):
+            self._run_operation(self.op, random.choice(tensor_list))
+        end_event.record()
+
+        self.device_synchronize()
+        self.barrier()
+        
+        return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
