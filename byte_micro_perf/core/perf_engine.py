@@ -117,66 +117,75 @@ def load_workload(task: str, task_dir: str) -> Dict[str, Any]:
 
 def parse_workload(workload):
     shape_list = []
-    if "input_shape_groups" in workload:
-        input_shape_groups = workload["input_shape_groups"] if isinstance(workload["input_shape_groups"], list) else [workload["input_shape_groups"]]
 
-        for input_shape_group in input_shape_groups:
-            if "inputs" in input_shape_group:
-                input_shape_list = []
-                for input_shapes in input_shape_group["inputs"]:
-                    input_shape_list.append([list(shape) for shape in itertools.product(*input_shapes)])
-                if len(input_shape_list) == 1:
-                    shape_list.extend(input_shape_list[0])
-                else:
-                    shape_list.extend([list(input_shape) for input_shape in zip(*input_shape_list)])
+    if "input_shape_groups" not in workload:
+        return shape_list
+    
+    input_shape_groups = workload["input_shape_groups"] if isinstance(workload["input_shape_groups"], list) else [workload["input_shape_groups"]]
 
+    for input_shape_group in input_shape_groups:
+        if "inputs" in input_shape_group:
+            input_shape_list = []
+            for input_shapes in input_shape_group["inputs"]:
+                input_shape_list.append([list(shape) for shape in itertools.product(*input_shapes)])
+
+            if len(input_shape_list) == 1:
+                shape_list.extend(input_shape_list[0])
             else:
-                gemm_keys = ["M", "K", "N", "MN", "MK", "KN"]
-                gemm_values = [input_shape_group.get(k, []) for k in gemm_keys]
-                if any(gemm_values):
-                    m ,k, n, mn, mk, kn = gemm_values
-                    # batch gemm
-                    if "batch_size" in input_shape_group:
-                        bs = input_shape_group.get("batch_size", [])
-                        if m and n and k:
-                            for p in itertools.product(bs, m, k, n):
-                                shape_list.append([[p[0], p[1], p[2]], [p[0], p[2], p[3]]])
-                        if mn and k:
-                            for p in itertools.product(bs, mn, k):
-                                shape_list.append([[p[0], p[1][0], p[2]], [p[0], p[2], p[1][1]]])
-                        if mk and n:
-                            for p in itertools.product(bs, mk, n):
-                                shape_list.append([[p[0], p[1][0], p[1][1]], [p[0], p[1][1], p[2]]])
-                        if m and kn:
-                            for p in itertools.product(bs, m, kn):
-                                shape_list.append([[p[0], p[1], p[2][0]], [p[0], p[2][0], p[2][1]]])
-                    # group gemm
-                    elif "gemm_group" in input_shape_group:
-                        groups = input_shape_group.get("gemm_group", [])
-                        batches = input_shape_group.get("batch", [])
-                        kn = input_shape_group.get("KN", [])
-                        if k and n:
-                            kn.append([list(shape) for shape in itertools.product(k, n)])
-                        for batch in batches:
-                            for _kn in kn:
-                                group_input_shape_list = []
-                                for group in groups:
-                                    group_input_shape_list.append([[group * batch, _kn[0]], [_kn[0], _kn[1]]])
-                                shape_list.append(group_input_shape_list)
-                    # gemm
-                    else:
-                        if m and n and k:
-                            for p in itertools.product(m, k, n):
-                                shape_list.append([[p[0], p[1]], [p[1], p[2]]])
-                        if mn and k:
-                            for p in itertools.product(mn, k):
-                                shape_list.append([[p[0][0], p[1]], [p[1], p[0][1]]])
-                        if mk and n:
-                            for p in itertools.product(mk, n):
-                                shape_list.append([[p[0][0], p[0][1]], [p[0][1], p[1]]])
-                        if m and kn:
-                            for p in itertools.product(m, kn):
-                                shape_list.append([[p[0], p[1][0]], [p[1][0], p[1][1]]])
+                max_num_cases = max([len(input_shape) for input_shape in input_shape_list])
+                for i in range(max_num_cases):
+                    test_cases = []
+                    for input_shape in input_shape_list:
+                        test_cases.append(input_shape[i%(len(input_shape))])
+                    shape_list.append(test_cases)
+
+        else:
+            gemm_keys = ["M", "K", "N", "MN", "MK", "KN"]
+            gemm_values = [input_shape_group.get(k, []) for k in gemm_keys]
+            if any(gemm_values):
+                m ,k, n, mn, mk, kn = gemm_values
+                # batch gemm
+                if "batch_size" in input_shape_group:
+                    bs = input_shape_group.get("batch_size", [])
+                    if m and n and k:
+                        for p in itertools.product(bs, m, k, n):
+                            shape_list.append([[p[0], p[1], p[2]], [p[0], p[2], p[3]]])
+                    if mn and k:
+                        for p in itertools.product(bs, mn, k):
+                            shape_list.append([[p[0], p[1][0], p[2]], [p[0], p[2], p[1][1]]])
+                    if mk and n:
+                        for p in itertools.product(bs, mk, n):
+                            shape_list.append([[p[0], p[1][0], p[1][1]], [p[0], p[1][1], p[2]]])
+                    if m and kn:
+                        for p in itertools.product(bs, m, kn):
+                            shape_list.append([[p[0], p[1], p[2][0]], [p[0], p[2][0], p[2][1]]])
+                # group gemm
+                elif "gemm_group" in input_shape_group:
+                    groups = input_shape_group.get("gemm_group", [])
+                    batches = input_shape_group.get("batch", [])
+                    kn = input_shape_group.get("KN", [])
+                    if k and n:
+                        kn.append([list(shape) for shape in itertools.product(k, n)])
+                    for batch in batches:
+                        for _kn in kn:
+                            group_input_shape_list = []
+                            for group in groups:
+                                group_input_shape_list.append([[group * batch, _kn[0]], [_kn[0], _kn[1]]])
+                            shape_list.append(group_input_shape_list)
+                # gemm
+                else:
+                    if m and n and k:
+                        for p in itertools.product(m, k, n):
+                            shape_list.append([[p[0], p[1]], [p[1], p[2]]])
+                    if mn and k:
+                        for p in itertools.product(mn, k):
+                            shape_list.append([[p[0][0], p[1]], [p[1], p[0][1]]])
+                    if mk and n:
+                        for p in itertools.product(mk, n):
+                            shape_list.append([[p[0][0], p[0][1]], [p[0][1], p[1]]])
+                    if m and kn:
+                        for p in itertools.product(m, kn):
+                            shape_list.append([[p[0], p[1][0]], [p[1][0], p[1][1]]])
     return shape_list
 
 
@@ -226,7 +235,7 @@ class PerfEngine:
         backend_module = importlib.import_module(
             "backends." + hardware_type + ".backend_" + hardware_type.lower())
         self.backend_class = getattr(backend_module, "Backend" + hardware_type)
-        self.backend = self.backend_class(self.workload, self.args.vendor_path)
+        self.backend = self.backend_class(self.workload)
 
         # create output dir based on task
         # {BYTEMLPERF_ROOT}/byte_micro_perf/reports/{backend_type}/{task_name}
@@ -284,17 +293,20 @@ class PerfEngine:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
-
         # all operations will enter subprocess to test in parallel
         for group in group_list:
-            logger.info(f"Start to test group size: {group}")       
+            logger.info(f"Start to test group size: {group}") 
+
+            # check device_count and group_size
+            if group > device_count:
+                logger.warning(f"group size {group} is larger than device count {device_count}, skip this group")
+                continue
+                
+            # get actual instance num
             instance_num = min(device_count, max(1, self.args.parallel)) if group == 1 else group
-            if self.workload["operator"] in ["device2host", "host2device"]:
-                instance_num = 1
 
             input_queues = mp.Queue()
             output_queues = mp.Queue(maxsize=1)
-
             try:
                 _subprocesses = mp.spawn(
                     fn=self.perf_func, 
@@ -401,7 +413,7 @@ class PerfEngine:
     def perf_func(self, rank: int, *args):
         world_size, group_size, output_dir, test_list, input_queues, output_queues = args
         
-        backend_instance = self.backend_class(self.workload, self.args.vendor_path)
+        backend_instance = self.backend_class(self.workload)
         backend_instance.rank = rank
         backend_instance.world_size = world_size
 
@@ -474,13 +486,32 @@ class PerfEngine:
                     reports = {}
 
                 if reports and "Error" not in reports:
+                    gather_output_list = [None for _ in range(group_size)]
+                    backend_instance.get_dist_module().gather_object(
+                        reports, 
+                        gather_output_list if rank == 0 else None, 
+                        dst=0
+                    )
+
+                    if rank == 0:
+                        latency_list = [data.get("Avg latency(us)", 0) for data in gather_output_list]
+                        kernel_bw_list = [data.get("Kernel bandwidth(GB/s)", 0) for data in gather_output_list]
+                        bus_bw_list = [data.get("Bus bandwidth(GB/s)", 0) for data in gather_output_list]
+                        print(f"rank {rank}, group_size {group_size}, {test_instance}")
+                        print(f"latency: {latency_list}")
+                        print(f"kernel_bw: {kernel_bw_list}")
+                        print(f"bus_bw: {bus_bw_list}")
+                        print("")
+
+                        reports["latency_list"] = latency_list
+                        reports["kernel_bw_list"] = kernel_bw_list
+                        reports["bus_bw_list"] = bus_bw_list
+
+                        if op_name in ["host2device", "device2host"]:
+                            reports["Kernel bandwidth(GB/s)"] = sum(kernel_bw_list)
+                            reports["Bus bandwidth(GB/s)"] = sum(bus_bw_list)
                     result_list.append(ResultItem(test_instance, reports))
 
-                    latency = reports.get("Avg latency(us)", 0)
-                    kernel_bw = reports.get("Kernel bandwidth(GB/s)", 0)
-                    bus_bw = reports.get("Bus bandwidth(GB/s)", 0)
-                    if rank == 0:
-                        print(f"rank {rank}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
                 else:
                     if rank == 0:
                         print(f"rank {rank}, {test_instance}, error")

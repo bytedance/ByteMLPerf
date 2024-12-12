@@ -24,6 +24,12 @@ You can run following command automate all steps with chatglm2 model on GPU back
 python3 byte_infer_perf/llm_perf/launch.py --hardware_type GPU --task chatglm2-torch-fp16-6b 
 ```
 
+## Split model
+Splitting model is needed if model is too large to fit into one GPU. Except for chatglm2-6b, other models should be splitted manually using `split_model.py` under `backends/GPU/model_impl`, such as `split_mixtral.py`. `chatglm2-6b` will be automatically splitted online.
+
+After splitting model, you will find a subdirectory `TP8` (tp_size=8) under model directory.
+
+
 ## Test accuracy (single query with specify prompt)
 Launch a server running mixtral-8x22b (tp_size=8, max_batch_size=8) with following command:
 ```shell

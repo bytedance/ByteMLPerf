@@ -19,13 +19,10 @@ import math
 import random
 import logging
 import traceback
-from abc import ABC, abstractmethod
-from datetime import timedelta
-from typing import Any, Dict, List, final
+from abc import ABC
+from typing import Any, Dict, List
 
 import torch
-import torch.distributed as dist
-import torch.distributed.distributed_c10d as dist_c10d
 
 from backends import module_store
 from backends.utils import dump_communication_ops_report, dump_computation_ops_report
@@ -40,7 +37,7 @@ default_op_create_tensors_registry = module_store.op_create_tensors_funcs.copy()
 
 
 class Backend(ABC):
-    def __init__(self, workload_dict: Dict[str, Any], vendor_path: str):
+    def __init__(self, workload_dict: Dict[str, Any]):
         self.op_name = workload_dict["operator"]
         self.iterations = workload_dict["iterations"]
         self.op = None
@@ -51,15 +48,10 @@ class Backend(ABC):
 
         # hardware info
         self.device_name = self.get_device_name()
+        
+        self.avail_memory, self.total_memory = self.get_mem_info()
+        self.memory_limit = self.avail_memory // (1024**3)
 
-        self.memory_limit = int(
-            self.get_device_properties().total_memory / (1024**3)
-        )
-        if vendor_path is not None and os.path.exists(vendor_path) and (vendor_path).endswith(".json"):
-            with open(vendor_path, "r") as f:
-                self.hw_info_dict = json.load(f)
-                # if the vendor path does not exist, please set this param manaually
-                self.bandwidth_limit = self.hw_info_dict["内存参数"]["内存"]["内存带宽(GB/s)"]
 
     """
     op
@@ -87,24 +79,25 @@ class Backend(ABC):
     """
     device management related
     """
-    # torch.get_device_name()
-    def get_device_name(self):
-        raise NotImplementedError
-    
-    # "cuda"
     def get_torch_device_name(self):
         raise NotImplementedError
 
-    def get_device_properties(self):
+    def get_device_name(self, index = 0):
+        raise NotImplementedError
+
+    def get_device_properties(self, index = 0):
+        raise NotImplementedError
+
+    def get_mem_info(self):
         raise NotImplementedError
 
     def get_device_count(self):
         raise NotImplementedError
     
-    def set_device(self, device_index : int):
+    def set_device(self, index : int):
         raise NotImplementedError
 
-    def get_device(self):
+    def get_device(self) -> int:
         raise NotImplementedError
 
     def device_synchronize(self):
@@ -112,7 +105,8 @@ class Backend(ABC):
 
     def empty_cache(self):
         raise NotImplementedError
-    
+
+
     """
     ccl related
     """
@@ -133,7 +127,6 @@ class Backend(ABC):
             dist.barrier()
 
 
-
     def _run_operation(self, operation, inputs):
         result = operation(*inputs)
         return result
@@ -142,14 +135,25 @@ class Backend(ABC):
     def build_tensor(self, input_shapes, torch_dtype):
         # get funcs
         compute_size_func = self.get_op_compute_size_func()
-        create_tensors_func = self.get_op_create_tensors_func()
-        _, tensor_size, _, _ = compute_size_func(input_shapes, torch_dtype)
+        result = compute_size_func(input_shapes, torch_dtype)
 
-        # avoid use cache, assume cache size is 1 GiB, and use 80% of device memory
+        # 4: (bs, rw_bytes, r_bytes, w_bytes)  assume tensor_size = rw_bytes
+        # 5: (bs, rw_bytes, r_bytes, w_bytes, tensor_size)
+        if len(result) == 4:
+            tensor_size = result[1]
+        elif len(result) == 5:
+            tensor_size = result[4]
+            
+        create_tensors_func = self.get_op_create_tensors_func()
+        
+        # avoid use cache, assume cache size is 1 GiB, and use 80% of available device memory
         assume_cache_size = 1 * 1024**3
+
         assume_avail_bytes = self.memory_limit * 0.9 * 1024**3
 
-        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p", "device2host", "host2device"]:
+
+
+        if self.op_name in ["allreduce", "allgather", "reducescatter", "alltoall", "broadcast", "p2p", "device2host", "host2device", "hash_table"]:
             if tensor_size > assume_avail_bytes:
                 return []
             else:
@@ -169,6 +173,19 @@ class Backend(ABC):
             create_tensors_func(input_shapes, torch_dtype, self.get_torch_device_name()) for _ in range(max_data_cnt)
         ]
         return tensor_list
+
+
+    def core_perf(self, prefer_iterations, tensor_list):
+        self.device_synchronize()
+        self.barrier()
+        start_time = time.perf_counter_ns()
+        for i in range(prefer_iterations):
+            self._run_operation(self.op, tensor_list[i % len(tensor_list)])
+        self.device_synchronize()
+        self.barrier()
+        end_time = time.perf_counter_ns()
+
+        return (end_time - start_time) / 1e3 / prefer_iterations
 
 
     def perf(self, input_shapes: List[List[int]], dtype):
@@ -209,19 +226,7 @@ class Backend(ABC):
                 else:
                     prefer_iterations = min(math.ceil(max_total_duration / avg_op_duration), self.iterations)
 
-                # perf
-                self.device_synchronize()
-                self.barrier()
-                start_time = time.perf_counter_ns()
-                for i in range(prefer_iterations):
-                    self._run_operation(self.op, tensor_list[i % len(tensor_list)])
-                self.device_synchronize()
-                self.barrier()
-                end_time = time.perf_counter_ns()
-
-                # time in us
-                total_exec_time = (end_time - start_time) / 1e3
-                latency = round(total_exec_time / prefer_iterations, 2)
+                latency = round(self.core_perf(prefer_iterations, tensor_list), 2)
 
             except Exception as e:
                 traceback.print_exc()
