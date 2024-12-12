@@ -567,49 +567,191 @@ def scatter_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [dst_tensor, src_tensor, index_tensor]
 
 
+def hash_table_compute_size(input_shapes, torch_dtype):
+    a_shape, b_shape = input_shapes
+
+    num_entry, emb_size = a_shape
+    index_bs, num_index = b_shape
+
+    weight_element_num = num_entry * emb_size
+    index_element_num = index_bs * num_index
+    output_element_num = index_element_num * emb_size
+
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    index_dtype_size = torch.tensor([], dtype=torch.int64).element_size()
+
+    bs = index_bs
+    r_bytes = output_element_num * dtype_size + index_element_num * index_dtype_size
+    w_bytes = output_element_num * dtype_size
+    rw_bytes = r_bytes + w_bytes    
+    reserved_tensor_size = (weight_element_num + output_element_num) * dtype_size + \
+                  index_element_num * index_dtype_size
+    
+    return bs, rw_bytes, r_bytes, w_bytes, reserved_tensor_size
 
 
+def hash_table_create_tensors(input_shapes, torch_dtype, xpu_device):
+    a_shape, b_shape = input_shapes
+
+    num_entry, emb_size = a_shape
+    index_bs, num_index = b_shape
+
+    weight_tensor = torch.randn(num_entry, emb_size, dtype=torch_dtype, device=xpu_device)
+    torch.random.manual_seed(1024)
+    index_tensor = torch.randint(0, num_entry, (index_bs, num_index), dtype=torch.int64, device="cpu").to(xpu_device)
+
+    return [weight_tensor, index_tensor]    
 
 
+def topk_compute_size(input_shapes, torch_dtype):
+    a_shape, b_shape = input_shapes
 
-
-def host2device_compute_size(input_shapes, torch_dtype):
-    a_shape, = input_shapes
     batch_size, hidden_size = a_shape
+    _, k = b_shape
 
+    input_element_num = sum([math.prod(shape) for shape in [a_shape]])
     output_element_num = sum([math.prod(shape) for shape in [a_shape]])
 
     dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    output_tensor_size = dtype_size * output_element_num
+    indice_dtype_size = torch.tensor([], dtype=torch.int64).element_size()
 
-    tensor_size = output_tensor_size
-    return batch_size, tensor_size, 0, output_tensor_size
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num + indice_dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+def topk_create_tensors(input_shapes, torch_dtype, xpu_device):
+    a_shape, b_shape = input_shapes
+
+    batch_size, hidden_size = a_shape
+    _, k = b_shape
+
+    # create input tensors
+    a_tensor = torch.randint(0, 7, a_shape, dtype=torch_dtype, device=xpu_device)
+    # create output tensors
+    values_tensor = torch.randint(0, 7, a_shape, dtype=torch_dtype, device=xpu_device)
+    indices_tensor = torch.randint(0, 7, a_shape, dtype=torch.int64, device=xpu_device)
+    return [a_tensor, values_tensor, indices_tensor]
+
+
+
+
+
+
+
+# host2device / device2host / allreduce / broadcast
+def host2device_compute_size(input_shapes, torch_dtype):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+    element_num = sum([math.prod(shape) for shape in [a_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    tensor_size = dtype_size * element_num
+    return batch_size, tensor_size, tensor_size, tensor_size
+
+# device2device
+def device2device_compute_size(input_shapes, torch_dtype):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+    element_num = sum([math.prod(shape) for shape in [a_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    tensor_size = dtype_size * element_num
+    return batch_size, 2 * tensor_size, tensor_size, tensor_size
+
+# alltoall / p2p
+def alltoall_compute_size(input_shapes, torch_dtype):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    world_size = dist.get_world_size()
+    element_num = sum([math.prod(shape) for shape in [a_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    
+    input_tensor_size = dtype_size * element_num
+    output_tensor_size = dtype_size * element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+# allgather
+def allgather_compute_size(input_shapes, torch_dtype):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    world_size = dist.get_world_size()
+    output_element_num = sum([math.prod(shape) for shape in [a_shape]])
+    input_element_num = output_element_num // world_size
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+# reducescatter
+def reducescatter_compute_size(input_shapes, torch_dtype):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    world_size = dist.get_world_size()
+    input_element_num = sum([math.prod(shape) for shape in [a_shape]])
+    output_element_num = input_element_num // world_size
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+
+
+
+
+
+
+
 
 def host2device_create_tensors(input_shapes, torch_dtype, xpu_device):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
-    host_tensor = torch.empty(a_shape, dtype=torch_dtype, device="cpu").pin_memory()
-    device_tensor = torch.empty(a_shape, dtype=torch_dtype, device=xpu_device)
-    
+    host_tensor = torch.empty(
+        [batch_size, hidden_size], 
+        dtype=torch_dtype, 
+        device="cpu"
+    ).pin_memory()
+    device_tensor = torch.empty(
+        a_shape, 
+        dtype=torch_dtype, 
+        device=xpu_device
+    )
     return [host_tensor, device_tensor]
+
+def device2device_create_tensors(input_shapes, torch_dtype, xpu_device):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    tensor_0 = torch.empty(
+        [batch_size, hidden_size],
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    tensor_1 = torch.empty(
+        [batch_size, hidden_size],
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    return [tensor_0, tensor_1]
 
 
 def allreduce_create_tensors(input_shapes, torch_dtype, xpu_device):
     a_shape, = input_shapes
-    a_tensor = torch.zeros(a_shape, dtype=torch_dtype, device=xpu_device)
-    return [a_tensor]
-
-
-def allgather_compute_size(input_shapes, torch_dtype):
-    a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
-    output_element_num = sum([math.prod(shape) for shape in [a_shape]])
-    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    output_tensor_size = dtype_size * output_element_num
-    tensor_size = output_tensor_size
-    return batch_size, tensor_size, 0, output_tensor_size
+    tensor = torch.empty(
+        [batch_size, hidden_size], 
+        dtype=torch_dtype, 
+        device=xpu_device
+    )
+    return [tensor]
 
 
 
@@ -617,63 +759,42 @@ def allgather_create_tensors(input_shapes, torch_dtype, xpu_device):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     
+    # tensor:       [batch_size, hidden_size]
+    # split_tensor: [batch_size // world_size, hidden_size]
     world_size = dist.get_world_size()
-    tensor = torch.empty([batch_size, hidden_size], dtype=torch_dtype, device=xpu_device)
-    tensors = list(torch.chunk(tensor, world_size, dim=0))
+    tensor = torch.zeros(
+        (batch_size, hidden_size), 
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    split_tensor = torch.zeros(
+        (batch_size // world_size, hidden_size),
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    return [tensor, split_tensor]
 
-    return [tensors]
-
-
-def alltoall_compute_size(input_shapes, torch_dtype):
-    a_shape, b_shape = input_shapes
-    batch_size, hidden_size = a_shape
-
-    world_size = dist.get_world_size()
-    output_element_num = sum([math.prod(shape) for shape in [a_shape]]) * 2
-    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    output_tensor_size = dtype_size * output_element_num
-    tensor_size = output_tensor_size
-    return batch_size, tensor_size, 0, output_tensor_size
 
 
 def alltoall_create_tensors(input_shapes, torch_dtype, xpu_device):
-    a_shape, b_shape = input_shapes
+    a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
-    world_size = dist.get_world_size()
-    input_tensor = torch.empty([batch_size, hidden_size], dtype=torch_dtype, device=xpu_device)
-    input_tensors = list(torch.chunk(input_tensor, world_size, dim=0))
+    # output_tensor: [batch_size, hidden_size]
+    # input_tensor: [batch_size, hidden_size]
+    input_tensor = torch.zeros(
+        (batch_size, hidden_size), 
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    output_tensor = torch.zeros(
+        (batch_size, hidden_size), 
+        dtype=torch_dtype,
+        device=xpu_device
+    )
 
-    output_tensor = torch.empty([batch_size, hidden_size], dtype=torch_dtype, device=xpu_device)
-    output_tensors = list(torch.chunk(output_tensor, world_size, dim=0))
-
-    return [input_tensors, output_tensors]
+    return [output_tensor, input_tensor]
     
-
-def p2p_compute_size(input_shapes, torch_dtype):
-    a_shape, b_shape = input_shapes
-    batch_size, hidden_size = a_shape
-
-    input_element_num = sum([math.prod(shape) for shape in [a_shape]])
-    output_element_num = sum([math.prod(shape) for shape in [b_shape]])
-
-    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    input_tensor_size = dtype_size * input_element_num
-    output_tensor_size = dtype_size * output_element_num
-
-    tensor_size = input_tensor_size + output_tensor_size
-    return batch_size, tensor_size, input_tensor_size, output_tensor_size
-
-def p2p_create_tensors(input_shapes, torch_dtype, xpu_device):
-    a_shape, b_shape = input_shapes
-    batch_size, hidden_size = a_shape
-
-    a_tensor = torch.empty(a_shape, dtype=torch_dtype, device=xpu_device)
-    b_tensor = torch.empty(b_shape, dtype=torch_dtype, device=xpu_device)
-
-    return [a_tensor, b_tensor]
-
-
 
 """
 gemm ops
@@ -822,6 +943,20 @@ class GatherOp(torch.nn.Module):
     def forward(self, dst_tensor, src_tensor, index_tensor):
         torch.gather(src_tensor, 0, index_tensor, out=dst_tensor)
 
+class HashTableOp(torch.nn.Module):
+    def forward(self, weight_tensor, index_tensor):
+        output_tensor = torch.nn.functional.embedding(index_tensor, weight_tensor)
+        # output_tensor = torch.index_select(weight_tensor, 0, index_tensor.view(-1))
+
+class TopKOp(torch.nn.Module):
+    def forward(self, a_tensor, value_tensor, indice_tensor):
+        value_tensor, indice_tensor = torch.topk(
+            a_tensor, 
+            k=value_tensor.shape[-1], 
+            dim=-1, 
+            largest=True,
+            sorted=False
+        )
 
 
 """
@@ -836,45 +971,63 @@ class Device2HostOp(torch.nn.Module):
     def forward(self, host_tensor, device_tensor):
         host_tensor.copy_(device_tensor)
 
+class Device2DeviceOp(torch.nn.Module):
+    def forward(self, device_tensor_0, device_tensor_1):
+        device_tensor_1.copy_(device_tensor_0)
 
 
 """
 communication ops
 """
 class AllReduceOp(torch.nn.Module):
-    def forward(self, input_tensor):
-        dist.all_reduce(input_tensor, op=dist.ReduceOp.SUM)
-
-class AllGatherOp(torch.nn.Module):
-    def forward(self, input_tensors):
-        dist.all_gather(input_tensors, input_tensors[dist.get_rank()])
-
-class ReduceScatterOp(torch.nn.Module):
-    def forward(self, input_tensors):
-        dist.reduce_scatter(input_tensors[dist.get_rank()], input_tensors)
-
-class AllToAllOp(torch.nn.Module):
-    def forward(self, input_tensors, output_tensors):
-        dist.all_to_all(output_tensors, input_tensors)
-
+    def forward(self, tensor):
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
 class BroadcastOp(torch.nn.Module):
-    def forward(self, input_tensor):
-        dist.broadcast(input_tensor, 0)
+    def forward(self, tensor):
+        dist.broadcast(tensor, 0)
 
+
+class AllGatherOp(torch.nn.Module):
+    def forward(self, tensor, split_tensor):
+        dist.all_gather_into_tensor(tensor, split_tensor)
+
+class ReduceScatterOp(torch.nn.Module):
+    def forward(self, tensor, split_tensor):
+        dist.reduce_scatter_tensor(split_tensor, tensor, op=dist.ReduceOp.SUM)
+
+class AllToAllOp(torch.nn.Module):
+    def forward(self, output_tensor, input_tensor):
+        dist.all_to_all_single(output_tensor, input_tensor)
 
 class P2POp(torch.nn.Module):
     def forward(self, send_tensor, recv_tensor):
         world_size = dist.get_world_size()
-        rank = dist.get_rank()
+        local_rank = dist.get_rank()
 
+        next_device = (local_rank + 1) % world_size
+        last_device = (local_rank - 1 + world_size) % world_size
+    
+        # 0 --> 1
+        # 0 --> 1 --> 2 --> 3
+        # 0 --> 1 --> 2 --> 3 --> 4 --> 5 --> 6 --> 7 --> 8
         reqs = []
-        if rank != world_size - 1:
-            reqs.append(dist.isend(send_tensor, (rank + 1) % world_size))
-        if rank != 0:
-            reqs.append(dist.irecv(recv_tensor, (rank - 1 + world_size) % world_size))
+        if local_rank != world_size - 1:
+            reqs.append(dist.isend(send_tensor, next_device))
+        if local_rank != 0:
+            reqs.append(dist.irecv(recv_tensor, last_device))
         for req in reqs:
             req.wait()
+
+
+
+
+
+
+
+
+
+
 
 
 op_registry = {
@@ -915,17 +1068,20 @@ op_registry = {
     "unique": UniqueOp(),
     "scatter": ScatterOp(),
     "gather": GatherOp(),
+    "hash_table": HashTableOp(), 
+    "topk": TopKOp(),
 
     # h2d_ops
     "device2host": Device2HostOp(),
     "host2device": Host2DeviceOp(),
+    "device2device": Device2DeviceOp(),
 
     # ccl ops
-    "broadcast": BroadcastOp(),
     "allreduce": AllReduceOp(),
+    "broadcast": BroadcastOp(),
     "allgather": AllGatherOp(),
-    "alltoall": AllToAllOp(),
     "reducescatter": ReduceScatterOp(),
+    "alltoall": AllToAllOp(),
     "p2p": P2POp(),
 }
 
@@ -968,18 +1124,22 @@ op_compute_size_funcs = {
     "unique": unique_compute_size,
     "scatter": scatter_compute_size,
     "gather": scatter_compute_size,
+    "hash_table": hash_table_compute_size, 
+    "topk": topk_compute_size,
 
-    # h2d_ops
+    # h2d_ops /  ccl_ops
     "host2device": host2device_compute_size,
     "device2host": host2device_compute_size,
-
-    # ccl_ops
-    "broadcast": host2device_compute_size,
     "allreduce": host2device_compute_size,
-    "allgather": allgather_compute_size,
+    "broadcast": host2device_compute_size,
+
+    "device2device": device2device_compute_size,
+
     "alltoall": alltoall_compute_size,
-    "reducescatter": allgather_compute_size, 
-    "p2p": p2p_compute_size,
+    "p2p": alltoall_compute_size,
+
+    "allgather": allgather_compute_size,
+    "reducescatter": reducescatter_compute_size, 
 }
 
 op_create_tensors_funcs = {
@@ -1020,16 +1180,20 @@ op_create_tensors_funcs = {
     "unique": unique_create_tensors,
     "scatter": scatter_create_tensors,
     "gather": scatter_create_tensors,
+    "hash_table": hash_table_create_tensors, 
+    "topk": topk_create_tensors,
 
-    # h2d_ops
+    # h2d_ops / ccl_ops
     "host2device": host2device_create_tensors,
     "device2host": host2device_create_tensors,
+    "device2device": device2device_create_tensors,
 
-    # ccl_ops
-    "broadcast": allreduce_create_tensors,
     "allreduce": allreduce_create_tensors,
+    "broadcast": allreduce_create_tensors,
+
     "allgather": allgather_create_tensors,
-    "alltoall": alltoall_create_tensors,
     "reducescatter": allgather_create_tensors, 
-    "p2p": p2p_create_tensors,
+
+    "alltoall": alltoall_create_tensors,
+    "p2p": alltoall_create_tensors,    
 }

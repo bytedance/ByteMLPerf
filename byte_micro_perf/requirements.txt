@@ -1,14 +1,1 @@
-matplotlib
-pandas
 virtualenv==16.7.12
-scikit-learn
-prompt_toolkit
-tqdm
-opencv-python
-transformers
-tokenization
-fpdf
-attrs
-decorator
-typing-extensions
-pydot

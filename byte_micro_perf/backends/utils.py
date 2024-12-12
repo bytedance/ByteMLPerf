@@ -34,6 +34,7 @@ def dump_communication_ops_report(
     # get dtype name and dtype_size
     dtype_name = str(torch_dtype).split(".")[-1]
     
+    # ignore compute_size_func
     dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
     element_num = math.prod(input_shapes[0])
     tensor_size = dtype_size * element_num
@@ -96,7 +97,12 @@ def dump_computation_ops_report(
 ):
     # get dtype name and dtype_size
     dtype_name = str(torch_dtype).split(".")[-1]
-    batch_size, tensor_size, input_tensor_size, output_tensor_size = compute_size_func(input_shapes, torch_dtype)
+    result = compute_size_func(input_shapes, torch_dtype)
+    
+    batch_size = result[0]
+    tensor_size = result[1]
+    input_tensor_size = result[2]
+    output_tensor_size = result[3]
     
     if error == "":
         qps = round(1e6 / latency * batch_size, 2)
