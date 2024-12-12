@@ -56,8 +56,8 @@ npu_op_create_tensors_funcs.update({"group_gemm": npu_group_gemm_create_tensors}
 
 
 class BackendNPU(Backend):
-    def __init__(self, workload_dict, vendor_path):
-        super().__init__(workload_dict, vendor_path)
+    def __init__(self, workload_dict):
+        super().__init__(workload_dict)
 
     """
     op
@@ -87,8 +87,11 @@ class BackendNPU(Backend):
     def get_torch_device_name(self):
         return "npu"
 
-    def get_device_properties(self):
+    def get_device_properties(self, index = 0):
         return torch_npu.npu.get_device_properties(0)
+
+    def get_mem_info(self):
+        return torch_npu.npu.mem_get_info()
 
     def get_device_count(self):
         return torch_npu.npu.device_count()
