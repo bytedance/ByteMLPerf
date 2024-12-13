@@ -15,6 +15,7 @@
 import os
 import json
 import logging
+import random
 
 from datetime import timedelta
 from typing import Any, Dict, List
@@ -136,3 +137,21 @@ class BackendNPU(Backend):
             timeout=timedelta(seconds=1800)
         )
         return True
+    
+
+    def core_perf(self, prefer_iterations, tensor_list):
+        start_event = torch_npu.npu.Event(enable_timing=True)
+        end_event = torch_npu.npu.Event(enable_timing=True)
+
+        self.device_synchronize()
+        self.barrier()
+
+        start_event.record()
+        for i in range(prefer_iterations):
+            self._run_operation(self.op, random.choice(tensor_list))
+        end_event.record()
+
+        self.device_synchronize()
+        self.barrier()
+        
+        return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
