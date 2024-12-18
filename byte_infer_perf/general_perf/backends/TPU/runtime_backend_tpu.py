@@ -50,7 +50,9 @@ class RuntimeBackendTPU(runtime_backend.RuntimeBackend):
         log.warning("TPU Backend only support static batch_size now.")
         self.bmodel_path = self.compiled_dir + self.configs["model"] + ".bmodel"
         # self.input_key = self.configs["input_shape"][self.configs["inputs"]]
-        self.net = sail.nn.Engine(self.bmodel_path, 1)
+        self.dev_id = 1
+        self.net = sail.nn.Engine(self.bmodel_path, self.dev_id)
+        self.stream = sail.nn.Engine(self.bmodel_path, self.dev_id)
         self.net_name = self.net.get_net_names()[0]
         self.input_name = self.net.get_input_names(self.net_name)[0]
         self.output_names = self.net.get_output_names(self.net_name)
@@ -71,10 +73,10 @@ class RuntimeBackendTPU(runtime_backend.RuntimeBackend):
 
         output_arrays = [np.ndarray(shape=(self.output_shapes[i]), dtype=np.float32) for i in range(len(self.output_shapes))]
         outputs = {i:array for i, array in enumerate(output_arrays)}
-        ret = self.net.process(input_data, outputs, self.net_name)
+        ret = self.net.process(input_data, outputs, self.stream, self.net_name)
         return outputs
 
-    def single_chip_test(self,dev_id, iter, thread_id):
+    def single_chip_test(self, dev_id, iter, thread_id):
         net = sail.nn.Engine(self.bmodel_path, dev_id)
         stream = sail.nn.Stream(dev_id)
         net_name = net.get_net_names()[0]
