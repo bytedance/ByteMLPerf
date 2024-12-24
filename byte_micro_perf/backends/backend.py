@@ -72,8 +72,7 @@ class Backend(ABC):
         self.get_op_instance()
 
     def __del__(self):
-        if self.world_size > 1:
-            self.destroy_process_group()
+        self.destroy_process_group()
 
 
     def get_op_instance(self):
