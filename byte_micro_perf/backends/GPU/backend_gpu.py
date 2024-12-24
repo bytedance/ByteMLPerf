@@ -22,7 +22,6 @@ from typing import Any, Dict, List
 
 import torch
 import torch.distributed as dist
-import torch.distributed.distributed_c10d as dist_c10d
 
 from backends import module_store
 from backends.backend import Backend
@@ -34,8 +33,8 @@ log = logging.getLogger("PerfEngine")
 
 
 class BackendGPU(Backend):
-    def __init__(self, workload_dict):
-        super().__init__(workload_dict)
+    def __init__(self, workload_dict, *args, **kwargs):
+        super().__init__(workload_dict, *args, **kwargs)
 
     def get_torch_device_name(self):
         return "cuda"
@@ -46,8 +45,8 @@ class BackendGPU(Backend):
     def get_device_properties(self, index = 0):
         return torch.cuda.get_device_properties(index)
 
-    def get_mem_info(self):
-        return torch.cuda.mem_get_info()
+    def get_mem_info(self, index = 0):
+        return torch.cuda.mem_get_info(index)
 
     def get_device_count(self):
         return torch.cuda.device_count()
@@ -68,15 +67,10 @@ class BackendGPU(Backend):
     def get_dist_module(self):
         return dist
 
-    def initialize_ccl(self, rank, world_size):
-        # check device_count
-        device_count = self.get_device_count()
-        if world_size > device_count:
-            world_size = device_count
-        if rank >= world_size:
-            return False
-        self.set_device(rank)
+    def get_dist_backend(self):
+        return "nccl"
 
+    def initialize_ccl(self, rank, world_size):
         # set envs and internal vars
         os.environ["MASTER_ADDR"] = "127.0.0.1"
         os.environ["MASTER_PORT"] = "49373"
@@ -93,12 +87,16 @@ class BackendGPU(Backend):
         )
         return True
 
+    def new_group(self, ranks):
+        return dist.new_group(ranks, backend="nccl")
+
+
     def core_perf(self, prefer_iterations, tensor_list):
         start_event = torch.cuda.Event(enable_timing=True)
         end_event = torch.cuda.Event(enable_timing=True)
 
         self.device_synchronize()
-        self.barrier()
+        self.op_group_barrier()
 
         start_event.record()
         for i in range(prefer_iterations):
@@ -106,6 +104,6 @@ class BackendGPU(Backend):
         end_event.record()
 
         self.device_synchronize()
-        self.barrier()
+        self.op_group_barrier()
         
         return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations

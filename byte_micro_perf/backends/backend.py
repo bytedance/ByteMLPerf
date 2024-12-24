@@ -37,25 +37,45 @@ default_op_create_tensors_registry = module_store.op_create_tensors_funcs.copy()
 
 
 class Backend(ABC):
-    def __init__(self, workload_dict: Dict[str, Any]):
+    def __init__(
+        self, 
+        workload_dict, 
+        device_index : int = 0,
+        world_size : int = 1, 
+        rank : int = 0
+    ):
+        self.workload = workload_dict
         self.op_name = workload_dict["operator"]
         self.iterations = workload_dict["iterations"]
         self.op = None
     
-        # communication params
-        self.world_size = None
-        self.rank = None
+        self.device_index = device_index
+        self.world_size = world_size
+        self.rank = rank
 
-        # hardware info
-        self.device_name = self.get_device_name()
-        
-        self.avail_memory, self.total_memory = self.get_mem_info()
-        self.memory_limit = self.avail_memory // (1024**3)
+        self.set_device(device_index)
+        self.device_name = self.get_device_name(device_index)
+        self.avail_memory, self.total_memory = self.get_mem_info(device_index)
+        self.memory_limit = self.avail_memory * 0.9 // (1024**3)
+
+        dist_module = self.get_dist_module()
+        if self.world_size > 1:
+            self.initialize_ccl(rank, world_size)
+            avail_memory_list = [None for _ in range(world_size)]
+            dist_module.all_gather_object(avail_memory_list, self.avail_memory)
+            self.avail_memory = min(avail_memory_list)
+            self.memory_limit = self.avail_memory * 0.9 // (1024**3)
+
+        self.op_group = None
+        self.op_group_size = 1
+
+        self.get_op_instance()
+
+    def __del__(self):
+        if self.world_size > 1:
+            self.destroy_process_group()
 
 
-    """
-    op
-    """
     def get_op_instance(self):
         if self.op_name in default_op_registry:
             self.op = default_op_registry[self.op_name]
@@ -88,16 +108,16 @@ class Backend(ABC):
     def get_device_properties(self, index = 0):
         raise NotImplementedError
 
-    def get_mem_info(self):
+    def get_mem_info(self, index = 0):
         raise NotImplementedError
 
     def get_device_count(self):
         raise NotImplementedError
     
-    def set_device(self, index : int):
+    def set_device(self, index = 0):
         raise NotImplementedError
 
-    def get_device(self) -> int:
+    def get_device(self):
         raise NotImplementedError
 
     def device_synchronize(self):
@@ -113,29 +133,49 @@ class Backend(ABC):
     def get_dist_module(self):
         raise NotImplementedError
 
+    def get_dist_backend(self):
+        raise NotImplementedError
+
     def initialize_ccl(self, rank, world_size):
         raise NotImplementedError
-    
+
+    def new_group(self, ranks):
+        raise NotImplementedError
+
+
     def destroy_process_group(self):
         dist = self.get_dist_module()
         if dist.is_initialized():
             dist.destroy_process_group()
 
-    def barrier(self):
+    def op_group_barrier(self):
         dist = self.get_dist_module()
-        if dist.is_initialized():
-            dist.barrier()
+        if dist.is_initialized() and self.op_group_size > 1:
+            dist.barrier(group=self.op_group)
 
 
     def _run_operation(self, operation, inputs):
-        result = operation(*inputs)
+        dist_module = self.get_dist_module()
+        if dist_module.is_initialized():
+            result = operation(
+                *inputs, 
+                op_group=self.op_group, 
+                op_group_size=self.op_group_size
+            )
+        else:
+            result = operation(*inputs)
         return result
 
 
     def build_tensor(self, input_shapes, torch_dtype):
         # get funcs
         compute_size_func = self.get_op_compute_size_func()
-        result = compute_size_func(input_shapes, torch_dtype)
+
+        result = compute_size_func(
+            input_shapes, torch_dtype,
+            op_group=self.op_group,
+            op_group_size=self.op_group_size
+        )
 
         # 4: (bs, rw_bytes, r_bytes, w_bytes)  assume tensor_size = rw_bytes
         # 5: (bs, rw_bytes, r_bytes, w_bytes, tensor_size)
@@ -170,19 +210,53 @@ class Backend(ABC):
 
         # create tensor_list for each op
         tensor_list = [
-            create_tensors_func(input_shapes, torch_dtype, self.get_torch_device_name()) for _ in range(max_data_cnt)
+            create_tensors_func(
+                input_shapes, torch_dtype, 
+                self.get_torch_device_name(), 
+                op_group=self.op_group, 
+                op_group_size=self.op_group_size
+            ) for _ in range(max_data_cnt)
         ]
         return tensor_list
 
 
+    def warmup_and_test(self, tensor_list):
+        warmup_iters = 3
+        for _ in range(warmup_iters):
+            self._run_operation(self.op, random.choice(tensor_list))
+
+        test_iters = 5
+        self.device_synchronize()
+        self.op_group_barrier()
+        start_time = time.perf_counter_ns()
+        for _ in range(test_iters):
+            self._run_operation(self.op, random.choice(tensor_list))
+        self.device_synchronize()
+        self.op_group_barrier()
+        end_time = time.perf_counter_ns()
+        avg_op_duration = (end_time - start_time) / 1e9 / test_iters
+
+        total_op_duration_margin = 10.
+        if avg_op_duration > total_op_duration_margin:
+            prefer_iterations = 2
+        else:
+            prefer_iterations = min(math.ceil(total_op_duration_margin / avg_op_duration), self.iterations)
+        return prefer_iterations
+
+
+
+
+
+
+
     def core_perf(self, prefer_iterations, tensor_list):
         self.device_synchronize()
-        self.barrier()
+        self.op_group_barrier()
         start_time = time.perf_counter_ns()
         for i in range(prefer_iterations):
             self._run_operation(self.op, tensor_list[i % len(tensor_list)])
         self.device_synchronize()
-        self.barrier()
+        self.op_group_barrier()
         end_time = time.perf_counter_ns()
 
         return (end_time - start_time) / 1e3 / prefer_iterations
@@ -190,56 +264,23 @@ class Backend(ABC):
 
     def perf(self, input_shapes: List[List[int]], dtype):
         error = ""
-
-        # create necessary tensors
         torch_dtype = getattr(torch, dtype)
-        tensor_list = self.build_tensor(input_shapes, torch_dtype)
+
+        # create input/output tensors for op
+        # malloc multiple instances of tensors to avoid using last level cache
+        tensor_list = self.build_tensor(
+            input_shapes, torch_dtype
+        )
+        if len(tensor_list) == 0:
+            raise RuntimeError("Not enough memory to run the op")
+
+        prefer_iterations = self.warmup_and_test(tensor_list)
+        latency = round(self.core_perf(prefer_iterations, tensor_list), 2)
 
 
-        if len(tensor_list) > 0:
-            try:
-                warm_iterations = 5
-                test_iterations = 5
-                max_total_duration = 10.
-                prefer_iterations = self.iterations
-
-                # warmup
-                self.device_synchronize()
-                self.barrier()
-                for _ in range(warm_iterations):
-                    self._run_operation(self.op, random.choice(tensor_list))
-
-                # test perf
-                self.device_synchronize()
-                self.barrier()
-                start_time = time.perf_counter_ns()
-                for i in range(test_iterations):
-                    self._run_operation(self.op, random.choice(tensor_list))
-                self.device_synchronize()
-                self.barrier()
-                end_time = time.perf_counter_ns()
-                avg_op_duration = (end_time - start_time) / 1e9 / test_iterations
-
-
-                if avg_op_duration > max_total_duration:
-                    prefer_iterations = 2
-                else:
-                    prefer_iterations = min(math.ceil(max_total_duration / avg_op_duration), self.iterations)
-
-                latency = round(self.core_perf(prefer_iterations, tensor_list), 2)
-
-            except Exception as e:
-                traceback.print_exc()
-                latency = 0
-                error = "RUN_OP_ERROR"
-        else:
-            latency = 0
-            error = "OOM"
-        
         # clean tensors and device memory
         del tensor_list
         self.empty_cache()
-
 
         # create report for communication ops and computation ops
         if self.op_name in [
@@ -249,7 +290,7 @@ class Backend(ABC):
             report = dump_communication_ops_report(
                 self.op_name, torch_dtype, input_shapes, 
                 self.get_op_compute_size_func(), 
-                self.world_size, 
+                self.op_group_size, 
                 None,
                 latency,
                 error
