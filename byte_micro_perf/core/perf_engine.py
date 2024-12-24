@@ -521,7 +521,7 @@ class PerfEngine:
                     backend_instance.op_group = new_group
                     backend_instance.op_group_size = group_size
                     
-                    test_tensor = torch.ones([1], device="cuda")
+                    test_tensor = torch.ones([1], device=backend_instance.get_torch_device_name())
                     dist_module.all_reduce(test_tensor, group=new_group)
                     print(f"allreduce in group size {group_size}, {test_tensor}\n", end="", flush=True)
 
