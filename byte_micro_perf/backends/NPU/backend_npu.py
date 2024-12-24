@@ -57,8 +57,8 @@ npu_op_create_tensors_funcs.update({"group_gemm": npu_group_gemm_create_tensors}
 
 
 class BackendNPU(Backend):
-    def __init__(self, workload_dict):
-        super().__init__(workload_dict)
+    def __init__(self, workload_dict, *args, **kwargs):
+        super().__init__(workload_dict, *args, **kwargs)
 
     """
     op
@@ -81,18 +81,17 @@ class BackendNPU(Backend):
         else:
             raise NotImplementedError
 
-
-    def get_device_name(self):
-        return torch_npu.npu.get_device_name(0)
-
     def get_torch_device_name(self):
         return "npu"
 
-    def get_device_properties(self, index = 0):
-        return torch_npu.npu.get_device_properties(0)
+    def get_device_name(self, index = 0):
+        return torch_npu.npu.get_device_name(index)
 
-    def get_mem_info(self):
-        return torch_npu.npu.mem_get_info()
+    def get_device_properties(self, index = 0):
+        return torch_npu.npu.get_device_properties(index)
+
+    def get_mem_info(self, index = 0):
+        return torch_npu.npu.mem_get_info(index)
 
     def get_device_count(self):
         return torch_npu.npu.device_count()
@@ -113,15 +112,10 @@ class BackendNPU(Backend):
     def get_dist_module(self):
         return dist
 
-    def initialize_ccl(self, rank, world_size):
-        # check device_count
-        device_count = self.get_device_count()
-        if world_size > device_count:
-            world_size = device_count
-        if rank >= world_size:
-            return False
-        self.set_device(rank)
+    def get_dist_backend(self):
+        return "hccl"
 
+    def initialize_ccl(self, rank, world_size):
         # set envs and internal vars
         os.environ["MASTER_ADDR"] = "127.0.0.1"
         os.environ["MASTER_PORT"] = "49373"
@@ -138,13 +132,15 @@ class BackendNPU(Backend):
         )
         return True
     
+    def new_group(self, ranks):
+        return dist.new_group(ranks, backend="hccl")
 
     def core_perf(self, prefer_iterations, tensor_list):
         start_event = torch_npu.npu.Event(enable_timing=True)
         end_event = torch_npu.npu.Event(enable_timing=True)
 
         self.device_synchronize()
-        self.barrier()
+        self.op_group_barrier()
 
         start_event.record()
         for i in range(prefer_iterations):
@@ -152,6 +148,6 @@ class BackendNPU(Backend):
         end_event.record()
 
         self.device_synchronize()
-        self.barrier()
+        self.op_group_barrier()
         
         return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
