@@ -11,7 +11,7 @@
     }, 
     "dtype": [
       "float32", 
-      "float16", 
-      "bfloat16"
+      "bfloat16", 
+      "float16"
     ]
   }

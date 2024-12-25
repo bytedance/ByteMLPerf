@@ -21,6 +21,7 @@ import pathlib
 import multiprocessing as mp
 import signal
 from typing import Any, Dict, Iterable, List
+import traceback
 
 # ${prj_root}/
 BYTE_MLPERF_ROOT = pathlib.Path(__file__).parents[1]
@@ -45,10 +46,24 @@ class PerfEngine:
         self.result_queue = mp.Queue()
         self.jobs: List[mp.Process] = []
         self.server_process = None
+        self.version = self.get_version()
 
 
     def __del__(self):
         self.stop_server()
+
+
+    def get_version(self):
+        version = ""
+        try:
+            version_file = os.path.join(str(BYTE_MLPERF_ROOT), "../VERSION")
+            with open(version_file) as f:
+                _version = f.read().splitlines()
+            version = '.'.join(v.split('=')[1] for v in _version)
+        except Exception as e:
+            traceback.print_exc()
+            logger.warning(f"get bytemlperf version failed, error msg: {e}")
+        return version
 
 
     def start_engine(self) -> None:
@@ -85,6 +100,8 @@ class PerfEngine:
 
             test_perf=test_perf,
             test_accuracy=test_accuracy,
+
+            version=self.version,
         )
         self.reporter.start()
 
