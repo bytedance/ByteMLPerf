@@ -88,6 +88,8 @@ if __name__ == "__main__":
         action="store_true",
         help="Print all hardware bytemlperf supported",
     )
+
+    parser.add_argument("--numa_node", type=int, choices=range(len(numa_configs)))
     parser.add_argument("--numa_balance", action="store_true", help=f"if enabled, process will launch num_numa_nodes={len(numa_configs)} processes")
     parser.add_argument("--device", type=str, default="all")
     parser.add_argument("--parallel", action="store_true")
@@ -98,9 +100,7 @@ if __name__ == "__main__":
     args.task_dir = pathlib.Path(args.task_dir).absolute()
     args.report_dir = pathlib.Path(args.report_dir).absolute()
     args.report_dir.mkdir(parents=True, exist_ok=True)
-    # report_log_path = args.report_dir.joinpath("_run_report.log")
-    # with open(report_log_path, "w") as file:
-    #     pass
+
 
 
     os.chdir(str(BYTE_MLPERF_ROOT))
@@ -222,15 +222,29 @@ if __name__ == "__main__":
         subprocess_cmds = []
         subprocess_instances = []
         subprocess_pids = []
-        for i in range(numa_world_size):
-            cmd = f"taskset -c {numa_configs[i]} {perf_cmd} --numa_world_size {numa_world_size} --numa_rank {i}"
+
+
+
+
+
+        if numa_world_size == 1:
+            if args.numa_node is not None:
+                cmd = f"taskset -c {numa_configs[args.numa_node]} {perf_cmd}"
+            else:
+                cmd = perf_cmd
             subprocess_cmds.append(cmd)
+        else:
+            for i in range(numa_world_size):
+                cmd = f"taskset -c {numa_configs[i]} {perf_cmd} --numa_world_size {numa_world_size} --numa_rank {i}"
+                subprocess_cmds.append(cmd)
+
+        for cmd in subprocess_cmds:
             print(f"{cmd}")
-        for i in range(numa_world_size):            
-            process_instance = subprocess.Popen(subprocess_cmds[i], shell=True)
+            process_instance = subprocess.Popen(cmd, shell=True)
             subprocess_instances.append(process_instance)
             process_pid = process_instance.pid
             subprocess_pids.append(process_pid)
+
         print(f"perf_subprocess_pids: {subprocess_pids}")
         print("")
 
