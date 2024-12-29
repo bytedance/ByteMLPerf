@@ -34,7 +34,6 @@ from collections import namedtuple
 
 import torch.distributed
 import torch.multiprocessing as mp
-import virtualenv
 
 import torch
 
@@ -55,7 +54,7 @@ def get_args():
     parser.add_argument("--task_dir", type=str)
     parser.add_argument("--task", type=str)
     parser.add_argument("--device", type=str)
-    parser.add_argument("--parallel", action="store_true")
+    parser.add_argument("--disable_parallel", action="store_true")
     parser.add_argument("--report_dir", type=str)
     parser.add_argument("--numa_world_size", type=int, default=1)
     parser.add_argument("--numa_rank", type=int, default=0)
@@ -193,35 +192,54 @@ class PerfEngine:
         self.device_count = self.backend.get_device_count()
         self.device_name = self.backend.get_device_name()
         self.avail_devices = list(range(self.device_count))
-        self.parallel = self.args.parallel
+        self.disable_parallel = self.args.disable_parallel
         self.device_config = self.args.device
 
         self.numa_world_size = self.args.numa_world_size
         self.numa_rank = self.args.numa_rank
 
         # target devices
-        self.target_devices = []        
+        self.valid_devices = []    
         if self.device_config == "all":
-            self.target_devices = self.avail_devices
+            for d in self.avail_devices:
+                self.valid_devices.append(d)
         else:
             for d in self.device_config.split(","):
                 if d.isdigit() and int(d) < self.device_count:
-                    self.target_devices.append(int(d))
-            self.target_devices.sort()
-        if not self.target_devices:
+                    self.valid_devices.append(int(d))
+        self.valid_device_count = len(self.valid_devices)
+        if self.valid_device_count == 0:
             logger.error("no valid device")
             exit(1)
 
+
+        # split numa nodes on valid device
+        self.device_num_per_numa = self.valid_device_count // self.numa_world_size
+        self.device_num_remain = self.valid_device_count % self.numa_world_size
+        if self.device_num_per_numa < 1:
+            logger.error(f"could not split valid_device_num ({self.valid_device_count}) into numa_world_size ({self.numa_world_size})")  
+            exit(1)
+
+
+        if self.numa_rank < self.device_num_remain:
+            self.target_device_start = self.numa_rank * (self.device_num_per_numa + 1)
+            self.target_device_end = min(self.valid_device_count, self.target_device_start + self.device_num_per_numa + 1)
+        else:
+            self.target_device_start = self.numa_rank * self.device_num_per_numa + self.device_num_remain
+            self.target_device_end = min(self.valid_device_count, self.target_device_start + self.device_num_per_numa)
         
-        self.device_per_numa = len(self.target_devices) // self.numa_world_size
-        self.device_offset = self.numa_rank * self.device_per_numa
-        self.ori_target_devices = self.target_devices.copy()
-        self.target_devices = self.target_devices[self.device_offset:self.device_offset + self.device_per_numa]
-        self.target_devices_num = len(self.target_devices)
+
+        self.target_devices = []
+        self.target_devices_index = []
+        for i in range(self.target_device_start, self.target_device_end):
+            self.target_devices.append(self.valid_devices[i])
+            self.target_devices_index.append(i)
+        self.target_device_num = len(self.target_devices)
+
 
         self.target_group_list = []
         for group_size in self.workload.get("group", [0]):
-            if group_size <= self.target_devices_num * self.numa_world_size:
+            if group_size <= self.valid_device_count:
                     self.target_group_list.append(group_size)
         self.target_group_list.sort()
 
@@ -231,16 +249,19 @@ class PerfEngine:
         pt.add_row(["op_name", self.op_name])
         pt.add_row(["hardware_type", self.backend_type])
         pt.add_row(["device_name", self.device_name])
-        pt.add_row(["device_count", self.device_count])
+
+    
+        pt.add_row(["avail_devices", self.avail_devices])
+        pt.add_row(["valid_devices", self.valid_devices])
+        pt.add_row(["target_devices", self.target_devices])
+        pt.add_row(["target_devices_index", self.target_devices_index])
+
+        pt.add_row(["disable_parallel", self.disable_parallel])
+        pt.add_row(["group_size_list", self.target_group_list])
+
         if self.numa_world_size > 1:
             pt.add_row(["numa_world_size", self.numa_world_size])
             pt.add_row(["numa_rank", self.numa_rank])
-            pt.add_row(["device_per_numa", self.device_per_numa])
-        pt.add_row(["available_devices", self.avail_devices])
-        pt.add_row(["ori_target_devices", self.ori_target_devices])
-        pt.add_row(["target_devices", self.target_devices])
-        pt.add_row(["parallel", self.parallel])
-        pt.add_row(["group_size_list", self.target_group_list])
         print(pt)
 
 
@@ -359,7 +380,7 @@ class PerfEngine:
             if self.numa_rank != 0:
                 return
 
-            instance_num = len(self.target_devices) if self.parallel else 1
+            instance_num = 1 if self.disable_parallel else len(self.target_devices)
             print(f"numa_node: 0, instance_num: {instance_num}")
 
             input_queues = mp.Queue()
@@ -368,7 +389,10 @@ class PerfEngine:
                 _subprocesses = mp.spawn(
                     fn=self.compute_op_perf, 
                     args=(
-                        self.target_devices, instance_num, 
+                        self.valid_devices, 
+                        self.target_devices, self.target_devices_index, 
+                        self.numa_world_size, self.numa_rank, 
+                        self.target_group_list, test_list, 
                         input_queues, output_queues
                     ), 
                     nprocs=instance_num,
@@ -403,7 +427,7 @@ class PerfEngine:
 
         # communication ops
         else:
-            instance_num = self.device_per_numa
+            instance_num = len(self.target_devices)
             print(f"numa_node: {self.numa_rank}, instance_num: {instance_num}")
 
             input_queues = mp.Queue()
@@ -413,9 +437,8 @@ class PerfEngine:
                 _subprocesses = mp.spawn(
                     fn=self.communication_op_perf,
                     args=(
-                        self.ori_target_devices, 
-                        self.target_devices, 
-                        instance_num, 
+                        self.valid_devices, 
+                        self.target_devices, self.target_devices_index, 
                         self.numa_world_size, self.numa_rank, 
                         self.target_group_list, test_list, 
                         input_queues, output_queues
@@ -430,8 +453,9 @@ class PerfEngine:
                 logger.info("all ranks are ready and listening, init done")
 
                 all_group_result_list = output_queues.get()
-                for group_size in all_group_result_list:
-                    self.process_results(all_group_result_list[group_size], group_size)
+                if all_group_result_list is not None:
+                    for group_size in all_group_result_list:
+                        self.process_results(all_group_result_list[group_size], group_size)
 
                 for process in _subprocesses.processes:
                     process.join()
@@ -441,13 +465,28 @@ class PerfEngine:
                 sys.exit(1)
 
 
-    def compute_op_perf(self, rank: int, *args):
-        target_devices, world_size, input_queues, output_queues = args
+    def compute_op_perf(self, instance_rank: int, *args):
+        valid_devices, target_devices, target_devices_index, \
+        numa_world_size, numa_rank, \
+        group_size_list, test_list, \
+        input_queues, output_queues = args
+
+        instance_world_size = len(target_devices)
+        device_world_size = len(valid_devices)
+        device_rank = target_devices_index[instance_rank]
+        current_device = target_devices[instance_rank]
+
+        print(f"instance_world_size {instance_world_size}, instance_rank {instance_rank}, device_world_size {device_world_size}, device_rank {device_rank}, current_device {current_device}")
+
         backend_instance = self.backend_class(
             self.workload, 
-            device_index=target_devices[rank]
+            device_index=current_device, 
+            world_size=1, 
+            rank=device_rank
         )
         output_queues.put("ready")
+
+
         op_name = self.workload["operator"]
         result_list = []
         while True:
@@ -480,31 +519,35 @@ class PerfEngine:
                 kernel_bw = reports.get("Kernel bandwidth(GB/s)", 0)
                 bus_bw = reports.get("Bus bandwidth(GB/s)", 0)
 
-                print(f"{op_name}, rank {rank}, device {target_devices[rank]}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
+                print(f"{op_name}, device_rank {device_rank}, device {current_device}, {test_instance}, latency: {latency}\nkernel_bw: {kernel_bw}, bus_bw: {bus_bw}")
             else:
-                print(f"{op_name}, rank {rank}, device {target_devices[rank]}, {test_instance}, error")
+                print(f"{op_name}, device_rank {device_rank}, device {current_device}, {test_instance}, error")
 
+        # all instance_ranks return results
         output_queues.put(result_list)
 
 
 
 
-    def communication_op_perf(self, rank: int, *args):
-        ori_target_devices, target_devices, \
-        world_size, \
+    def communication_op_perf(self, instance_rank: int, *args):
+        valid_devices, target_devices, target_devices_index, \
         numa_world_size, numa_rank, \
         group_size_list, test_list, \
         input_queues, output_queues = args
 
-        
-        current_device = target_devices[rank]
-        world_size = len(target_devices) * numa_world_size
+        instance_world_size = len(target_devices)
+        device_world_size = len(valid_devices)
+        device_rank = target_devices_index[instance_rank]
+        current_device = target_devices[instance_rank]
+
+        print(f"instance_world_size {instance_world_size}, instance_rank {instance_rank}, device_world_size {device_world_size}, device_rank {device_rank}, current_device {current_device}")
+
 
         backend_instance = self.backend_class(
             self.workload, 
             device_index=current_device, 
-            world_size=world_size, 
-            rank=current_device
+            world_size=device_world_size, 
+            rank=device_rank
         )
         output_queues.put("ready")
         op_name = self.workload["operator"]
@@ -517,7 +560,7 @@ class PerfEngine:
 
             if group_size > 1:
                 new_group = backend_instance.new_group(range(group_size))
-                if current_device < group_size:
+                if device_rank < group_size:
                     backend_instance.op_group = new_group
                     backend_instance.op_group_size = group_size
                     
@@ -526,7 +569,7 @@ class PerfEngine:
                     print(f"allreduce in group size {group_size}, {test_tensor}\n", end="", flush=True)
 
 
-            if current_device < group_size:
+            if device_rank < group_size:
                 for test_instance in test_list:
                     test_dtype = test_instance.dtype
                     test_shape = test_instance.tensor_shapes
@@ -551,17 +594,17 @@ class PerfEngine:
                     else:
                         dist_module.all_gather_object(reports_list, reports, group=new_group)
                     
-                    if current_device == 0 and reports_list[0] and "Error" not in reports_list[0]:
+                    if device_rank == 0 and reports_list[0] and "Error" not in reports_list[0]:
                         latency_list = [reports.get("Avg latency(us)", 0) for reports in reports_list]
                         kernel_bw_list = [reports.get("Kernel bandwidth(GB/s)", 0) for reports in reports_list]
                         bus_bw_list = [reports.get("Bus bandwidth(GB/s)", 0) for reports in reports_list]
-                        print(f"{op_name}, device {ori_target_devices[0:group_size]}, {test_instance}")
+                        print(f"{op_name}, device {valid_devices[0:group_size]}, {test_instance}")
                         print(f"latency: {latency_list}")
                         print(f"kernel_bw: {kernel_bw_list}")
                         print(f"bus_bw: {bus_bw_list}")
                         print("")
 
-                        reports["device_list"] = ori_target_devices[0:group_size]
+                        reports["device_list"] = valid_devices[0:group_size]
                         reports["latency_list"] = latency_list
                         reports["kernel_bw_list"] = kernel_bw_list
                         reports["bus_bw_list"] = bus_bw_list
@@ -572,15 +615,19 @@ class PerfEngine:
 
             if group_size > 1:
                 dist_module.destroy_process_group(new_group)
-                if current_device < group_size:
+                if device_rank < group_size:
                     backend_instance.op_group = None
                     backend_instance.op_group = 1
 
             dist_module.barrier()
             all_group_result_list[group_size] = result_list
 
-        if rank == 0:
-            output_queues.put(all_group_result_list)
+        # only instance_ranl 0 and device_rank 0 return result_list
+        if instance_rank == 0:
+            if device_rank == 0:
+                output_queues.put(all_group_result_list)
+            else:
+                output_queues.put(None)
 
 
 if __name__ == "__main__":
