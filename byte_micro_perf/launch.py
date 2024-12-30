@@ -59,7 +59,9 @@ if __name__ == "__main__":
     # 1: 32-63,96-127
     numa_configs = get_numa_configs()
 
-
+    avail_numa_node = [-1]
+    for i, numa_config in enumerate(numa_configs):
+        avail_numa_node.append(i)
 
 
     parser = argparse.ArgumentParser()
@@ -89,10 +91,9 @@ if __name__ == "__main__":
         help="Print all hardware bytemlperf supported",
     )
 
-    parser.add_argument("--numa_node", type=int, choices=range(len(numa_configs)))
-    parser.add_argument("--numa_balance", action="store_true", help=f"if enabled, process will launch num_numa_nodes={len(numa_configs)} processes")
+    parser.add_argument("--numa_node", type=int, choices=avail_numa_node, help="NUMA node id, -1 means all NUMA nodes, default is None which means numa_balance.")
     parser.add_argument("--device", type=str, default="all")
-    parser.add_argument("--parallel", action="store_true")
+    parser.add_argument("--disable_parallel", action="store_true")
     parser.add_argument("--report_dir", type=str, default=str(BYTE_MLPERF_ROOT.joinpath("reports").absolute()))
     args = parser.parse_args()
 
@@ -204,10 +205,6 @@ if __name__ == "__main__":
 
 
 
-        
-    numa_world_size = len(numa_configs) if args.numa_balance else 1
-
-
     for task in test_cases:
         perf_cmd =  f"python3 ./core/perf_engine.py"\
                     f" --hardware_type {args.hardware_type}"\
@@ -215,8 +212,8 @@ if __name__ == "__main__":
                     f" --task {task}"\
                     f" --device {args.device}"\
                     f" --report_dir {args.report_dir}"
-        if args.parallel:
-            perf_cmd += " --parallel"
+        if args.disable_parallel:
+            perf_cmd += " --disable_parallel"
 
         print(f"******************************************* Start to test op: [{task}]. *******************************************")
         subprocess_cmds = []
@@ -224,19 +221,16 @@ if __name__ == "__main__":
         subprocess_pids = []
 
 
-
-
-
-        if numa_world_size == 1:
-            if args.numa_node is not None:
-                cmd = f"taskset -c {numa_configs[args.numa_node]} {perf_cmd}"
-            else:
-                cmd = perf_cmd
+        if args.numa_node is None:
+            for i, numa_config in enumerate(numa_configs):
+                cmd = f"taskset -c {numa_config} {perf_cmd} --numa_world_size {len(numa_configs)} --numa_rank {i}"
+                subprocess_cmds.append(cmd)
+        elif args.numa_node == -1:
+            cmd = perf_cmd
             subprocess_cmds.append(cmd)
         else:
-            for i in range(numa_world_size):
-                cmd = f"taskset -c {numa_configs[i]} {perf_cmd} --numa_world_size {numa_world_size} --numa_rank {i}"
-                subprocess_cmds.append(cmd)
+            cmd = f"taskset -c {numa_configs[args.numa_node]} {perf_cmd}"
+            subprocess_cmds.append(cmd)
 
         for cmd in subprocess_cmds:
             print(f"{cmd}")
