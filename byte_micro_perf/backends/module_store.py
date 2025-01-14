@@ -263,6 +263,38 @@ def swiglu_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     return [input_tensor, output_tensor]
 
 
+def dropout_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    input_tensor_shape = [batch_size, hidden_size]
+    output_tensor_shape = [batch_size, hidden_size]
+
+    input_element_num = sum([math.prod(shape) for shape in [input_tensor_shape]])
+    output_element_num = sum([math.prod(shape) for shape in [output_tensor_shape]])
+
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+
+def dropout_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    input_tensor_shape = [batch_size, hidden_size]
+    output_tensor_shape = [batch_size, hidden_size]
+
+    # create input tensors
+    input_tensor = torch.randint(0, 7, input_tensor_shape, dtype=torch_dtype, device=xpu_device)
+
+    # create output tensors
+    output_tensor = torch.randint(0, 7, output_tensor_shape, dtype=torch_dtype, device=xpu_device)
+
+    return [input_tensor, output_tensor]
+
 
 def add_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, b_shape = input_shapes
@@ -859,6 +891,10 @@ class SwiGLUOp(torch.nn.Module):
     def forward(self, input_tensor, output_tensor):
         torch.mul(torch.nn.functional.silu(input_tensor), input_tensor, out=output_tensor)
 
+class DropoutOP(torch.nn.Module):
+    def forward(self, input_tensor, output_tensor):
+        output_tensor = torch.nn.functional.dropout(input_tensor)
+
 """
 Binary ops
 """
@@ -1037,6 +1073,7 @@ op_registry = {
     "silu": SiluOp(),
     "gelu": GeluOp(),
     "swiglu": SwiGLUOp(),
+    "dropout": DropoutOP(),
 
     # binary ops
     "add": AddOp(),
@@ -1093,6 +1130,7 @@ op_compute_size_funcs = {
     "silu": sin_compute_size,
     "gelu": sin_compute_size,
     "swiglu": swiglu_compute_size,
+    "dropout": dropout_compute_size,
 
     # binary_ops
     "add": add_compute_size,
@@ -1149,6 +1187,7 @@ op_create_tensors_funcs = {
     "silu": sin_create_tensors,
     "gelu": sin_create_tensors,
     "swiglu": swiglu_create_tensors,
+    "dropout": dropout_create_tensors,
 
     # binary ops
     "add": add_create_tensors,
