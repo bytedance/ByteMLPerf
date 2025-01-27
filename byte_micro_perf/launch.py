@@ -14,11 +14,12 @@
 
 import os
 import sys
-import argparse
+import signal
 import pathlib
 import logging
+import argparse
 import subprocess
-import signal
+
 
 # directory config
 CUR_DIR = pathlib.Path.cwd().absolute()
@@ -41,24 +42,36 @@ def parse_task(task_dir):
     return tasks
 
 
+def get_numa_configs():
+    numa_configs = []
+    numa_node_num = int(subprocess.check_output("lscpu | grep 'NUMA node(s)' | awk -F: '{print $2}'", shell=True).decode().strip())
+    for i in range(numa_node_num):
+        numa_cores = subprocess.check_output(f"lscpu | grep 'NUMA node{i}' | awk -F: '{{print $2}}'", shell=True).decode().strip()
+        numa_configs.append(numa_cores)
+    return numa_configs
+    
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
 
-    # hardware config
+    # get numa config, for example: 
+    # 0: 0-31,64-95
+    # 1: 32-63,96-127
+    numa_configs = get_numa_configs()
+
+    avail_numa_node = [-1]
+    for i, numa_config in enumerate(numa_configs):
+        avail_numa_node.append(i)
+
+
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "--hardware_type",
         default="GPU", 
         help="The backend going to be evaluted, refs to backends/",
     )
     parser.add_argument(
-        "--vendor_path",
-        help="The hardware configs need to be loaded, refs to vendor_zoo/",
-    )
-
-    # task config
-    parser.add_argument(
-        "--task_dir", 
+        "--task_dir", type=str, 
         default=str(BYTE_MLPERF_ROOT.joinpath("workloads").absolute()), 
         help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
     )
@@ -67,8 +80,6 @@ if __name__ == "__main__":
         default="all", 
         help="The task going to be evaluted, refs to workloads/, default use all tasks in workloads/"
     )
-
-    # list all supported task and hardware
     parser.add_argument(
         "--show_task_list", 
         action="store_true", 
@@ -80,31 +91,23 @@ if __name__ == "__main__":
         help="Print all hardware bytemlperf supported",
     )
 
-    # feature control
-    parser.add_argument(
-        "--parallel", 
-        type=int, default=1, 
-        help="Run all tasks in parallel if available"
-    )
-    parser.add_argument(
-        "--install_requirements", action="store_true", 
-        help="Install all required packages"
-    )
-    parser.add_argument(
-        "--activate_venv", action="store_true",
-        help="Enable python virtual environment"
-    )
+    parser.add_argument("--numa_node", type=int, choices=avail_numa_node, help="NUMA node id, -1 means all NUMA nodes, default is None which means numa_balance.")
+    parser.add_argument("--device", type=str, default="all")
+    parser.add_argument("--disable_parallel", action="store_true")
+    parser.add_argument("--report_dir", type=str, default=str(BYTE_MLPERF_ROOT.joinpath("reports").absolute()))
     args = parser.parse_args()
 
-    args.vendor_path = pathlib.Path(args.vendor_path).absolute() if args.vendor_path else None
+
     args.task_dir = pathlib.Path(args.task_dir).absolute()
+    args.report_dir = pathlib.Path(args.report_dir).absolute()
+    args.report_dir.mkdir(parents=True, exist_ok=True)
+
+
+
     os.chdir(str(BYTE_MLPERF_ROOT))
 
-
-    # show tasks
-    task_list = [file.stem for file in args.task_dir.iterdir()]
+    task_list = [task_json.stem for task_json in args.task_dir.glob("*.json")]
     task_list.sort()
-
     task_mapping = {
         "all": task_list, 
         "gemm_ops": [], 
@@ -128,30 +131,33 @@ if __name__ == "__main__":
         if task in ["layernorm", "softmax", "reduce_sum", "reduce_max", "reduce_min"]:
             task_mapping["reduction_ops"].append(task)
         
-        if task in ["index_add", "sort", "unique", "gather", "scatter"]:
+        if task in ["index_add", "sort", "unique", "gather", "scatter", "hash_table", "topk"]:
             task_mapping["index_ops"].append(task)
 
         if task in ["host2device", "device2host", "device2device"]:
             task_mapping["h2d_ops"].append(task)
 
-        if task in ["allgather", "allreduce", "alltoall", "broadcast", "p2p", "reduce_scatter"]:
+        if task in ["allgather", "allreduce", "alltoall", "broadcast", "p2p", "reducescatter"]:
             task_mapping["ccl_ops"].append(task)
 
+    hardware_list = []
+    for file in BYTE_MLPERF_ROOT.joinpath("backends").iterdir():
+        if file.is_dir() and file.stem.startswith("_") is False:
+            hardware_list.append(file.stem)
 
+
+    # show task and hardware list
     if args.show_task_list:
         logger.info("******************* Supported Task *******************")
         print(task_list)        
         exit(0)
 
-    # show hardwares
-    hardware_list = []
-    for file in BYTE_MLPERF_ROOT.joinpath("backends").iterdir():
-        if file.is_dir() and file.stem.startswith("_") is False:
-            hardware_list.append(file.stem)
     if args.show_hardware_list:
         logger.info("***************** Supported Hardware Backend *****************")
         print(hardware_list)
         exit(0)
+
+
 
     # check task
     test_cases = []
@@ -178,67 +184,64 @@ if __name__ == "__main__":
     logger.info(f"******************* hardware: *****************")
     logger.info(f"{hardware}\n")
 
-    if args.install_requirements:
-        logger.info("******************* Pip Package Installing *******************")
-        subprocess.run(
-            ["python3", "-m", "pip", "install", "pip", "--upgrade", "--quiet"]
-        )
-        subprocess.run(
-            ["python3", "-m", "pip", "install", "-r", "requirements.txt", "--quiet"]
-        )
-        if not args.activate_venv:
-            subprocess.run(
-                ["python3", "-m", "pip", "install", "-r", f"backends/{hardware}/requirements.txt", "--quiet"]
-            )
 
 
-    outputs_dir = pathlib.Path(BYTE_MLPERF_ROOT).joinpath("reports", args.hardware_type)
-    if not outputs_dir.exists():
-        outputs_dir.mkdir(parents=True)
-    with open(f"{BYTE_MLPERF_ROOT}/reports/{args.hardware_type}/_run_report.log", "w") as file:
-        pass
 
 
-    # terminate task perf process
-    subprocess_pid = -1
+
+
+    # terminate core task perf process
+    subprocess_pids = []
     def signal_handler(signum, frame):
         logger.info(f"Received signal {signum}, exiting...")
-        if subprocess_pid != -1:
-            logger.info(f"terminate subprocess: {subprocess_pid}")
-            os.kill(subprocess_pid, signal.SIGTERM)
+        if len(subprocess_pids) > 0:
+            logger.info(f"terminate subprocess: {subprocess_pids}")
+            for pid in subprocess_pids:
+                os.kill(pid, signal.SIGTERM)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
 
-    failed_ops = []
+
     for task in test_cases:
-        cmds = [
-            "python3", 
-            "./core/perf_engine.py", 
-            "--hardware_type", args.hardware_type,
-            "--vendor_path", str(args.vendor_path),
-            "--task", task,
-            "--task_dir", str(args.task_dir), 
-            "--parallel", str(args.parallel)
-        ]
-        if args.activate_venv:
-            cmds.append("--activate_venv")
+        perf_cmd =  f"python3 ./core/perf_engine.py"\
+                    f" --hardware_type {args.hardware_type}"\
+                    f" --task_dir {args.task_dir}"\
+                    f" --task {task}"\
+                    f" --device {args.device}"\
+                    f" --report_dir {args.report_dir}"
+        if args.disable_parallel:
+            perf_cmd += " --disable_parallel"
 
         print(f"******************************************* Start to test op: [{task}]. *******************************************")
-        process = subprocess.Popen(cmds)
-        subprocess_pid = process.pid
+        subprocess_cmds = []
+        subprocess_instances = []
+        subprocess_pids = []
 
-        ret = process.wait()
-        if ret != 0:
-            failed_ops.append(task)
+
+        if args.numa_node is None:
+            for i, numa_config in enumerate(numa_configs):
+                cmd = f"taskset -c {numa_config} {perf_cmd} --numa_world_size {len(numa_configs)} --numa_rank {i}"
+                subprocess_cmds.append(cmd)
+        elif args.numa_node == -1:
+            cmd = perf_cmd
+            subprocess_cmds.append(cmd)
+        else:
+            cmd = f"taskset -c {numa_configs[args.numa_node]} {perf_cmd}"
+            subprocess_cmds.append(cmd)
+
+        for cmd in subprocess_cmds:
+            print(f"{cmd}")
+            process_instance = subprocess.Popen(cmd, shell=True)
+            subprocess_instances.append(process_instance)
+            process_pid = process_instance.pid
+            subprocess_pids.append(process_pid)
+
+        print(f"perf_subprocess_pids: {subprocess_pids}")
         print("")
 
-
-    
-    if failed_ops:
-        logger.error(f"Failed ops: {failed_ops}")
-        exit(1)
-    else:
-        logger.info("All ops passed")
+        for process in subprocess_instances:
+            process.wait()
+        print("")

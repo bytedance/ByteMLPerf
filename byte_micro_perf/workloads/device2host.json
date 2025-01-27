@@ -9,9 +9,6 @@
       ]
     ]
   },
-  "dtype": [
-    "float32",
-    "bfloat16",
-    "float16"
-  ]
+  "dtype": ["float32", "bfloat16", "float16"],
+  "group": [1, 2, 4, 8, 16]
 }

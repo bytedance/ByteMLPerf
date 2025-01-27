@@ -10,11 +10,13 @@ import grpc
 import signal
 
 
-# ${prj_root}/byte_infer_perf
-CUR_DIR = pathlib.Path.cwd().absolute()
-BYTE_MLPERF_ROOT = pathlib.Path(__file__).absolute().parents[2].__str__()
+CWD_DIR = pathlib.Path.cwd().absolute()
+FILE_DIR = pathlib.Path(__file__).parent.absolute()
+BYTE_MLPERF_ROOT = FILE_DIR.parents[1]
 os.chdir(BYTE_MLPERF_ROOT)
-sys.path.insert(0, BYTE_MLPERF_ROOT)
+sys.path.insert(0, BYTE_MLPERF_ROOT.__str__())
+
+
 
 from llm_perf.server import server_pb2, server_pb2_grpc
 from llm_perf.server.pb import deserialize_value, serialize_value
@@ -29,9 +31,9 @@ class TestServer(server_pb2_grpc.InferenceServicer):
 
     async def StreamingInference(
         self, 
-        request: server_pb2.InferenceRequest, 
-        context: grpc.ServicerContext
-    ) -> AsyncIterable[server_pb2.InferenceResponse]:
+        request, 
+        context
+    ):
         logger.debug(f"StreamingInference request id {request.req_id}")
 
         req = {k: deserialize_value(v) for k, v in request.inputs.items()}
@@ -76,6 +78,7 @@ async def serve(port, generator: LLMPerfEndpoint) -> None:
     await server.wait_for_termination()    
 
 
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_config", type=str, required=True)
@@ -89,24 +92,30 @@ def parse_args():
 def main():
     args = parse_args()
     setup_logger(args.log_level)
-    
-    # create xpu config
-    xpu_cfg = {}
 
-    xpu_cfg["hardware_type"] = args.hardware_type
-    xpu_cfg["tp_size"] = args.tp_size
-    xpu_cfg["max_batch_size"] = args.max_batch_size
-    
-    model_config_path = CUR_DIR / args.model_config
+    # check model_config
+    if pathlib.Path(args.model_config).is_absolute():
+        model_config_path = model_config_path
+    else:
+        model_config_path = CWD_DIR.joinpath(args.model_config)
+
     if not model_config_path.exists():
         logger.error(f"model_config_path not exist")
         sys.exit(-1)
     with open(model_config_path, 'r') as file:
         model_config = json.load(file)
-    xpu_cfg["model_config"] = model_config
 
+
+    # create xpu config
+    xpu_cfg = {
+        "hardware_type": args.hardware_type,
+        "tp_size": args.tp_size,
+        "max_batch_size": args.max_batch_size,
+        "model_config": model_config
+    }
     generator = LLMPerfEndpoint(xpu_cfg)
     asyncio.run(serve(args.port, generator))
+
 
 if __name__ == "__main__":
     main()

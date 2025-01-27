@@ -18,7 +18,7 @@ import random
 import torch
 import torch.distributed as dist
 
-def gemm_compute_size(input_shapes, torch_dtype):
+def gemm_compute_size(input_shapes, torch_dtype, **kwargs):
     # input_shapes: [[M, K], [K, N]]
     a_shape, b_shape = input_shapes
     M, _ = a_shape
@@ -39,7 +39,7 @@ def gemm_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return (batch_size, tensor_size, input_tensor_size, output_tensor_size)
 
-def gemm_create_tensors(input_shapes, torch_dtype, xpu_device):
+def gemm_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     # input_shapes: [[M, K], [K, N]]
     a_shape, b_shape = input_shapes
     M, _ = a_shape
@@ -56,10 +56,7 @@ def gemm_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-
-
-
-def batch_gemm_compute_size(input_shapes, torch_dtype):
+def batch_gemm_compute_size(input_shapes, torch_dtype, **kwargs):
     # input_shapes: [[bs, M, K], [bs, K, N]]
     a_shape, b_shape = input_shapes
     bs, M, _ = a_shape
@@ -80,7 +77,7 @@ def batch_gemm_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return (batch_size, tensor_size, input_tensor_size, output_tensor_size)
 
-def batch_gemm_create_tensors(input_shapes, torch_dtype, xpu_device):
+def batch_gemm_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     # input_shapes: [[bs, M, K], [bs, K, N]]
     a_shape, b_shape = input_shapes
     bs, M, _ = a_shape
@@ -97,7 +94,7 @@ def batch_gemm_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-def group_gemm_compute_size(input_shapes, torch_dtype):
+def group_gemm_compute_size(input_shapes, torch_dtype, **kwargs):
     """
     [
         [[M1, K1], [K1, N1]], 
@@ -129,7 +126,7 @@ def group_gemm_compute_size(input_shapes, torch_dtype):
 
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def group_gemm_create_tensors(input_shapes, torch_dtype, xpu_device):
+def group_gemm_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     """
     [
         [[M1, K1], [K1, N1]],
@@ -161,7 +158,7 @@ def group_gemm_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-def sin_compute_size(input_shapes, torch_dtype):
+def sin_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     c_shape = a_shape
 
@@ -174,7 +171,7 @@ def sin_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def sin_create_tensors(input_shapes, torch_dtype, xpu_device):
+def sin_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     c_shape = a_shape
 
@@ -186,7 +183,7 @@ def sin_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [a_tensor, c_tensor]
 
 
-def cast_compute_size(input_shapes, torch_dtype):
+def cast_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     c_shape = a_shape
     input_element_num = sum([math.prod(shape) for shape in [a_shape]])
@@ -211,7 +208,7 @@ def cast_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def cast_create_tensors(input_shapes, torch_dtype, xpu_device):
+def cast_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     c_shape = a_shape
 
@@ -233,7 +230,7 @@ def cast_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [a_tensor, c_tensor]
 
 
-def swiglu_compute_size(input_shapes, torch_dtype):
+def swiglu_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
@@ -250,7 +247,7 @@ def swiglu_compute_size(input_shapes, torch_dtype):
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
 
-def swiglu_create_tensors(input_shapes, torch_dtype, xpu_device):
+def swiglu_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
@@ -267,7 +264,7 @@ def swiglu_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-def add_compute_size(input_shapes, torch_dtype):
+def add_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, b_shape = input_shapes
     c_shape = a_shape
     batch_size, hidden_size = a_shape
@@ -281,7 +278,7 @@ def add_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def add_create_tensors(input_shapes, torch_dtype, xpu_device):
+def add_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, b_shape = input_shapes
     c_shape = a_shape
 
@@ -294,7 +291,7 @@ def add_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [a_tensor, b_tensor, c_tensor]
 
 
-def layer_norm_compute_size(input_shapes, torch_dtype):
+def layer_norm_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -309,7 +306,7 @@ def layer_norm_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def layer_norm_create_tensors(input_shapes, torch_dtype, xpu_device):
+def layer_norm_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -328,7 +325,7 @@ def layer_norm_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-def softmax_compute_size(input_shapes, torch_dtype):
+def softmax_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -342,7 +339,7 @@ def softmax_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def softmax_create_tensors(input_shapes, torch_dtype, xpu_device):
+def softmax_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -356,7 +353,7 @@ def softmax_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-def reduce_sum_compute_size(input_shapes, torch_dtype):
+def reduce_sum_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = [batch_size, 1]
@@ -370,7 +367,7 @@ def reduce_sum_compute_size(input_shapes, torch_dtype):
 
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def reduce_sum_create_tensors(input_shapes, torch_dtype, xpu_device):
+def reduce_sum_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = [batch_size, 1]
@@ -384,7 +381,7 @@ def reduce_sum_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [a_tensor, c_tensor]
 
 
-def reduce_min_compute_size(input_shapes, torch_dtype):
+def reduce_min_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
@@ -403,7 +400,7 @@ def reduce_min_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def reduce_min_create_tensors(input_shapes, torch_dtype, xpu_device):
+def reduce_min_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     values_shape = [batch_size, 1]
@@ -421,7 +418,7 @@ def reduce_min_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-def index_add_compute_size(input_shapes, torch_dtype):
+def index_add_compute_size(input_shapes, torch_dtype, **kwargs):
     # src_tensor -->(index_tensor) dst_tensor
     dst_shape, src_shape = input_shapes
 
@@ -447,8 +444,7 @@ def index_add_compute_size(input_shapes, torch_dtype):
 
     return src_batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-
-def index_add_create_tensors(input_shapes, torch_dtype, xpu_device):
+def index_add_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     # src_tensor -->(index_tensor) dst_tensor
     dst_shape, src_shape = input_shapes
 
@@ -467,7 +463,7 @@ def index_add_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [dst_tensor, src_tensor, index_tensor]
 
 
-def sort_compute_size(input_shapes, torch_dtype):
+def sort_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -485,7 +481,7 @@ def sort_compute_size(input_shapes, torch_dtype):
 
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def sort_create_tensors(input_shapes, torch_dtype, xpu_device):
+def sort_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -499,7 +495,7 @@ def sort_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [a_tensor, c_tensor, indice_tensor]
 
 
-def unique_compute_size(input_shapes, torch_dtype):
+def unique_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -515,7 +511,7 @@ def unique_compute_size(input_shapes, torch_dtype):
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def unique_create_tensors(input_shapes, torch_dtype, xpu_device):
+def unique_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, = input_shapes
     batch_size, hidden_size = a_shape
     c_shape = a_shape
@@ -531,8 +527,7 @@ def unique_create_tensors(input_shapes, torch_dtype, xpu_device):
 
 
 
-
-def scatter_compute_size(input_shapes, torch_dtype):
+def scatter_compute_size(input_shapes, torch_dtype, **kwargs):
     tensor_shape = input_shapes[0]
     batch_size, hidden_size = tensor_shape
     index_shape = [batch_size]
@@ -549,7 +544,7 @@ def scatter_compute_size(input_shapes, torch_dtype):
     tensor_size = input_element_num + output_element_num
     return batch_size, tensor_size, input_element_num, output_element_num
 
-def scatter_create_tensors(input_shapes, torch_dtype, xpu_device):
+def scatter_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     tensor_shape = input_shapes[0]
     batch_size, hidden_size = tensor_shape
     index_shape = [batch_size]
@@ -567,113 +562,229 @@ def scatter_create_tensors(input_shapes, torch_dtype, xpu_device):
     return [dst_tensor, src_tensor, index_tensor]
 
 
+def hash_table_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, b_shape = input_shapes
 
+    num_entry, emb_size = a_shape
+    index_bs, num_index = b_shape
 
-
-
-
-
-def host2device_compute_size(input_shapes, torch_dtype):
-    a_shape, = input_shapes
-    batch_size, hidden_size = a_shape
-
-    output_element_num = sum([math.prod(shape) for shape in [a_shape]])
+    weight_element_num = num_entry * emb_size
+    index_element_num = index_bs * num_index
+    output_element_num = index_element_num * emb_size
 
     dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    output_tensor_size = dtype_size * output_element_num
+    index_dtype_size = torch.tensor([], dtype=torch.int64).element_size()
 
-    tensor_size = output_tensor_size
-    return batch_size, tensor_size, 0, output_tensor_size
-
-def host2device_create_tensors(input_shapes, torch_dtype, xpu_device):
-    a_shape, = input_shapes
-    batch_size, hidden_size = a_shape
-
-    host_tensor = torch.empty(a_shape, dtype=torch_dtype, device="cpu").pin_memory()
-    device_tensor = torch.empty(a_shape, dtype=torch_dtype, device=xpu_device)
+    bs = index_bs
+    r_bytes = output_element_num * dtype_size + index_element_num * index_dtype_size
+    w_bytes = output_element_num * dtype_size
+    rw_bytes = r_bytes + w_bytes    
+    reserved_tensor_size = (weight_element_num + output_element_num) * dtype_size + \
+                  index_element_num * index_dtype_size
     
-    return [host_tensor, device_tensor]
+    return bs, rw_bytes, r_bytes, w_bytes, reserved_tensor_size
 
-
-def allreduce_create_tensors(input_shapes, torch_dtype, xpu_device):
-    a_shape, = input_shapes
-    a_tensor = torch.zeros(a_shape, dtype=torch_dtype, device=xpu_device)
-    return [a_tensor]
-
-
-def allgather_compute_size(input_shapes, torch_dtype):
-    a_shape, = input_shapes
-    batch_size, hidden_size = a_shape
-
-    output_element_num = sum([math.prod(shape) for shape in [a_shape]])
-    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    output_tensor_size = dtype_size * output_element_num
-    tensor_size = output_tensor_size
-    return batch_size, tensor_size, 0, output_tensor_size
-
-
-
-def allgather_create_tensors(input_shapes, torch_dtype, xpu_device):
-    a_shape, = input_shapes
-    batch_size, hidden_size = a_shape
-    
-    world_size = dist.get_world_size()
-    tensor = torch.empty([batch_size, hidden_size], dtype=torch_dtype, device=xpu_device)
-    tensors = list(torch.chunk(tensor, world_size, dim=0))
-
-    return [tensors]
-
-
-def alltoall_compute_size(input_shapes, torch_dtype):
+def hash_table_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, b_shape = input_shapes
-    batch_size, hidden_size = a_shape
 
-    world_size = dist.get_world_size()
-    output_element_num = sum([math.prod(shape) for shape in [a_shape]]) * 2
-    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    output_tensor_size = dtype_size * output_element_num
-    tensor_size = output_tensor_size
-    return batch_size, tensor_size, 0, output_tensor_size
+    num_entry, emb_size = a_shape
+    index_bs, num_index = b_shape
+
+    weight_tensor = torch.randn(num_entry, emb_size, dtype=torch_dtype, device=xpu_device)
+    torch.random.manual_seed(1024)
+    index_tensor = torch.randint(0, num_entry, (index_bs, num_index), dtype=torch.int64, device="cpu").to(xpu_device)
+
+    return [weight_tensor, index_tensor]    
 
 
-def alltoall_create_tensors(input_shapes, torch_dtype, xpu_device):
+def topk_compute_size(input_shapes, torch_dtype, **kwargs):
     a_shape, b_shape = input_shapes
+
     batch_size, hidden_size = a_shape
-
-    world_size = dist.get_world_size()
-    input_tensor = torch.empty([batch_size, hidden_size], dtype=torch_dtype, device=xpu_device)
-    input_tensors = list(torch.chunk(input_tensor, world_size, dim=0))
-
-    output_tensor = torch.empty([batch_size, hidden_size], dtype=torch_dtype, device=xpu_device)
-    output_tensors = list(torch.chunk(output_tensor, world_size, dim=0))
-
-    return [input_tensors, output_tensors]
-    
-
-def p2p_compute_size(input_shapes, torch_dtype):
-    a_shape, b_shape = input_shapes
-    batch_size, hidden_size = a_shape
+    _, k = b_shape
 
     input_element_num = sum([math.prod(shape) for shape in [a_shape]])
-    output_element_num = sum([math.prod(shape) for shape in [b_shape]])
+    output_element_num = sum([math.prod(shape) for shape in [a_shape]])
 
     dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
-    input_tensor_size = dtype_size * input_element_num
-    output_tensor_size = dtype_size * output_element_num
+    indice_dtype_size = torch.tensor([], dtype=torch.int64).element_size()
 
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num + indice_dtype_size * output_element_num
     tensor_size = input_tensor_size + output_tensor_size
     return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-def p2p_create_tensors(input_shapes, torch_dtype, xpu_device):
+def topk_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
     a_shape, b_shape = input_shapes
+
+    batch_size, hidden_size = a_shape
+    _, k = b_shape
+
+    # create input tensors
+    a_tensor = torch.randint(0, 7, a_shape, dtype=torch_dtype, device=xpu_device)
+    # create output tensors
+    values_tensor = torch.randint(0, 7, a_shape, dtype=torch_dtype, device=xpu_device)
+    indices_tensor = torch.randint(0, 7, a_shape, dtype=torch.int64, device=xpu_device)
+    return [a_tensor, values_tensor, indices_tensor]
+
+
+
+
+
+
+
+# host2device / device2host / allreduce / broadcast
+def host2device_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+    element_num = sum([math.prod(shape) for shape in [a_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    tensor_size = dtype_size * element_num
+    return batch_size, tensor_size, tensor_size, tensor_size
+
+# device2device
+def device2device_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+    element_num = sum([math.prod(shape) for shape in [a_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    tensor_size = dtype_size * element_num
+    return batch_size, 2 * tensor_size, tensor_size, tensor_size
+
+# alltoall / p2p
+def alltoall_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, = input_shapes
     batch_size, hidden_size = a_shape
 
-    a_tensor = torch.empty(a_shape, dtype=torch_dtype, device=xpu_device)
-    b_tensor = torch.empty(b_shape, dtype=torch_dtype, device=xpu_device)
+    world_size = kwargs.get("op_group_size", 1)
+    element_num = sum([math.prod(shape) for shape in [a_shape]])
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+    
+    input_tensor_size = dtype_size * element_num
+    output_tensor_size = dtype_size * element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
-    return [a_tensor, b_tensor]
+# allgather
+def allgather_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    world_size = kwargs.get("op_group_size", 1)
+    output_element_num = sum([math.prod(shape) for shape in [a_shape]])
+    input_element_num = output_element_num // world_size
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
+
+# reducescatter
+def reducescatter_compute_size(input_shapes, torch_dtype, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    world_size = kwargs.get("op_group_size", 1)
+    input_element_num = sum([math.prod(shape) for shape in [a_shape]])
+    output_element_num = input_element_num // world_size
+    dtype_size = torch.tensor([], dtype=torch_dtype).element_size()
+
+    input_tensor_size = dtype_size * input_element_num
+    output_tensor_size = dtype_size * output_element_num
+    tensor_size = input_tensor_size + output_tensor_size
+    return batch_size, tensor_size, input_tensor_size, output_tensor_size
 
 
+
+
+
+def host2device_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    host_tensor = torch.empty(
+        [batch_size, hidden_size], 
+        dtype=torch_dtype, 
+        device="cpu"
+    ).pin_memory()
+    device_tensor = torch.empty(
+        a_shape, 
+        dtype=torch_dtype, 
+        device=xpu_device
+    )
+    return [host_tensor, device_tensor]
+
+def device2device_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    tensor_0 = torch.empty(
+        [batch_size, hidden_size],
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    tensor_1 = torch.empty(
+        [batch_size, hidden_size],
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    return [tensor_0, tensor_1]
+
+
+def allreduce_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    tensor = torch.empty(
+        [batch_size, hidden_size], 
+        dtype=torch_dtype, 
+        device=xpu_device
+    )
+    return [tensor]
+
+
+
+def allgather_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+    
+    # tensor:       [batch_size, hidden_size]
+    # split_tensor: [batch_size // world_size, hidden_size]
+    world_size = kwargs.get("op_group_size", 1)
+    tensor = torch.zeros(
+        (batch_size, hidden_size), 
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    split_tensor = torch.zeros(
+        (batch_size // world_size, hidden_size),
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    return [tensor, split_tensor]
+
+
+
+def alltoall_create_tensors(input_shapes, torch_dtype, xpu_device, **kwargs):
+    a_shape, = input_shapes
+    batch_size, hidden_size = a_shape
+
+    # output_tensor: [batch_size, hidden_size]
+    # input_tensor: [batch_size, hidden_size]
+    input_tensor = torch.zeros(
+        (batch_size, hidden_size), 
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+    output_tensor = torch.zeros(
+        (batch_size, hidden_size), 
+        dtype=torch_dtype,
+        device=xpu_device
+    )
+
+    return [output_tensor, input_tensor]
+    
 
 """
 gemm ops
@@ -822,59 +933,90 @@ class GatherOp(torch.nn.Module):
     def forward(self, dst_tensor, src_tensor, index_tensor):
         torch.gather(src_tensor, 0, index_tensor, out=dst_tensor)
 
+class HashTableOp(torch.nn.Module):
+    def forward(self, weight_tensor, index_tensor):
+        output_tensor = torch.nn.functional.embedding(index_tensor, weight_tensor)
+        # output_tensor = torch.index_select(weight_tensor, 0, index_tensor.view(-1))
+
+class TopKOp(torch.nn.Module):
+    def forward(self, a_tensor, value_tensor, indice_tensor):
+        value_tensor, indice_tensor = torch.topk(
+            a_tensor, 
+            k=value_tensor.shape[-1], 
+            dim=-1, 
+            largest=True,
+            sorted=False
+        )
 
 
 """
 h2d_ops
 """
 class Host2DeviceOp(torch.nn.Module):
-    def forward(self, host_tensor, device_tensor):
+    def forward(self, host_tensor, device_tensor, **kwargs):
         device_tensor.copy_(host_tensor)
 
 
 class Device2HostOp(torch.nn.Module):
-    def forward(self, host_tensor, device_tensor):
+    def forward(self, host_tensor, device_tensor, **kwargs):
         host_tensor.copy_(device_tensor)
 
+class Device2DeviceOp(torch.nn.Module):
+    def forward(self, device_tensor_0, device_tensor_1, **kwargs):
+        device_tensor_1.copy_(device_tensor_0)
 
 
 """
 communication ops
 """
 class AllReduceOp(torch.nn.Module):
-    def forward(self, input_tensor):
-        dist.all_reduce(input_tensor, op=dist.ReduceOp.SUM)
-
-class AllGatherOp(torch.nn.Module):
-    def forward(self, input_tensors):
-        dist.all_gather(input_tensors, input_tensors[dist.get_rank()])
-
-class ReduceScatterOp(torch.nn.Module):
-    def forward(self, input_tensors):
-        dist.reduce_scatter(input_tensors[dist.get_rank()], input_tensors)
-
-class AllToAllOp(torch.nn.Module):
-    def forward(self, input_tensors, output_tensors):
-        dist.all_to_all(output_tensors, input_tensors)
-
+    def forward(self, tensor, **kwargs):
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=kwargs.get("op_group", None))
 
 class BroadcastOp(torch.nn.Module):
-    def forward(self, input_tensor):
-        dist.broadcast(input_tensor, 0)
+    def forward(self, tensor, **kwargs):
+        dist.broadcast(tensor, 0, group=kwargs.get("op_group", None))
 
+class AllGatherOp(torch.nn.Module):
+    def forward(self, tensor, split_tensor, **kwargs):
+        dist.all_gather_into_tensor(tensor, split_tensor, group=kwargs.get("op_group", None))
+
+class ReduceScatterOp(torch.nn.Module):
+    def forward(self, tensor, split_tensor, **kwargs):
+        dist.reduce_scatter_tensor(split_tensor, tensor, op=dist.ReduceOp.SUM, group=kwargs.get("op_group", None))
+
+class AllToAllOp(torch.nn.Module):
+    def forward(self, output_tensor, input_tensor, **kwargs):
+        dist.all_to_all_single(output_tensor, input_tensor, group=kwargs.get("op_group", None))
 
 class P2POp(torch.nn.Module):
-    def forward(self, send_tensor, recv_tensor):
-        world_size = dist.get_world_size()
-        rank = dist.get_rank()
+    def forward(self, send_tensor, recv_tensor, **kwargs):
+        world_size = kwargs.get("op_group_size", 1)
+        local_rank = dist.get_rank()
 
+        next_device = (local_rank + 1) % world_size
+        last_device = (local_rank - 1 + world_size) % world_size
+    
+        # 0 --> 1
+        # 0 --> 1 --> 2 --> 3
+        # 0 --> 1 --> 2 --> 3 --> 4 --> 5 --> 6 --> 7 --> 8
         reqs = []
-        if rank != world_size - 1:
-            reqs.append(dist.isend(send_tensor, (rank + 1) % world_size))
-        if rank != 0:
-            reqs.append(dist.irecv(recv_tensor, (rank - 1 + world_size) % world_size))
+        if local_rank != world_size - 1:
+            reqs.append(dist.isend(send_tensor, next_device, group=kwargs.get("op_group", None)))
+        if local_rank != 0:
+            reqs.append(dist.irecv(recv_tensor, last_device, group=kwargs.get("op_group", None)))
         for req in reqs:
             req.wait()
+
+
+
+
+
+
+
+
+
+
 
 
 op_registry = {
@@ -915,17 +1057,20 @@ op_registry = {
     "unique": UniqueOp(),
     "scatter": ScatterOp(),
     "gather": GatherOp(),
+    "hash_table": HashTableOp(), 
+    "topk": TopKOp(),
 
     # h2d_ops
     "device2host": Device2HostOp(),
     "host2device": Host2DeviceOp(),
+    "device2device": Device2DeviceOp(),
 
     # ccl ops
-    "broadcast": BroadcastOp(),
     "allreduce": AllReduceOp(),
+    "broadcast": BroadcastOp(),
     "allgather": AllGatherOp(),
-    "alltoall": AllToAllOp(),
     "reducescatter": ReduceScatterOp(),
+    "alltoall": AllToAllOp(),
     "p2p": P2POp(),
 }
 
@@ -968,18 +1113,22 @@ op_compute_size_funcs = {
     "unique": unique_compute_size,
     "scatter": scatter_compute_size,
     "gather": scatter_compute_size,
+    "hash_table": hash_table_compute_size, 
+    "topk": topk_compute_size,
 
-    # h2d_ops
+    # h2d_ops /  ccl_ops
     "host2device": host2device_compute_size,
     "device2host": host2device_compute_size,
-
-    # ccl_ops
-    "broadcast": host2device_compute_size,
     "allreduce": host2device_compute_size,
-    "allgather": allgather_compute_size,
+    "broadcast": host2device_compute_size,
+
+    "device2device": device2device_compute_size,
+
     "alltoall": alltoall_compute_size,
-    "reducescatter": allgather_compute_size, 
-    "p2p": p2p_compute_size,
+    "p2p": alltoall_compute_size,
+
+    "allgather": allgather_compute_size,
+    "reducescatter": reducescatter_compute_size, 
 }
 
 op_create_tensors_funcs = {
@@ -1020,16 +1169,20 @@ op_create_tensors_funcs = {
     "unique": unique_create_tensors,
     "scatter": scatter_create_tensors,
     "gather": scatter_create_tensors,
+    "hash_table": hash_table_create_tensors, 
+    "topk": topk_create_tensors,
 
-    # h2d_ops
+    # h2d_ops / ccl_ops
     "host2device": host2device_create_tensors,
     "device2host": host2device_create_tensors,
+    "device2device": device2device_create_tensors,
 
-    # ccl_ops
-    "broadcast": allreduce_create_tensors,
     "allreduce": allreduce_create_tensors,
+    "broadcast": allreduce_create_tensors,
+
     "allgather": allgather_create_tensors,
-    "alltoall": alltoall_create_tensors,
     "reducescatter": allgather_create_tensors, 
-    "p2p": p2p_create_tensors,
+
+    "alltoall": alltoall_create_tensors,
+    "p2p": alltoall_create_tensors,    
 }
