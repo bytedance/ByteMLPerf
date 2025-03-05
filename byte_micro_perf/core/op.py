@@ -24,16 +24,28 @@ class BasicOp:
 
         # custom config for backend and op
         self._custom_run = False
-        self._run_func = None
+        self._run_func = self.empty_run
 
         # preset
         self.input_tensor_info = None
         self.output_tensor_info = None
-        self.calc_flops = None
+        self.input_tensor_size = 0
+        self.output_tensor_size = 0
+        self.tensor_size = 0
+        self.read_bytes = 0
+        self.write_bytes = 0
+        self.io_bytes = 0
+        self.algo_size = 0
+        self.bus_size = 0
+        self.calc_flops = 0
+
+        self.prepare()
+
+    
+    def empty_run(self):
+        pass
 
         
-
-
     @staticmethod
     def is_concurrent():
         return False

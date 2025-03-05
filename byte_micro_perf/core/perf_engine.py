@@ -737,10 +737,16 @@ if __name__ == "__main__":
     scheduler = Scheduler(args)
     result_list = scheduler.run(task_cases)
 
-    
+    if len(result_list) == 0:
+        logger.error("No result found")
+        sys.exit(1)
+
+    sku_name = result_list[0]["sku_name"]
+
     report_dir = pathlib.Path(args.report_dir).absolute()
     backend_dir = report_dir.joinpath(args.hardware_type)
-    op_dir = backend_dir.joinpath(args.task)
+    sku_dir = backend_dir.joinpath(sku_name)
+    op_dir = sku_dir.joinpath(args.task)
     op_dir.mkdir(parents=True, exist_ok=True)
 
 

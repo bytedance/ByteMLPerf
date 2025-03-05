@@ -179,6 +179,8 @@ class Scheduler:
 
         result_list = sorted(result_list, key=lambda x: x["arguments"]["index"])
         for result in result_list:
+            result["sku_name"] = self.backend.get_device_name()
+            result["op_name"] = self.op_name
             result["arguments"].pop("index")
 
         for process in self._subprocesses:

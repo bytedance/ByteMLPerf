@@ -15,7 +15,8 @@ from core.op import BasicOp
 class AddOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
-        
+
+    def prepare(self):
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
         self.dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
@@ -54,10 +55,9 @@ class AddOp(BasicOp):
         self.algo_size = 0
         self.bus_size = 0
 
-        self.calc_flops = self.batch_size * self.dim_size * 2    
+        self.calc_flops = self.batch_size * self.dim_size 
 
         self._run_func = self.add_run
-
 
     def add_run(self, tensor_mapping):
         a = tensor_mapping["a"]
@@ -110,6 +110,8 @@ class GemmOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
 
+
+    def prepare(self):
         self.dtype = self.args_dict["dtype"]
         
         if self.dtype == "tfloat32":
@@ -179,7 +181,6 @@ class GemmOp(BasicOp):
 
         self.calc_flops = self.M * self.N * self.K * 2
         self._run_func = self.gemm_run
-        
 
     def gemm_run(self, tensor_mapping):
         a = tensor_mapping["a"]
@@ -200,6 +201,7 @@ class AllGatherOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
 
+    def prepare(self):
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
         self.dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
@@ -223,8 +225,7 @@ class AllGatherOp(BasicOp):
             )
         }
 
-        
-
+    
         self.input_tensor_size = sum([calc_tensor_size(info) for info in self.input_tensor_info.values()])
         self.output_tensor_size = sum([calc_tensor_size(info) for info in self.output_tensor_info.values()])
         self.tensor_size = self.input_tensor_size + self.output_tensor_size

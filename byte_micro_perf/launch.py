@@ -180,6 +180,8 @@ if __name__ == "__main__":
                 exit(1)
             test_cases.append(task)
 
+    test_cases.sort()
+
     logger.info(f"******************* Tasks: *****************")
     logger.info(f"{test_cases}\n")
 
