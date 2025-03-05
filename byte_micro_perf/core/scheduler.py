@@ -216,9 +216,12 @@ class Scheduler:
                 test_case = input_queues.get()
                 if test_case is None:
                     break
-
-                op_instance = create_op(self.op_name, test_case, backend)
-                result_json = backend.perf(op_instance)
+                
+                try:
+                    op_instance = create_op(self.op_name, test_case, backend)
+                    result_json = backend.perf(op_instance)
+                except Exception as e:
+                    print(e)
                 print(f"{true_rank}: {result_json}")
                 output_queues.put(result_json, block=False)
         else:
@@ -243,8 +246,11 @@ class Scheduler:
                     process_groups_mapping[world_size] = backend.new_group(range(world_size))
 
                 if true_rank < world_size:
-                    op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size], group_size=world_size)
-                    result_json = backend.perf(op_instance)
+                    try:
+                        op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size], group_size=world_size)
+                        result_json = backend.perf(op_instance)
+                    except Exception as e:
+                        print(e)
                 else:
                     continue
 
@@ -270,7 +276,3 @@ class Scheduler:
 
         backend.destroy_process_group()
 
-
-
-    
-    

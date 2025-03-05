@@ -19,7 +19,7 @@ class AddOp(BasicOp):
     def prepare(self):
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
-        self.dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
+        
 
         self.batch_size = self.args_dict["batch_size"]
         self.dim_size = self.args_dict["dim_size"]
@@ -118,7 +118,6 @@ class GemmOp(BasicOp):
             self.torch_dtype = torch.float32
         else:
             self.torch_dtype = getattr(torch, self.dtype)
-        self.dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
 
         self.M = self.args_dict["M"]
         self.K = self.args_dict["K"]
@@ -204,7 +203,7 @@ class AllGatherOp(BasicOp):
     def prepare(self):
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
-        self.dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
+        
 
         self.world_size = self.args_dict["world_size"]
         self.batch_size = self.args_dict["batch_size"]
