@@ -12,39 +12,20 @@ sys.path.insert(0, str(MICRO_PERF_DIR))
 from core.utils import logger
 
 
-BACKEND_MAPPING = {}
-
-for backend_dir in BACKEND_DIR.iterdir():
-    backend_name = backend_dir.stem
-
-    if backend_name.startswith("_"):
-        continue
-
-    backend_module = importlib.import_module(
-        "backends." + backend_name + ".backend_" + backend_name.lower())
-    backend_cls = getattr(backend_module, "Backend" + backend_name)
-    op_mapping = getattr(backend_module, "OP_MAPPING")
-
-    BACKEND_MAPPING[backend_name] = (backend_cls, op_mapping)
-
-
-
 def get_backend_cls(backend_type: str):
-    if backend_type not in BACKEND_MAPPING:
-        raise ValueError("backend_type {} not supported".format(backend_type))
-    backend_cls, op_mapping = BACKEND_MAPPING[backend_type]
+    backend_module = importlib.import_module(
+        "backends." + backend_type + ".backend_" + backend_type.lower())
+    backend_cls = getattr(backend_module, "Backend" + backend_type)
     return backend_cls
 
 def get_op_cls(backend_type: str, op_type: str):
-    if backend_type not in BACKEND_MAPPING:
-        raise ValueError("backend_type {} not supported".format(backend_type))
-    backend_cls, op_mapping = BACKEND_MAPPING[backend_type]
+    backend_module = importlib.import_module(
+        "backends." + backend_type + ".backend_" + backend_type.lower())
+    op_mapping = getattr(backend_module, "OP_MAPPING")
     if op_type not in op_mapping:
         raise ValueError("op_type {} not supported".format(op_type))
     op_cls = op_mapping[op_type]
     return op_cls
-
-
 
 
 

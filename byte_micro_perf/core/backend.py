@@ -185,7 +185,7 @@ class Backend(ABC):
             del tensor_list
             self.empty_cache()
         except Exception as e:
-            pass
+            print(e)
 
         result_json = op_instance.summary(latency_us)
         return result_json
