@@ -67,4 +67,29 @@ class BackendGPU(Backend):
     
     def get_dist_backend(self):
         return "nccl"
-    
+
+
+
+
+    def core_perf(self, op_instance, warmup_iterations, prefer_iterations, tensor_list):
+        op_group = op_instance.op_group
+        group_size = op_instance.group_size
+
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
+        for i in range(warmup_iterations):
+            op_instance.core_run(tensor_list[i % len(tensor_list)])
+
+        self.device_synchronize()
+        self.op_group_barrier(op_group=op_group, group_size=group_size)
+
+        start_event.record()
+        for i in range(prefer_iterations):
+            op_instance.core_run(tensor_list[i % len(tensor_list)])
+        end_event.record()
+
+        self.device_synchronize()
+        self.op_group_barrier(op_group=op_group, group_size=group_size)
+
+        return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations

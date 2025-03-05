@@ -94,15 +94,16 @@ class BasicOp:
     def summary(self, latency_us):
         result_dict = {
             "arguments": self.args_dict,
-            "targets": {
-                "latency(us)": latency_us,
-                "qps": 1000000 / latency_us, 
-                "mem_bw(GB/s)": self.io_bytes / (latency_us * 1e-6) / 1e9,
-                "algo_bw(GB/s)": self.algo_size / (latency_us * 1e-6) / 1e9,
-                "bus_bw(GB/s)": self.bus_size / (latency_us * 1e-6) / 1e9,
-                "calc_flops_power(tflops)": self.calc_flops / (latency_us * 1e-6) / 1e12, 
-                "calc_mem_ratio": self.calc_flops / self.io_bytes
-            }
+            "targets": {}
         }
-
+        if latency_us > 0:
+            result_dict["targets"] = {
+                "latency(us)": round(latency_us, 3),
+                "qps": round(1000000 / latency_us, 3),
+                "mem_bw(GB/s)": round(self.io_bytes / (latency_us * 1e-6) / 1e9, 3),
+                "algo_bw(GB/s)": round(self.algo_size / (latency_us * 1e-6) / 1e9, 3),
+                "bus_bw(GB/s)": round(self.bus_size / (latency_us * 1e-6) / 1e9, 3),
+                "calc_flops_power(tflops)": round(self.calc_flops / (latency_us * 1e-6) / 1e12, 3),
+                "calc_mem_ratio": round(self.calc_flops / self.io_bytes, 3)
+            }
         return result_dict

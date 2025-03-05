@@ -14,7 +14,7 @@ from core.op import BasicOp
 
 class AddOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend)
+        super().__init__(args_dict, backend, *args, **kwargs)
         
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
@@ -110,7 +110,7 @@ class DivOp(AddOp):
 
 class GemmOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend)
+        super().__init__(args_dict, backend, *args, **kwargs)
 
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
@@ -196,7 +196,7 @@ class GemmOp(BasicOp):
 
 class AllGatherOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend)
+        super().__init__(args_dict, backend, *args, **kwargs)
 
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
@@ -230,7 +230,7 @@ class AllGatherOp(BasicOp):
         self.write_bytes = self.output_tensor_size
         self.io_bytes = self.read_bytes + self.write_bytes
 
-        self.algo_size = self.input_tensor_size
+        self.algo_size = self.output_tensor_size
         self.bus_size = (self.world_size - 1) * self.algo_size / self.world_size
 
         self.calc_flops = 0

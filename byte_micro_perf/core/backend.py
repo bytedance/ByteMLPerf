@@ -116,10 +116,12 @@ class Backend(ABC):
     
 
 
-    def core_perf(self, op_instance, prefer_iterations, tensor_list):
+    def core_perf(self, op_instance, warmup_iterations, prefer_iterations, tensor_list):
         op_group = op_instance.op_group
         group_size = op_instance.group_size
 
+        for i in range(warmup_iterations):
+            op_instance.core_run(tensor_list[i % len(tensor_list)])
 
         self.device_synchronize()
         self.op_group_barrier(op_group=op_group, group_size=group_size)
@@ -156,17 +158,35 @@ class Backend(ABC):
         assume_avail_bytes = int(avail_memory * 0.9)
 
 
-        if not type(op_instance).is_concurrent():
-            if tensor_size > assume_avail_bytes:
-                return 0
-            elif 2 * tensor_size > assume_avail_bytes:
-                max_data_cnt = 1
-            elif tensor_size > assume_cache_size:
-                max_data_cnt = 2
-            else:
-                max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), 32)
-            
-            # create tensor_list for each op
-            tensor_list = op_instance.create_tensors(max_data_cnt)
-            latency_us = self.core_perf(op_instance, 4, tensor_list)
+        latency_us = 0.
+        try:
+
+            max_data_cnt = 1
+            if not type(op_instance).is_concurrent():
+                if tensor_size > assume_avail_bytes:
+                    raise RuntimeError("Not enough memory to run the op")
+                elif 2 * tensor_size > assume_avail_bytes:
+                    max_data_cnt = 1
+                elif tensor_size > assume_cache_size:
+                    max_data_cnt = 2
+                else:
+                    max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), 32)
+
+            tensor_list = op_instance.create_tensors(1)
+            latency_us = self.core_perf(op_instance, 2, 2, tensor_list)
+            prefer_iters = min(max(int(1000000 / latency_us), 1), 100)
+
+            if op_instance.group_size > 1:
+                dist_module = self.get_dist_module()
+                prefer_iters_list = [None for _ in range(op_instance.group_size)]
+                dist_module.all_gather_object(prefer_iters_list, prefer_iters, group=op_instance.op_group)
+                prefer_iters = max(prefer_iters_list)
+                
+            latency_us = self.core_perf(op_instance, 2, prefer_iters, tensor_list)
+        except Exception as e:
+            pass
+
+        result_json = op_instance.summary(latency_us)
+        return result_json
+
 

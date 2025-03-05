@@ -206,42 +206,37 @@ class Scheduler:
                 if test_case is None:
                     break
 
-                print(f"rank: {true_rank}, test case: {test_case}")
-
                 op_instance = create_op(self.op_name, test_case, backend)
                 result_json = backend.perf(op_instance)
+
+                print(result_json)
         else:
             process_groups_mapping = {
                 true_world_size: None
             }
             while True:
-                broadcast_test_case = [None for _ in range(true_world_size)]
+                broadcast_test_case = [None]
                 if true_rank == 0:
                     test_case = input_queues.get()
-                    if test_case is not None:
-                        world_size = test_case.get("world_size", 1)
-                        broadcast_test_case[0:world_size] = [test_case for _ in range(world_size)]
-                        broadcast_test_case[world_size:] = [{} for _ in range(true_world_size - world_size)]
+                    broadcast_test_case[0] = test_case
 
                 if true_world_size > 1:
                     dist_module.broadcast_object_list(broadcast_test_case, 0)
 
-
-                test_case = broadcast_test_case[true_rank]
+                test_case = broadcast_test_case[0]
                 if test_case is None:
                     break
                 
-                if true_rank == 0:
-                    print(f"rank: {true_rank}, test case: {test_case}")
-
                 world_size = test_case.get("world_size", 1)
                 if world_size > 1 and world_size not in process_groups_mapping:
                     process_groups_mapping[world_size] = backend.new_group(range(world_size))
 
-
-                if test_case:
+                if true_rank < world_size:
                     op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size], group_size=world_size)
                     result_json = backend.perf(op_instance)
+
+                if true_rank == 0:
+                    print(result_json)
 
                 if true_world_size > 1:
                     dist_module.barrier()
