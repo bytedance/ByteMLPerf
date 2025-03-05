@@ -219,7 +219,11 @@ class Scheduler:
 
                 op_instance = create_op(self.op_name, test_case, backend)
                 result_json = backend.perf(op_instance)
-                print(f"{true_rank}: {result_json}")
+
+                arguments = result_json["arguments"]
+                targets = result_json["targets"]
+                print(f"{arguments}\n{targets}\n")
+
                 output_queues.put(result_json, block=False)
         else:
             process_groups_mapping = {
@@ -265,7 +269,13 @@ class Scheduler:
                         result_json["targets"]["algo_bw_list(GB/s)"] = algo_bw_list
                         result_json["targets"]["bus_bw_list(GB/s)"] = bus_bw_list
 
-                    print(f"{true_rank}: {result_json}")
+                        arguments = result_json["arguments"]
+                        latency = result_json["targets"]["latency(us)"]
+
+                    arguments = result_json["arguments"]
+                    targets = result_json["targets"]
+                    print(f"{arguments}\n{targets}\n")             
+                    
                     output_queues.put(result_json, block=False)
 
         backend.destroy_process_group()
