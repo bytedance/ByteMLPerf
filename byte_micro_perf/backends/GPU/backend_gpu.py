@@ -1,6 +1,7 @@
 import os
 import sys
 import pathlib
+import random
 from datetime import timedelta
 
 import torch
@@ -15,10 +16,10 @@ sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.backend import Backend
 from core.op_mapping import DEFAULT_OP_MAPPING
-
-
+from .custom_ops import GpuGemmOp
 
 OP_MAPPING = DEFAULT_OP_MAPPING.copy()
+OP_MAPPING["gemm"] = GpuGemmOp
 
 
 
@@ -79,11 +80,11 @@ class BackendGPU(Backend):
         end_event = torch.cuda.Event(enable_timing=True)
 
         for i in range(warmup_iterations):
-            op_instance.core_run(tensor_list[i % len(tensor_list)])
+            index = random.randint(0, len(tensor_list) - 1)
+            op_instance.core_run(tensor_list[index])
 
         self.device_synchronize()
         self.op_group_barrier(op_group=op_group, group_size=group_size)
-
         start_event.record()
         for i in range(prefer_iterations):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
@@ -93,3 +94,4 @@ class BackendGPU(Backend):
         self.op_group_barrier(op_group=op_group, group_size=group_size)
 
         return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
+    

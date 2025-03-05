@@ -99,7 +99,6 @@ class BasicOp:
         if latency_us > 0:
             result_dict["targets"] = {
                 "latency(us)": round(latency_us, 3),
-                "qps": round(1000000 / latency_us, 3),
                 "mem_bw(GB/s)": round(self.io_bytes / (latency_us * 1e-6) / 1e9, 3),
                 "algo_bw(GB/s)": round(self.algo_size / (latency_us * 1e-6) / 1e9, 3),
                 "bus_bw(GB/s)": round(self.bus_size / (latency_us * 1e-6) / 1e9, 3),

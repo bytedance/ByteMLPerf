@@ -655,6 +655,7 @@ import pathlib
 import traceback
 import itertools
 import prettytable
+import jsonlines
 
 from typing import Any, Dict, List
 import itertools
@@ -730,9 +731,54 @@ def parse_task(task_dir, task):
 
 
 
-
 if __name__ == "__main__":
     args = parse_args()
     task_cases = parse_task(args.task_dir, args.task)
     scheduler = Scheduler(args)
-    scheduler.run(task_cases)
+    result_list = scheduler.run(task_cases)
+
+    
+    report_dir = pathlib.Path(args.report_dir).absolute()
+    backend_dir = report_dir.joinpath(args.hardware_type)
+    op_dir = backend_dir.joinpath(args.task)
+    op_dir.mkdir(parents=True, exist_ok=True)
+
+
+    result_mapping = {}
+    for result in result_list:
+        arguments = result["arguments"]
+        targets = result["targets"]
+
+        arg_type = arguments.get("arg_type", "default")
+        world_size = arguments.get("world_size", 1)
+        dtype = arguments["dtype"]
+
+        key = (arg_type, world_size, dtype)
+        if key not in result_mapping:
+            result_mapping[key] = []
+        result_mapping[key].append(result)
+
+    for key in result_mapping:
+        file_name = f"{key[0]}-group{key[1]}-{key[2]}"
+        result_list = result_mapping[key]
+
+        jsonl_file_path = op_dir.joinpath(file_name + ".jsonl")
+        with jsonlines.open(jsonl_file_path, "w") as writer:
+            for result in result_list:
+                writer.write(result)
+
+        keys = ["task_name"]
+        keys.extend(list(result_list[0]["arguments"].keys()))
+        keys.extend(list(result_list[0]["targets"].keys()))
+
+        csv_file_path = op_dir.joinpath(file_name + ".csv")
+        with open(csv_file_path, "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(keys)
+            for result in result_list:
+                row = [args.task]
+                row.extend(list(result["arguments"].values()))
+                row.extend(list(result["targets"].values()))
+                writer.writerow(row)
+
+        

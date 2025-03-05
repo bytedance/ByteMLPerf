@@ -17,6 +17,9 @@ BACKEND_MAPPING = {}
 for backend_dir in BACKEND_DIR.iterdir():
     backend_name = backend_dir.stem
 
+    if backend_name.startswith("_"):
+        continue
+
     backend_module = importlib.import_module(
         "backends." + backend_name + ".backend_" + backend_name.lower())
     backend_cls = getattr(backend_module, "Backend" + backend_name)

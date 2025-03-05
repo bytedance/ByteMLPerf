@@ -56,8 +56,6 @@ class AddOp(BasicOp):
 
         self.calc_flops = self.batch_size * self.dim_size * 2    
 
-        
-
         self._run_func = self.add_run
 
 
@@ -113,7 +111,11 @@ class GemmOp(BasicOp):
         super().__init__(args_dict, backend, *args, **kwargs)
 
         self.dtype = self.args_dict["dtype"]
-        self.torch_dtype = getattr(torch, self.dtype)
+        
+        if self.dtype == "tfloat32":
+            self.torch_dtype = torch.float32
+        else:
+            self.torch_dtype = getattr(torch, self.dtype)
         self.dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
 
         self.M = self.args_dict["M"]

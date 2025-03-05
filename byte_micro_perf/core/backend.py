@@ -160,7 +160,6 @@ class Backend(ABC):
 
         latency_us = 0.
         try:
-
             max_data_cnt = 1
             if not type(op_instance).is_concurrent():
                 if tensor_size > assume_avail_bytes:
@@ -172,9 +171,9 @@ class Backend(ABC):
                 else:
                     max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), 32)
 
-            tensor_list = op_instance.create_tensors(1)
+            tensor_list = op_instance.create_tensors(max_data_cnt)
             latency_us = self.core_perf(op_instance, 2, 2, tensor_list)
-            prefer_iters = min(max(int(1000000 / latency_us), 1), 100)
+            prefer_iters = min(max(int(1000000 / latency_us), 2), 32)
 
             if op_instance.group_size > 1:
                 dist_module = self.get_dist_module()
@@ -183,6 +182,8 @@ class Backend(ABC):
                 prefer_iters = max(prefer_iters_list)
                 
             latency_us = self.core_perf(op_instance, 2, prefer_iters, tensor_list)
+            del tensor_list
+            self.empty_cache()
         except Exception as e:
             pass
 

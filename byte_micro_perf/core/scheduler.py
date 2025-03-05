@@ -133,7 +133,7 @@ class Scheduler:
 
         instance_num = len(self.backend.target_devices)
         input_queues = mp.Queue()
-        output_queues = mp.Queue(maxsize=1)
+        output_queues = mp.Queue()
         try:
             _subprocess = mp.spawn(
                 fn=self.subprocess_func,
@@ -153,28 +153,39 @@ class Scheduler:
         logger.info("all ranks are ready and listening, init done")
 
 
-
-
-
-        # distribute test cases
-        for test_case in test_cases:
+        # # distribute test cases
+        # print(f"total   :\t{'*'*len(test_cases)}")
+        # print(f"current :\t", end="", flush=True)
+        valid_case_set = set()
+        for index, test_case in enumerate(test_cases):
             world_size = test_case.get("world_size", 1)
             if world_size <= self.backend.device_num_per_numa * self.backend.numa_world_size:
+                test_case["index"] = index
+                valid_case_set.add(index)
                 input_queues.put(test_case, False)
 
-
-        # devices are independent
         if not self.is_concurrent:      
             for _ in range(instance_num):
                 input_queues.put(None, False)
-        # devices are concurrent
         else:
             input_queues.put(None, False)
 
 
+        result_list = []
+        while len(valid_case_set) > 0:
+            result_json = output_queues.get()
+            result_list.append(result_json)
+            valid_case_set.remove(result_json["arguments"]["index"])
+
+        result_list = sorted(result_list, key=lambda x: x["arguments"]["index"])
+        for result in result_list:
+            result["arguments"].pop("index")
+
         for process in self._subprocesses:
             process.join()
-        
+
+        return result_list
+
 
 
     def subprocess_func(self, instance_rank : int, *args): 
@@ -195,8 +206,6 @@ class Scheduler:
 
         output_queues.put("ready")
 
-
-
         if not self.is_concurrent:
             while True:
                 if self.disable_parallel:
@@ -208,8 +217,8 @@ class Scheduler:
 
                 op_instance = create_op(self.op_name, test_case, backend)
                 result_json = backend.perf(op_instance)
-
-                print(result_json)
+                print(f"{true_rank}: {result_json}")
+                output_queues.put(result_json, block=False)
         else:
             process_groups_mapping = {
                 true_world_size: None
@@ -234,12 +243,28 @@ class Scheduler:
                 if true_rank < world_size:
                     op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size], group_size=world_size)
                     result_json = backend.perf(op_instance)
+                else:
+                    continue
+
+                result_list = [None for _ in range(world_size)]
+                result_list[true_rank] = result_json
+                if world_size > 1:
+                    dist_module.all_gather_object(result_list, result_json, group=process_groups_mapping[world_size])
 
                 if true_rank == 0:
-                    print(result_json)
+                    if result_json["targets"]:
+                        latency_list = [result["targets"]["latency(us)"] for result in result_list]
+                        algo_bw_list = [result["targets"]["algo_bw(GB/s)"] for result in result_list]
+                        bus_bw_list = [result["targets"]["bus_bw(GB/s)"] for result in result_list]
 
-                if true_world_size > 1:
-                    dist_module.barrier()
+                        result_json["targets"]["algo_bw_sum(GB/s)"] = sum(algo_bw_list)
+                        result_json["targets"]["bus_bw_sum(GB/s)"] = sum(bus_bw_list)
+                        result_json["targets"]["latency_list(us)"] = latency_list
+                        result_json["targets"]["algo_bw_list(GB/s)"] = algo_bw_list
+                        result_json["targets"]["bus_bw_list(GB/s)"] = bus_bw_list
+
+                    print(f"{true_rank}: {result_json}")
+                    output_queues.put(result_json, block=False)
 
         backend.destroy_process_group()
 
