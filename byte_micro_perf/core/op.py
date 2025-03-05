@@ -18,6 +18,9 @@ class BasicOp:
     def __init__(self, args_dict, backend, *args, **kwargs):
         self.args_dict = args_dict
         self.backend = backend
+        
+        self.op_group = kwargs.get("op_group", None)
+        self.group_size = kwargs.get("group_size", 1)
 
         # custom config for backend and op
         self._custom_run = False
@@ -27,6 +30,8 @@ class BasicOp:
         self.input_tensor_info = None
         self.output_tensor_info = None
         self.calc_flops = None
+
+        
 
 
     @staticmethod
@@ -62,7 +67,7 @@ class BasicOp:
 
     
 
-    def parepare_op(self):
+    def prepare(self):
         pass
 
     def create_tensors(self, instance_num : int):
@@ -73,7 +78,7 @@ class BasicOp:
         for i in range(instance_num):
             tensor_mapping = {}
             for key, value in input_tensor_info.items():
-                tensor_mapping[key] = torch.randint(
+                tensor_mapping[key] = torch.empty(
                     size=value.shape
                 ).to(dtype=value.dtype, device=torch_device_name)
             for key, value in output_tensor_info.items():

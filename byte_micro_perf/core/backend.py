@@ -1,5 +1,7 @@
 import os
 import sys
+import math
+import time
 import pathlib
 from datetime import timedelta
 from abc import ABC, abstractmethod
@@ -101,7 +103,7 @@ class Backend(ABC):
             return None
 
 
-    def op_group_barrier(self, op_group, group_size):
+    def op_group_barrier(self, op_group=None, group_size=1):
         dist_module = self.get_dist_module()
         if dist_module.is_initialized() and group_size > 1:
             dist_module.barrier(group=op_group)
@@ -114,39 +116,57 @@ class Backend(ABC):
     
 
 
+    def core_perf(self, op_instance, prefer_iterations, tensor_list):
+        op_group = op_instance.op_group
+        group_size = op_instance.group_size
+
+
+        self.device_synchronize()
+        self.op_group_barrier(op_group=op_group, group_size=group_size)
+
+        start_time = time.perf_counter_ns()
+        for i in range(prefer_iterations):
+            op_instance.core_run(tensor_list[i % len(tensor_list)])
+
+        self.device_synchronize()
+        self.op_group_barrier(op_group=op_group, group_size=group_size)
+        end_time = time.perf_counter_ns()
+        return (end_time - start_time) / 1e3 / prefer_iterations
+            
+
 
     
-    def perf(self, op_instance, *args, **kwargs):
-        return
-
-
+    def perf(self, op_instance):
         if op_instance.is_custom_run():
-            latency_us = op_instance.core_run(*args, **kwargs)
-        else:
-            # op
-            op_size_info = op_instance.get_size_info()
+            latency_us = op_instance.core_run()
+            return latency_us
+        
+    
 
-            # device
-            device_mem_info = self.get_mem_info()
-            avail_memory = device_mem_info[0]
-            total_memory = device_mem_info[1]
-            memory_limit = int(avail_memory * 0.9)
+        # op
+        op_size_info = op_instance.get_size_info()
+        tensor_size = op_size_info.tensor_size
+
+        # device
+        device_mem_info = self.get_mem_info()
+        avail_memory = device_mem_info[0]
+
+        # assume
+        assume_cache_size = 1 * (1024 ** 3)
+        assume_avail_bytes = int(avail_memory * 0.9)
 
 
-            if type(op_instance).is_concurrent():
-                pass
+        if not type(op_instance).is_concurrent():
+            if tensor_size > assume_avail_bytes:
+                return 0
+            elif 2 * tensor_size > assume_avail_bytes:
+                max_data_cnt = 1
+            elif tensor_size > assume_cache_size:
+                max_data_cnt = 2
             else:
-                pass
-
-
-
-            # print(avail_memory, total_memory, memory_limit)
-
-
-            # tensor_size = op_size_info.tensor_size
-
-
-    
-    
-
+                max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), 32)
+            
+            # create tensor_list for each op
+            tensor_list = op_instance.create_tensors(max_data_cnt)
+            latency_us = self.core_perf(op_instance, 4, tensor_list)
 

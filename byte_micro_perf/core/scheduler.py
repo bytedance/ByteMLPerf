@@ -189,13 +189,12 @@ class Scheduler:
 
 
         backend.set_device(true_device_index)
-
-
-        if true_world_size > 1:
+        if self.is_concurrent and true_world_size > 1:
             backend.initialize_ccl(true_rank, true_world_size)
             dist_module = backend.get_dist_module()
 
         output_queues.put("ready")
+
 
 
         if not self.is_concurrent:
@@ -241,7 +240,7 @@ class Scheduler:
 
 
                 if test_case:
-                    op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size])
+                    op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size], group_size=world_size)
                     result_json = backend.perf(op_instance)
 
                 if true_world_size > 1:

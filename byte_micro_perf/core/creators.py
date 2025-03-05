@@ -56,8 +56,8 @@ def create_backend(backend_type: str):
     return backend_instance
 
 
-def create_op(op_type: str, args_dict: dict, backend, op_group=None):
+def create_op(op_type: str, args_dict: dict, backend, op_group=None, group_size=1):
     backend_type = backend.backend_type
     op_cls = get_op_cls(backend_type, op_type)
-    op_instance = op_cls(args_dict, backend, op_group=op_group)
+    op_instance = op_cls(args_dict, backend, op_group=op_group, group_size=group_size)
     return op_instance

@@ -205,7 +205,6 @@ class AllGatherOp(BasicOp):
         self.world_size = self.args_dict["world_size"]
         self.batch_size = self.args_dict["batch_size"]
         self.dim_size = self.args_dict["dim_size"]
-        self.op_group = kwargs.get("op_group", None)
 
         self.input_tensor_info = {
             "src": OpTensorInfo(
