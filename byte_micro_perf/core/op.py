@@ -90,11 +90,11 @@ class BasicOp:
         for i in range(instance_num):
             tensor_mapping = {}
             for key, value in input_tensor_info.items():
-                tensor_mapping[key] = torch.empty(
+                tensor_mapping[key] = torch.zeros(
                     size=value.shape
                 ).to(dtype=value.dtype, device=torch_device_name)
             for key, value in output_tensor_info.items():
-                tensor_mapping[key] = torch.empty(
+                tensor_mapping[key] = torch.zeros(
                     size=value.shape
                 ).to(dtype=value.dtype, device=torch_device_name)
             all_tensor_list.append(tensor_mapping)

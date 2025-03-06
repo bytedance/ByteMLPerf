@@ -13,9 +13,7 @@ MICRO_PERF_DIR = BACKEND_DIR.parent
 
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
-
 from core.backend import Backend
-
 
 # ops
 from core.ops.binary_ops import *
@@ -35,10 +33,9 @@ OP_MAPPING = {
     "gemm": MLUGemmOp,
 
     # xccl_ops
-    "all_gather": AllGatherOp
+    "all_gather": AllGatherOp, 
+    "all_reduce": AllReduceOp
 }
-
-
 
 
 

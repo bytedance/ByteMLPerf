@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import signal
 import pathlib
 import traceback
@@ -153,35 +154,33 @@ class Scheduler:
         logger.info("all ranks are ready and listening, init done")
 
 
-        # # distribute test cases
-        # print(f"total   :\t{'*'*len(test_cases)}")
-        # print(f"current :\t", end="", flush=True)
-        valid_case_set = set()
-        for index, test_case in enumerate(test_cases):
-            world_size = test_case.get("world_size", 1)
-            if world_size <= self.backend.device_num_per_numa * self.backend.numa_world_size:
-                test_case["index"] = index
-                valid_case_set.add(index)
-                input_queues.put(test_case, False)
-
-        if not self.is_concurrent:      
-            for _ in range(instance_num):
-                input_queues.put(None, False)
-        else:
-            input_queues.put(None, False)
-
 
         result_list = []
-        while len(valid_case_set) > 0:
-            result_json = output_queues.get()
-            result_list.append(result_json)
-            valid_case_set.remove(result_json["arguments"]["index"])
+        if self.backend.numa_rank == 0:
+            valid_case_set = set()
+            for index, test_case in enumerate(test_cases):
+                world_size = test_case.get("world_size", 1)
+                if world_size <= self.backend.device_num_per_numa * self.backend.numa_world_size:
+                    test_case["index"] = index
+                    valid_case_set.add(index)
+                    input_queues.put(test_case, False)
 
-        result_list = sorted(result_list, key=lambda x: x["arguments"]["index"])
-        for result in result_list:
-            result["sku_name"] = self.backend.get_device_name()
-            result["op_name"] = self.op_name
-            result["arguments"].pop("index")
+            if not self.is_concurrent:      
+                for _ in range(instance_num):
+                    input_queues.put(None, False)
+            else:
+                input_queues.put(None, False)
+        
+            while len(valid_case_set) > 0:
+                result_json = output_queues.get()
+                result_list.append(result_json)
+                valid_case_set.remove(result_json["arguments"]["index"])
+
+            result_list = sorted(result_list, key=lambda x: x["arguments"]["index"])
+            for result in result_list:
+                result["sku_name"] = self.backend.get_device_name()
+                result["op_name"] = self.op_name
+                result["arguments"].pop("index")
 
         for process in self._subprocesses:
             process.join()
@@ -278,9 +277,9 @@ class Scheduler:
                         arguments = result_json["arguments"]
                         latency = result_json["targets"]["latency(us)"]
 
-                    arguments = result_json["arguments"]
-                    targets = result_json["targets"]
-                    print(f"{arguments}\n{targets}\n")             
+                    arguments_str = json.dumps(result_json["arguments"])
+                    targets_str = json.dumps(result_json["targets"], indent=4)
+                    print(f"{arguments_str}\n{targets_str}\n")             
                     
                     output_queues.put(result_json, block=False)
 
