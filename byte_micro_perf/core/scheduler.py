@@ -222,9 +222,9 @@ class Scheduler:
                 except Exception as e:
                     print(e)
 
-                arguments = result_json["arguments"]
-                targets = result_json["targets"]
-                print(f"{arguments}\n{targets}\n")
+                arguments_str = json.dumps(result_json["arguments"])
+                targets_str = json.dumps(result_json["targets"], indent=4)
+                print(f"{arguments_str}\n{targets_str}\n")         
 
                 output_queues.put(result_json, block=False)
         else:
