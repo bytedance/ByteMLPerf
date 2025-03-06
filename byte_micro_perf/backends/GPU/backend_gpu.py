@@ -15,11 +15,28 @@ sys.path.insert(0, str(MICRO_PERF_DIR))
 
 
 from core.backend import Backend
-from core.op_mapping import DEFAULT_OP_MAPPING
+
+# ops
+from core.ops.binary_ops import *
+from core.ops.ccl_ops import *
+from core.ops.gemm_ops import *
 from .custom_ops import GpuGemmOp
 
-OP_MAPPING = DEFAULT_OP_MAPPING.copy()
-OP_MAPPING["gemm"] = GpuGemmOp
+
+OP_MAPPING = {
+    # binary_ops
+    "add": AddOp, 
+    "sub": SubOp,
+    "mul": MulOp,
+    "div": DivOp,
+
+    # gemm_ops
+    "gemm": GpuGemmOp,
+
+    # xccl_ops
+    "all_gather": AllGatherOp
+}
+
 
 
 

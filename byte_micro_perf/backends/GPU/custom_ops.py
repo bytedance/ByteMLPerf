@@ -8,8 +8,7 @@ MICRO_PERF_DIR = FILE_DIR.parent.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 
-from core.op_mapping import GemmOp
-
+from core.ops.gemm_ops import GemmOp
 
 class GpuGemmOp(GemmOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
