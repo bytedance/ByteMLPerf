@@ -19,7 +19,7 @@ class TpuScheduler(CoreScheduler):
         sampler: CoreSampler,
         xpu_cfg
     ) -> None:
-        super().__init__(inferencer, sampler, xpu_cfg)
+        super().__init__(inferencer, sampler)
         self.max_batch_size = xpu_cfg["max_batch_size"]
         
         
@@ -30,7 +30,6 @@ class TpuScheduler(CoreScheduler):
         context_slots: List[int] = []
 
         while self.started:
-            
             while not self.task_queue.empty():
                 if len(avail_slots) == 0:
                     break

@@ -12,10 +12,10 @@ import torch
 import torch.nn as nn
 import torch_tpu
 
-from .tpu_llama2 import TPULlama
+from .tpu_llama import TPULlama
 
 from llm_perf.utils.logger import logger
 
 __all__ = {
-    "llama2": TPULlama,
+    "llama3.1": TPULlama,
 }

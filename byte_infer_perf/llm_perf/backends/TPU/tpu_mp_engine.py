@@ -4,7 +4,8 @@ import time
 import signal
 import pathlib
 from multiprocessing import Queue
-from typeing import List
+from typing import List
+from abc import ABC
 
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ import torch_tpu
 
 from llm_perf.core.mp_engine import CoreMpEngine
 from llm_perf.utils.logger import logger
+
 
 # context: 
 #   input_ids: [1, s_q]
@@ -31,7 +33,7 @@ def get_context_masks(
         1, q_len, q_len, 
         device=input_ids.device
     )
-    full_attention_mask.tril_()
+    # full_attention_mask.tril_()
     full_attention_mask = full_attention_mask * padding_mask.unsqueeze(1)
     full_attention_mask -= padding_mask.unsqueeze(-1) - 1
     full_attention_mask = (full_attention_mask < 0.5).bool()
@@ -69,18 +71,17 @@ def get_decode_masks(
 class TpuMpEngine(CoreMpEngine):
     def __init__(self, world_size: int, model_impl: nn.Module, xpu_cfg) -> None:
         super().__init__(world_size, model_impl, xpu_cfg)
-        
     def build_inputs(self, forward_inputs):
         # list --> torch.Tensor --> cuda
         forward_inputs["input_ids"] = torch.tensor(
             forward_inputs["input_ids"]
-        ).tpu()
+        ).to(torch.int32).tpu()
         forward_inputs["position_ids"] = torch.tensor(
             forward_inputs["position_ids"]
-        ).tpu()
+        ).to(torch.int32).tpu()
         forward_inputs["attention_mask"] = torch.tensor(
             forward_inputs["attention_mask"]
-        ).tpu()
+        ).to(torch.int32).tpu()
         
         is_context = forward_inputs["is_context"]
         if is_context:
@@ -96,7 +97,7 @@ class TpuMpEngine(CoreMpEngine):
         return forward_inputs
 
     @torch.no_grad()
-    def my_loop_worker(
+    def mp_loop_worker(
         self,
         local_rank: int,
         world_size: int,
@@ -147,13 +148,12 @@ class TpuMpEngine(CoreMpEngine):
                     workspace_dir.mkdir(exist_ok=True, parents=True)
                     forward_inputs["log_file"] = open(workspace_dir / "run.log", "w")
 
-
                 inputs_dict = self.build_inputs(forward_inputs)
                 start_time = time.perf_counter_ns()
 
                 output_dict = model.forward(inputs_dict)
 
-                torch.cuda.synchronize()
+                torch.tpu.synchronize()
                 end_time = time.perf_counter_ns()
                 duration_ms = round((end_time - start_time) / 1e6, 3)
                 output_dict["duration_ms"] = duration_ms
