@@ -19,10 +19,6 @@ class Backend(ABC):
     def __init__(self):
         pass
 
-    def __del__(self):
-        self.destroy_process_group()
-
-
     """
     device management related
     """

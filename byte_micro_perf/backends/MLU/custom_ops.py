@@ -24,12 +24,12 @@ class MLUGemmOp(GemmOp):
 
         if self.dtype == "float32":
             self.torch_dtype = torch.float32
-            torch.backends.mlu.matmul.allow_tf32 = False
-            torch.backends.cnnl.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
+            torch.backends.cudnn.allow_tf32 = False
         elif self.dtype == "tfloat32":
             self.torch_dtype = torch.float32
-            torch.backends.mlu.matmul.allow_tf32 = True
-            torch.backends.cnnl.allow_tf32 = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
         else:
             self.torch_dtype = getattr(torch, self.dtype)
 
