@@ -17,22 +17,27 @@ from core.backend import Backend
 
 # ops
 from core.ops.binary_ops import *
-from core.ops.ccl_ops import *
+from core.ops.reduction_ops import *
 from core.ops.gemm_ops import *
+from core.ops.ccl_ops import *
+
 from .custom_ops import GpuGemmOp
 
 
 OP_MAPPING = {
-    # binary_ops
+    # binary ops
     "add": AddOp, 
     "sub": SubOp,
     "mul": MulOp,
     "div": DivOp,
 
-    # gemm_ops
+    # reduction ops
+    "softmax": SoftmaxOp,
+
+    # gemm ops
     "gemm": GpuGemmOp,
 
-    # xccl_ops
+    # xccl ops
     "all_gather": AllGatherOp, 
     "all_reduce": AllReduceOp
 }

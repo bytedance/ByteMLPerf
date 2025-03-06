@@ -125,11 +125,11 @@ if __name__ == "__main__":
             arguments = result["arguments"]
             targets = result["targets"]
 
-            arg_type = arguments.get("arg_type", "default")
+            args_type = arguments.get("args_type", "default")
             world_size = arguments.get("world_size", 1)
             dtype = arguments["dtype"]
 
-            key = (arg_type, world_size, dtype)
+            key = (args_type, world_size, dtype)
             if key not in result_mapping:
                 result_mapping[key] = []
             result_mapping[key].append(result)
