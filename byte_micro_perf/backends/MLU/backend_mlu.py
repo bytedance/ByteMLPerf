@@ -17,8 +17,9 @@ from core.backend import Backend
 
 # ops
 from core.ops.binary_ops import *
-from core.ops.ccl_ops import *
+from core.ops.reduction_ops import *
 from core.ops.gemm_ops import *
+from core.ops.ccl_ops import *
 from .custom_ops import MLUGemmOp
 
 
@@ -29,6 +30,9 @@ OP_MAPPING = {
     "mul": MulOp,
     "div": DivOp,
 
+    # reduction ops
+    "softmax": SoftmaxOp,
+
     # gemm_ops
     "gemm": MLUGemmOp,
 
@@ -38,10 +42,11 @@ OP_MAPPING = {
 }
 
 
-
 class BackendMLU(Backend):
     def __init__(self):
         super().__init__()
+
+        os.environ['TORCH_ALLOW_TF32_CNMATMUL_OVERRIDE'] = '0'
 
     """
     device management related
