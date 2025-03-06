@@ -11,8 +11,7 @@ sys.path.insert(0, str(MICRO_PERF_DIR))
 from core.utils import logger
 from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
 from core.op import BasicOp
-from core.op_mapping import GemmOp
-
+from core.ops.gemm_ops import GemmOp
 
 class MLUGemmOp(GemmOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
@@ -24,12 +23,12 @@ class MLUGemmOp(GemmOp):
 
         if self.dtype == "float32":
             self.torch_dtype = torch.float32
-            torch.backends.cuda.matmul.allow_tf32 = False
-            torch.backends.cudnn.allow_tf32 = False
+            torch.backends.mlu.matmul.allow_tf32 = False
+            torch.backends.cnnl.allow_tf32 = False
         elif self.dtype == "tfloat32":
             self.torch_dtype = torch.float32
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.mlu.matmul.allow_tf32 = True
+            torch.backends.cnnl.allow_tf32 = True
         else:
             self.torch_dtype = getattr(torch, self.dtype)
 
