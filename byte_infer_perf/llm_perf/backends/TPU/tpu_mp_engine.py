@@ -72,7 +72,7 @@ class TpuMpEngine(CoreMpEngine):
     def __init__(self, world_size: int, model_impl: nn.Module, xpu_cfg) -> None:
         super().__init__(world_size, model_impl, xpu_cfg)
     def build_inputs(self, forward_inputs):
-        # list --> torch.Tensor --> cuda
+        # list --> torch.Tensor --> tpu
         forward_inputs["input_ids"] = torch.tensor(
             forward_inputs["input_ids"]
         ).to(torch.int32).tpu()
@@ -158,10 +158,11 @@ class TpuMpEngine(CoreMpEngine):
                 duration_ms = round((end_time - start_time) / 1e6, 3)
                 output_dict["duration_ms"] = duration_ms
 
+                output_dict["logits"] = output_dict["logits"].to('cpu')
                 # TP realization: rank0 send result back to main process
                 if local_rank == 0:
                     output_queue.put(output_dict)
-
+                
                 if log and workspace is not None:
                     forward_inputs["log_file"].close()
 

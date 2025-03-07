@@ -1016,7 +1016,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 causal_mask = torch.triu(causal_mask, diagonal=1)
             
             # origin_dtype = causal_mask.dtype
-            causal_mask *= torch.arange(target_length, device=device).to(torch.int32) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(target_length, device=device).to(torch.int32) > cache_position.reshape(-1, 1).to(torch.int32)
             # causal_mask.to_(origin_dtype)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:

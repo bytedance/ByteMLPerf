@@ -9,9 +9,9 @@
     }, 
     "test_perf": true,
     "perf_config": {
-        "tp_sizes": [1, 2, 4, 8], 
-        "batch_sizes": [1, 4, 8, 16, 24, 32],
-        "input_tokens": [1024, 2048], 
+        "tp_sizes": [1], 
+        "batch_sizes": [1, 4, 8],
+        "input_tokens": [1024], 
         "output_tokens": 200, 
         "perf_time": 100
     }

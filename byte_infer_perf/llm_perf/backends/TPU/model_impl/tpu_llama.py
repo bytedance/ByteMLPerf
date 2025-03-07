@@ -163,7 +163,6 @@ class TPULlama(nn.Module):
             # past_key_values=self.kv_cache
             past_key_values=None
         )
-
         # context: [1, seq_len] --> [1, seq_len, vocab_size] or [1, 1, vocab_size]
         # decode: [max_batch_size, 1]
         logits = model_outputs.logits
