@@ -18,10 +18,10 @@ from core.backend import Backend
 # ops
 from core.ops.binary_ops import *
 from core.ops.reduction_ops import *
-from core.ops.gemm_ops import *
 from core.ops.ccl_ops import *
+from core.ops.gemm_ops import *
 
-from .custom_ops import GpuGemmOp
+from .custom_ops import GPUGemmOp, GPUFlashAttentionOp, GPUFlashMLAOp
 
 
 OP_MAPPING = {
@@ -32,14 +32,18 @@ OP_MAPPING = {
     "div": DivOp,
 
     # reduction ops
-    "softmax": SoftmaxOp,
-
-    # gemm ops
-    "gemm": GpuGemmOp,
+    "softmax": SoftmaxOp, 
 
     # xccl ops
     "all_gather": AllGatherOp, 
-    "all_reduce": AllReduceOp
+    "all_reduce": AllReduceOp, 
+
+    # gemm ops
+    "gemm": GPUGemmOp,
+
+    # attn ops
+    "flash_attention": GPUFlashAttentionOp,
+    "flash_mla": GPUFlashMLAOp,
 }
 
 

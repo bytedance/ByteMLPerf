@@ -1,2 +1,4 @@
 prettytable
 jsonlines
+ninja
+packaging

@@ -25,6 +25,7 @@ class BasicOp:
         # custom config for backend and op
         self._custom_run = False
         self._run_func = self.empty_run
+        self._provider = "torch"
 
         # preset
         self.input_tensor_info = None
@@ -70,6 +71,8 @@ class BasicOp:
         return self.calc_flops
 
 
+    def get_provider(self):
+        return self._provider
 
     def is_custom_run(self):
         return self._custom_run
@@ -105,6 +108,7 @@ class BasicOp:
 
     def summary(self, latency_us):
         result_dict = {
+            "provider": self.get_provider(),
             "arguments": self.args_dict,
             "targets": {}
         }

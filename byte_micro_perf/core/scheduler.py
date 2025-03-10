@@ -72,17 +72,28 @@ class Scheduler:
         target_devices = []
         total_target_devices = []
         device_num_per_numa = ori_target_device_count // self.backend.numa_world_size
-        if self.backend.numa_world_size > ori_target_device_count:
-            if self.backend.numa_rank >= ori_target_device_count:
+
+        # not concurrent and disable_parallel, only enable 1 device
+        if not self.is_concurrent and self.disable_parallel:
+            if self.backend.numa_rank != 0:
                 exit(0)
-            self.backend.numa_world_size = ori_target_device_count
+            target_devices = ori_target_devices[0:1]
+            total_target_devices = ori_target_devices[0:1]
             device_num_per_numa = 1
-            target_devices = ori_target_devices[self.backend.numa_rank:self.backend.numa_rank+1] 
-            total_target_devices = ori_target_devices
+            self.backend.numa_world_size = 1
+            self.backend.numa_rank = 0
         else:
-            for i in range(self.backend.numa_rank * device_num_per_numa, (self.backend.numa_rank + 1) * device_num_per_numa):
-                target_devices.append(ori_target_devices[i])
-            total_target_devices = ori_target_devices[0:self.backend.numa_world_size * device_num_per_numa]
+            if self.backend.numa_world_size > ori_target_device_count:
+                if self.backend.numa_rank >= ori_target_device_count:
+                    exit(0)
+                self.backend.numa_world_size = ori_target_device_count
+                device_num_per_numa = 1
+                target_devices = ori_target_devices[self.backend.numa_rank:self.backend.numa_rank+1] 
+                total_target_devices = ori_target_devices
+            else:
+                for i in range(self.backend.numa_rank * device_num_per_numa, (self.backend.numa_rank + 1) * device_num_per_numa):
+                    target_devices.append(ori_target_devices[i])
+                total_target_devices = ori_target_devices[0:self.backend.numa_world_size * device_num_per_numa]
 
         
         self.backend.ori_target_devices = ori_target_devices
@@ -224,7 +235,7 @@ class Scheduler:
 
                 arguments_str = json.dumps(result_json["arguments"])
                 targets_str = json.dumps(result_json["targets"], indent=4)
-                print(f"{arguments_str}\n{targets_str}\n")         
+                print(f"{true_rank}: {arguments_str}\n{targets_str}\n")         
 
                 output_queues.put(result_json, block=False)
         else:
@@ -279,7 +290,7 @@ class Scheduler:
 
                     arguments_str = json.dumps(result_json["arguments"])
                     targets_str = json.dumps(result_json["targets"], indent=4)
-                    print(f"{arguments_str}\n{targets_str}\n")             
+                    print(f"{true_rank}: {arguments_str}\n{targets_str}\n")             
                     
                     output_queues.put(result_json, block=False)
 
