@@ -515,17 +515,28 @@ class LlamaSdpaAttention(LlamaAttention):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
-
+        
+        cur_device = query_states.device
+        
         attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
+            query_states.to('cpu'),
+            key_states.to('cpu'),
+            value_states.to('cpu'),
+            attn_mask=causal_mask.to('cpu'),
             dropout_p=self.attention_dropout if self.training else 0.0,
             is_causal=is_causal,
         )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
+        # attn_output = torch.nn.functional.scaled_dot_product_attention(
+        #     query_states,
+        #     key_states,
+        #     value_states,
+        #     attn_mask=causal_mask,
+        #     dropout_p=self.attention_dropout if self.training else 0.0,
+        #     is_causal=is_causal,
+        # )
+
+        attn_output = attn_output.transpose(1, 2).contiguous().to(cur_device)
         attn_output = attn_output.view(bsz, q_len, -1)
 
         attn_output = self.o_proj(attn_output)
@@ -545,8 +556,7 @@ class LlamaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        # self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
-        self.self_attn = LlamaAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -923,8 +933,8 @@ class LlamaModel(LlamaPreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if False:
-        # if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        # if False:
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,

@@ -15,6 +15,7 @@ from accelerate import init_empty_weights
 from llm_perf.backends.TPU.tpu_ckpt_loader import TpuCkptLoader
 from llm_perf.core.ckpt_loader import Llama_ModelLoader
 from transformers import LlamaConfig
+from transformers.cache_utils import DynamicCache, StaticCache
 from .modeling_llama3 import LlamaForCausalLM
 
 
@@ -122,7 +123,7 @@ class TPULlama(nn.Module):
 
         # check_memory_usage("After model to device")
 
-        # self.kv_cache = self.init_kvcache(self.llama_config.torch_dtype)
+        self.kv_cache = self.init_kvcache(self.llama_config.torch_dtype)
 
         if self.mp_size > 1:
             dist.barrier()
@@ -138,30 +139,24 @@ class TPULlama(nn.Module):
 
     def init_kvcache(self, dtype):
         max_batch_size = self.xpu_cfg["max_batch_size"]
-        num_layers = self.llama_config.num_hidden_layers
-        max_seq_len = self.llama_config.max_position_embeddings
-        hidden_size = self.llama_config.hidden_size
-        q_head_num = self.llama_config.num_attention_heads
-        kv_head_num = self.llama_config.num_key_value_heads
-        head_dim = hidden_size // q_head_num
-
         cur_device = self.transformer_model.device
-
-        past_key_values = ()
-        for i in range(num_layers):
-            kv_shape = (max_batch_size, kv_head_num // self.mp_size, max_seq_len, head_dim)
-            key_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
-            value_cache = torch.empty(kv_shape, dtype=dtype, device=cur_device)
-            past_key_values += ((key_cache, value_cache),)
-        return past_key_values
+        # cache = DynamicCache(num_layers)
+        
+        cache = StaticCache(self.llama_config,
+                            max_batch_size,
+                            4096,
+                            torch.device('cpu'), # torch.zeros not support bf16 with TPU now
+                            dtype,
+                            max_batch_size).to(cur_device)
+        return cache
     
 
     def forward(self, inputs : Dict[str, torch.Tensor]):
         # inputs = inputs.to(torch.int32)
         model_outputs = self.transformer_model.forward(
             **inputs, 
-            # past_key_values=self.kv_cache
-            past_key_values=None
+            past_key_values=self.kv_cache
+            # past_key_values=None
         )
         # context: [1, seq_len] --> [1, seq_len, vocab_size] or [1, 1, vocab_size]
         # decode: [max_batch_size, 1]
