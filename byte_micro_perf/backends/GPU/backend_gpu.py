@@ -20,6 +20,7 @@ from core.ops.binary_ops import *
 from core.ops.reduction_ops import *
 from core.ops.ccl_ops import *
 from core.ops.gemm_ops import *
+from core.ops.attn_ops import *
 
 from .custom_ops import GPUGemmOp, GPUFlashAttentionOp, GPUFlashMLAOp
 

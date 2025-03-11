@@ -2,7 +2,6 @@ import sys
 import pathlib
 import torch
 
-
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 MICRO_PERF_DIR = FILE_DIR.parent.parent
 
@@ -12,15 +11,12 @@ from core.utils import logger
 from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
 from core.op import BasicOp
 
-
-
 """
 gemm ops
 """
 class GemmOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
-
 
     def prepare(self):
         self.dtype = self.args_dict["dtype"]

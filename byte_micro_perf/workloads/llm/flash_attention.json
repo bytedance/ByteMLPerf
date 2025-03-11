@@ -2,8 +2,9 @@
     "cases": [
         {
             "args_type": "llm",
-            "dtype": ["bfloat16"], 
+            "phase": ["prefill"],
             "is_causal": [true], 
+            "dtype": ["bfloat16"], 
             "q_head_num.kv_head_num": [
                 [8, 1], 
                 [64, 8]

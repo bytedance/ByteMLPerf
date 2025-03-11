@@ -139,8 +139,6 @@ class Backend(ABC):
             latency_us = op_instance.core_run()
             return latency_us
         
-    
-
         # op
         op_size_info = op_instance.get_size_info()
         tensor_size = op_size_info.tensor_size
@@ -174,13 +172,11 @@ class Backend(ABC):
             tensor_list = op_instance.create_tensors(max_data_cnt)
             latency_us = self.core_perf(op_instance, 2, 2, tensor_list)
             prefer_iters = min(max(int(max_test_time / latency_us), 2), min_test_iters)
-
             if op_instance.group_size > 1:
                 dist_module = self.get_dist_module()
                 prefer_iters_list = [None for _ in range(op_instance.group_size)]
                 dist_module.all_gather_object(prefer_iters_list, prefer_iters, group=op_instance.op_group)
                 prefer_iters = max(prefer_iters_list)
-                
             time.sleep(sleep_time)
             latency_us = self.core_perf(op_instance, 2, prefer_iters, tensor_list)
 

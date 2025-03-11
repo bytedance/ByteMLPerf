@@ -94,12 +94,16 @@ class BasicOp:
             tensor_mapping = {}
             for key, value in input_tensor_info.items():
                 tensor_mapping[key] = torch.zeros(
-                    size=value.shape
-                ).to(dtype=value.dtype, device=torch_device_name)
+                    size=value.shape, 
+                    dtype=value.dtype,
+                    device=torch_device_name
+                )
             for key, value in output_tensor_info.items():
                 tensor_mapping[key] = torch.zeros(
-                    size=value.shape
-                ).to(dtype=value.dtype, device=torch_device_name)
+                    size=value.shape, 
+                    dtype=value.dtype,
+                    device=torch_device_name
+                )
             all_tensor_list.append(tensor_mapping)
 
         return all_tensor_list
@@ -115,10 +119,10 @@ class BasicOp:
         if latency_us > 0:
             result_dict["targets"] = {
                 "latency(us)": round(latency_us, 3),
-                "mem_bw(GB/s)": round(self.io_bytes / (latency_us * 1e-6) / 1e9, 3),
-                "algo_bw(GB/s)": round(self.algo_size / (latency_us * 1e-6) / 1e9, 3),
-                "bus_bw(GB/s)": round(self.bus_size / (latency_us * 1e-6) / 1e9, 3),
-                "calc_flops_power(tflops)": round(self.calc_flops / (latency_us * 1e-6) / 1e12, 3),
-                "calc_mem_ratio": round(self.calc_flops / self.io_bytes, 3)
+                "mem_bw(GB/s)": round(self.io_bytes / latency_us / 1e3, 3),
+                "algo_bw(GB/s)": round(self.algo_size / latency_us / 1e3, 3),
+                "bus_bw(GB/s)": round(self.bus_size / latency_us / 1e3, 3),
+                "calc_flops_power(tflops)": round(self.calc_flops / latency_us / 1e6, 3),
+                "calc_mem_ratio": round(self.calc_flops / self.io_bytes, 3) if self.io_bytes != 0 else 0
             }
         return result_dict

@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import signal
 import pathlib
 import traceback
@@ -232,10 +233,11 @@ class Scheduler:
                     result_json = backend.perf(op_instance)
                 except Exception as e:
                     print(e)
+                    print(traceback.format_exc())
 
                 arguments_str = json.dumps(result_json["arguments"])
                 targets_str = json.dumps(result_json["targets"], indent=4)
-                print(f"{true_rank}: {arguments_str}\n{targets_str}\n")         
+                print(f"{arguments_str}\n{targets_str}\n")         
 
                 output_queues.put(result_json, block=False)
         else:
@@ -265,6 +267,7 @@ class Scheduler:
                         result_json = backend.perf(op_instance)
                     except Exception as e:
                         print(e)
+                        print(traceback.format_exc())
                 else:
                     continue
 
@@ -290,7 +293,7 @@ class Scheduler:
 
                     arguments_str = json.dumps(result_json["arguments"])
                     targets_str = json.dumps(result_json["targets"], indent=4)
-                    print(f"{true_rank}: {arguments_str}\n{targets_str}\n")             
+                    print(f"{arguments_str}\n{targets_str}\n")             
                     
                     output_queues.put(result_json, block=False)
 
