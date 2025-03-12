@@ -79,7 +79,7 @@ def parse_args():
     # task
     parser.add_argument(
         "--task_dir", type=str, 
-        default=str(BYTE_MLPERF_ROOT.joinpath("workloads", "basic")), 
+        default=str(BYTE_MLPERF_ROOT.joinpath("workloads")), 
         help="The direcotry of tasks going to be evaluted, e.g., default set to workloads"
     )
     parser.add_argument(

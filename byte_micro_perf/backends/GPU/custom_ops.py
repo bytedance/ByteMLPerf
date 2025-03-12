@@ -39,7 +39,7 @@ try:
     from deep_gemm import bench_kineto, calc_diff, ceil_div, get_col_major_tma_aligned_tensor
 except ImportError:
     deep_gemm = None
-    logger.warning("deep_gemm is not available, please install it first.")
+    # logger.warning("deep_gemm is not available, please install it first.")
 
 FP8_E4M3_MAX = 448.0  # Maximum representable value in FP8 E4M3 format
 
@@ -167,20 +167,25 @@ class GPUGroupGemmFP8Op(GroupGemmFP8Op):
 """
 attn_ops
 """
+
+try:
+    import flash_attn
+    from flash_attn import flash_attn_func
+except ImportError:
+    flash_attn = None
+
 try:
     import flash_attn_interface
     from flash_attn_interface import flash_attn_func
 except ImportError:
     flash_attn_interface = None
-    logger.warning("flash_attention is not available, please install it first.")
-
 
 class GPUFlashAttentionOp(FlashAttentionOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
         self._run_func = self.flash_attention_run
 
-        if flash_attn_interface is None:
+        if flash_attn is None and flash_attn_interface is None:
             raise ImportError("flash_attention is not available, please install it first.")
 
     def flash_attention_run(self, tensor_mapping):
@@ -192,12 +197,13 @@ class GPUFlashAttentionOp(FlashAttentionOp):
 
 
 
+
 try:
     import flash_mla
     from flash_mla import flash_mla_with_kvcache, get_mla_metadata
 except ImportError:
     flash_mla = None
-    logger.warning("flash_mla is not available, please install it first.")
+    # logger.warning("flash_mla is not available, please install it first.")
 
 class GPUFlashMLAOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
