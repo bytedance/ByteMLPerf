@@ -47,3 +47,17 @@ def calc_tensor_size(tensor_info: OpTensorInfo):
     dtype_size = torch.tensor([], dtype=tensor_info.dtype).element_size()
     tensor_size *= dtype_size
     return tensor_size
+
+
+def ceil_div(x: int, y: int) -> int:
+    """
+    Perform ceiling division of two integers.
+
+    Args:
+        x: the dividend.
+        y: the divisor.
+
+    Returns:
+        The result of the ceiling division.
+    """
+    return (x + y - 1) // y

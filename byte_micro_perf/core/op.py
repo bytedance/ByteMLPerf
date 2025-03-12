@@ -44,7 +44,7 @@ class BasicOp:
 
     
     def empty_run(self):
-        pass
+        raise NotImplementedError
 
         
     @staticmethod

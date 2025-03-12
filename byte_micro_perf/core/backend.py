@@ -3,6 +3,7 @@ import sys
 import math
 import time
 import pathlib
+import traceback
 from datetime import timedelta
 from abc import ABC, abstractmethod
 from typing import List
@@ -183,9 +184,8 @@ class Backend(ABC):
             del tensor_list
             self.empty_cache()
         except Exception as e:
-            print(e)
+            print(traceback.format_exc())
 
-        result_json = op_instance.summary(latency_us)
-        return result_json
+        return latency_us
 
 

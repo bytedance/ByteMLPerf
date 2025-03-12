@@ -22,7 +22,7 @@ from core.ops.ccl_ops import *
 from core.ops.gemm_ops import *
 from core.ops.attn_ops import *
 
-from .custom_ops import GPUGemmOp, GPUFlashAttentionOp, GPUFlashMLAOp
+from .custom_ops import GPUGemmOp, GPUGemmFP8Op, GPUFlashAttentionOp, GPUFlashMLAOp
 
 
 OP_MAPPING = {
@@ -41,6 +41,7 @@ OP_MAPPING = {
 
     # gemm ops
     "gemm": GPUGemmOp,
+    "gemm_fp8": GPUGemmFP8Op,
 
     # attn ops
     "flash_attention": GPUFlashAttentionOp,
