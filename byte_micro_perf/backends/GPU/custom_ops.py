@@ -101,13 +101,13 @@ def construct_grouped(num_groups: int, m: int, k: int, n: int, is_masked: bool, 
 
 class GPUGemmFP8Op(GemmFP8Op):
     def __init__(self, args_dict, backend, *args, **kwargs):
+        if deep_gemm is None:
+            raise ImportError("deep_gemm is not available, please install it first.")
+            
         super().__init__(args_dict, backend, *args, **kwargs)
 
         self._custom_run = True
         self._run_func = self.gemm_fp8_run
-
-        if deep_gemm is None:
-            raise ImportError("deep_gemm is not available, please install it first.")
 
 
     def gemm_fp8_run(self):
@@ -126,14 +126,13 @@ class GPUGemmFP8Op(GemmFP8Op):
 
 class GPUGroupGemmFP8Op(GroupGemmFP8Op):
     def __init__(self, args_dict, backend, *args, **kwargs):
+        if deep_gemm is None:
+            raise ImportError("deep_gemm is not available, please install it first.")
+
         super().__init__(args_dict, backend, *args, **kwargs)
 
         self._custom_run = True
         self._run_func = self.group_gemm_fp8_run
-
-        if deep_gemm is None:
-            raise ImportError("deep_gemm is not available, please install it first.")
-
 
     def group_gemm_fp8_run(self):
 
@@ -182,11 +181,11 @@ except ImportError:
 
 class GPUFlashAttentionOp(FlashAttentionOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend, *args, **kwargs)
-        self._run_func = self.flash_attention_run
-
         if flash_attn is None and flash_attn_interface is None:
             raise ImportError("flash_attention is not available, please install it first.")
+
+        super().__init__(args_dict, backend, *args, **kwargs)
+        self._run_func = self.flash_attention_run
 
     def flash_attention_run(self, tensor_mapping):
         q = tensor_mapping["q"]
@@ -207,10 +206,11 @@ except ImportError:
 
 class GPUFlashMLAOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend, *args, **kwargs)
-
         if flash_mla is None or flash_attn_interface is None:
             raise ImportError("flash_mla or flash_attn is not available, please install it first.")
+
+        super().__init__(args_dict, backend, *args, **kwargs)
+        self._run_func = self.flash_mla_run
 
     def prepare(self):
         # llm args
@@ -401,9 +401,6 @@ class GPUFlashMLAOp(BasicOp):
             # q * k, p * v
             self.calc_flops = self.total_seqlens * self.q_head_num * self.q_seq_len * (self.qk_dim_size + self.v_dim_size) * 2
 
-
-
-        self._run_func = self.flash_mla_run
 
 
     def create_tensors(self, instance_num : int):
