@@ -19,7 +19,7 @@ sys.path.insert(0, str(MICRO_PERF_DIR))
 from core.utils import logger
 from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
 from core.op import BasicOp
-from core.ops.gemm_ops import GemmOp, GemmFP8Op
+from core.ops.gemm_ops import GemmOp, GemmFP8Op, GroupGemmFP8Op
 from core.ops.attn_ops import FlashAttentionOp
 
 
@@ -75,6 +75,28 @@ def construct(m: int, k: int, n: int, group_size, device) -> \
     return x_fp8, y_fp8, out
 
 
+def construct_grouped(num_groups: int, m: int, k: int, n: int, is_masked: bool, group_size, device) -> \
+        Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor], torch.Tensor, torch.Tensor]:
+    x = torch.randn((num_groups, m, k), device=device, dtype=torch.bfloat16)
+    y = torch.randn((num_groups, n, k), device=device, dtype=torch.bfloat16)
+    out = torch.empty((num_groups, m, n), device=device, dtype=torch.bfloat16)
+
+    assert m % 4 == 0, f'TMA alignment error: {m}'
+    x_fp8 = (torch.empty_like(x, dtype=torch.float8_e4m3fn), torch.empty((num_groups, m, k // group_size), device=device, dtype=torch.float))
+    y_fp8 = (torch.empty_like(y, dtype=torch.float8_e4m3fn), torch.empty((num_groups, (n + group_size - 1) // group_size, k // group_size), device=device, dtype=torch.float))
+    for i in range(num_groups):
+        x_fp8[0][i], x_fp8[1][i] = per_token_cast_to_fp8(x[i], group_size)
+        y_fp8[0][i], y_fp8[1][i] = per_block_cast_to_fp8(y[i], group_size)
+
+    # For non-masked input, we must merge the group and M dims
+    if not is_masked:
+        x_fp8 = (x_fp8[0].view(-1, k), per_token_cast_to_fp8(x.view(-1, k), group_size)[1])
+        out = out.view(-1, n)
+
+    # Transpose earlier so that the testing will not trigger transposing kernels
+    x_fp8 = (x_fp8[0], get_col_major_tma_aligned_tensor(x_fp8[1]))
+    return x_fp8, y_fp8, out
+
 
 
 class GPUGemmFP8Op(GemmFP8Op):
@@ -87,12 +109,52 @@ class GPUGemmFP8Op(GemmFP8Op):
 
     def gemm_fp8_run(self):
         def test_func():
-            x_fp8, y_fp8, out = construct(self.M, self.K, self.N, self.quant_group_size, self.backend.get_torch_device_name())
+            x_fp8, y_fp8, out = construct(
+                self.M, self.K, self.N, 
+                self.quant_group_size, 
+                self.backend.get_torch_device_name()
+            )
             deep_gemm.gemm_fp8_fp8_bf16_nt(x_fp8, y_fp8, out)
 
         t = bench_kineto(test_func, 'fp8_gemm', suppress_kineto_output=True)
         return t * 1e6
 
+
+
+class GPUGroupGemmFP8Op(GroupGemmFP8Op):
+    def __init__(self, args_dict, backend, *args, **kwargs):
+        super().__init__(args_dict, backend, *args, **kwargs)
+
+        self._custom_run = True
+        self._run_func = self.group_gemm_fp8_run
+
+
+    def group_gemm_fp8_run(self):
+
+        def test_func_contiguous():
+            x_fp8, y_fp8, out = construct_grouped(
+                self.num_groups, self.M, self.K, self.N, False, 
+                self.quant_group_size, 
+                self.backend.get_torch_device_name()
+            )
+            m_indices = torch.arange(0, self.num_groups, device='cuda', dtype=torch.int)
+            m_indices = m_indices.unsqueeze(-1).expand(self.num_groups, self.M).contiguous().view(-1)
+            deep_gemm.m_grouped_gemm_fp8_fp8_bf16_nt_contiguous(x_fp8, y_fp8, out, m_indices)
+
+        def test_func_masked():
+            x_fp8, y_fp8, out = construct_grouped(
+                self.num_groups, self.M, self.K, self.N, True, 
+                self.quant_group_size, 
+                self.backend.get_torch_device_name()
+            )
+            masked_m = torch.ones((self.num_groups, ), device='cuda', dtype=torch.int) * self.M
+            deep_gemm.m_grouped_gemm_fp8_fp8_bf16_nt_masked(x_fp8, y_fp8, out, masked_m, self.M)
+
+        if self.mode == "contiguous":
+            t = bench_kineto(test_func_contiguous, 'fp8_gemm', suppress_kineto_output=True)
+        elif self.mode == "masked":
+            t = bench_kineto(test_func_masked, 'fp8_gemm', suppress_kineto_output=True)
+        return t * 1e6
 
 
 
