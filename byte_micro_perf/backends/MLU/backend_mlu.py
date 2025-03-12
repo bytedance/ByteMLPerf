@@ -105,14 +105,10 @@ class BackendMLU(Backend):
             op_instance.core_run(tensor_list[index])
 
         self.device_synchronize()
-        self.op_group_barrier(op_group=op_group, group_size=group_size)
         start_event.record()
         for i in range(prefer_iterations):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
         end_event.record()
-
         self.device_synchronize()
-        self.op_group_barrier(op_group=op_group, group_size=group_size)
-
         return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
     

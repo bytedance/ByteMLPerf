@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import time
+import torch
 import pathlib
 import traceback
 from datetime import timedelta
@@ -103,9 +104,12 @@ class Backend(ABC):
     def op_group_barrier(self, op_group=None, group_size=1):
         dist_module = self.get_dist_module()
         if dist_module.is_initialized() and group_size > 1:
-            dist_module.barrier(group=op_group)
+            dist_module.all_reduce(
+                torch.tensor([1], dtype=torch.int32, device=self.get_device()),
+                op=dist_module.ReduceOp.SUM,
+                group=op_group
+            )
 
-    
     def destroy_process_group(self):
         dist_module = self.get_dist_module()
         if dist_module.is_initialized():
@@ -121,14 +125,10 @@ class Backend(ABC):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
 
         self.device_synchronize()
-        self.op_group_barrier(op_group=op_group, group_size=group_size)
-
         start_time = time.perf_counter_ns()
         for i in range(prefer_iterations):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
-
         self.device_synchronize()
-        self.op_group_barrier(op_group=op_group, group_size=group_size)
         end_time = time.perf_counter_ns()
         return (end_time - start_time) / 1e3 / prefer_iterations
             

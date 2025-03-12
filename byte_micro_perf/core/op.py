@@ -96,14 +96,18 @@ class BasicOp:
                 tensor_mapping[key] = torch.zeros(
                     size=value.shape, 
                     dtype=value.dtype,
-                    device=torch_device_name
+                    device=value.device
                 )
+                if value.device == "cpu":
+                    tensor_mapping[key] = tensor_mapping[key].pin_memory()
             for key, value in output_tensor_info.items():
                 tensor_mapping[key] = torch.zeros(
                     size=value.shape, 
                     dtype=value.dtype,
-                    device=torch_device_name
+                    device=value.device
                 )
+                if value.device == "cpu":
+                    tensor_mapping[key] = tensor_mapping[key].pin_memory()
             all_tensor_list.append(tensor_mapping)
 
         return all_tensor_list

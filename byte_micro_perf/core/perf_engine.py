@@ -65,11 +65,10 @@ def parse_args():
 
 def parse_task(task_dir, task):
     task_dir = pathlib.Path(task_dir).absolute()
+    target_task_files = task_dir.rglob(task + ".json")
     task_cases = []
-    # 如果存在 task.json
-    json_path = task_dir.joinpath(task + ".json")
-    if json_path.exists():
-        with open(json_path, "r") as f:
+    for task_file in target_task_files:
+        with open(task_file, "r") as f:
             json_data = json.load(f)
         json_data_list = json_data.get("cases", [])
         if json_data_list:
@@ -102,6 +101,10 @@ def parse_task(task_dir, task):
 if __name__ == "__main__":
     args = parse_args()
     task_cases = parse_task(args.task_dir, args.task)
+    if len(task_cases) == 0:
+        logger.error("No task found")
+        sys.exit(1)
+
     scheduler = Scheduler(args)
     result_list = scheduler.run(task_cases)
 

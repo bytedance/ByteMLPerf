@@ -5,12 +5,6 @@ import random
 
 from typing import List, Dict, Union, Tuple
 
-from flash_attn_interface import flash_attn_func
-from flash_mla import flash_mla_with_kvcache, get_mla_metadata
-import deep_gemm
-from deep_gemm import bench_kineto, calc_diff, ceil_div, get_col_major_tma_aligned_tensor
-
-
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 MICRO_PERF_DIR = FILE_DIR.parent.parent
 
@@ -40,6 +34,12 @@ class GPUGemmOp(GemmOp):
 
 
 
+try:
+    import deep_gemm
+    from deep_gemm import bench_kineto, calc_diff, ceil_div, get_col_major_tma_aligned_tensor
+except ImportError:
+    deep_gemm = None
+    logger.warning("deep_gemm is not available, please install it first.")
 
 FP8_E4M3_MAX = 448.0  # Maximum representable value in FP8 E4M3 format
 
@@ -106,6 +106,9 @@ class GPUGemmFP8Op(GemmFP8Op):
         self._custom_run = True
         self._run_func = self.gemm_fp8_run
 
+        if deep_gemm is None:
+            raise ImportError("deep_gemm is not available, please install it first.")
+
 
     def gemm_fp8_run(self):
         def test_func():
@@ -127,6 +130,9 @@ class GPUGroupGemmFP8Op(GroupGemmFP8Op):
 
         self._custom_run = True
         self._run_func = self.group_gemm_fp8_run
+
+        if deep_gemm is None:
+            raise ImportError("deep_gemm is not available, please install it first.")
 
 
     def group_gemm_fp8_run(self):
@@ -161,10 +167,21 @@ class GPUGroupGemmFP8Op(GroupGemmFP8Op):
 """
 attn_ops
 """
+try:
+    import flash_attn_interface
+    from flash_attn_interface import flash_attn_func
+except ImportError:
+    flash_attn_interface = None
+    logger.warning("flash_attention is not available, please install it first.")
+
+
 class GPUFlashAttentionOp(FlashAttentionOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
         self._run_func = self.flash_attention_run
+
+        if flash_attn_interface is None:
+            raise ImportError("flash_attention is not available, please install it first.")
 
     def flash_attention_run(self, tensor_mapping):
         q = tensor_mapping["q"]
@@ -174,9 +191,20 @@ class GPUFlashAttentionOp(FlashAttentionOp):
 
 
 
+
+try:
+    import flash_mla
+    from flash_mla import flash_mla_with_kvcache, get_mla_metadata
+except ImportError:
+    flash_mla = None
+    logger.warning("flash_mla is not available, please install it first.")
+
 class GPUFlashMLAOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
+
+        if flash_mla is None or flash_attn_interface is None:
+            raise ImportError("flash_mla or flash_attn is not available, please install it first.")
 
     def prepare(self):
         # llm args

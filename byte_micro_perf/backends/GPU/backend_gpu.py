@@ -19,6 +19,7 @@ from core.backend import Backend
 from core.ops.binary_ops import *
 from core.ops.reduction_ops import *
 from core.ops.ccl_ops import *
+from core.ops.h2d_ops import *
 from core.ops.gemm_ops import *
 from core.ops.attn_ops import *
 
@@ -38,7 +39,16 @@ OP_MAPPING = {
     # xccl ops
     "all_gather": AllGatherOp, 
     "all_reduce": AllReduceOp, 
+    "all_to_all": AlltoAllOp,
+    "broadcast": BroadcastOp,
+    "reduce_scatter": ReduceScatterOp, 
+    "p2p": P2POp,
 
+    # h2d ops
+    "host2device": Host2DeviceOp,
+    "device2host": Device2HostOp,
+    "device2device": Device2DeviceOp,
+    
     # gemm ops
     "gemm": GPUGemmOp,
     "gemm_fp8": GPUGemmFP8Op,
@@ -113,14 +123,11 @@ class BackendGPU(Backend):
             op_instance.core_run(tensor_list[index])
 
         self.device_synchronize()
-        self.op_group_barrier(op_group=op_group, group_size=group_size)
         start_event.record()
         for i in range(prefer_iterations):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
         end_event.record()
-
         self.device_synchronize()
-        self.op_group_barrier(op_group=op_group, group_size=group_size)
 
         return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
     

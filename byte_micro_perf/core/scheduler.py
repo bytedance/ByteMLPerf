@@ -212,99 +212,119 @@ class Scheduler:
             true_device_index = backend.target_devices[instance_rank]
             print(f"true_world_size: {true_world_size}, true_rank: {true_rank}, true_device_index: {true_device_index}")
 
-            # init device and ccl if necessary
+            
             backend.set_device(true_device_index)
             if self.is_concurrent and true_world_size > 1:
                 backend.initialize_ccl(true_rank, true_world_size)
                 dist_module = backend.get_dist_module()
 
-            # inform main process that this rank is ready
             output_queues.put("ready")
 
 
             if not self.is_concurrent:
                 while True:
-                    if self.disable_parallel:
-                        if true_rank != 0:
-                            break
+                    # get task args
                     test_case = input_queues.get()
                     if test_case is None:
                         break
-                    
+                
+                    # try create op
+                    op_instance = None
                     try:
-                        op_instance = create_op(self.op_name, test_case, backend)
-                        latency_us = backend.perf(op_instance)
+                        op_instance = create_op(
+                            self.op_name, test_case, backend
+                        )
                     except Exception as e:
-                        print(e)
                         print(traceback.format_exc())
-                    result_json = op_instance.summary(latency_us)
 
+                    # try bench op
+                    result_json = {"arguments": test_case, "targets": {}}
+                    if op_instance is not None:
+                        latecy_us = 0.
+                        try:
+                            latency_us = backend.perf(op_instance)
+                        except Exception as e:
+                            print(traceback.format_exc())
+                        result_json = op_instance.summary(latency_us)
 
                     arguments_str = json.dumps(result_json["arguments"])
                     targets_str = json.dumps(result_json["targets"], indent=4)
                     print(f"{arguments_str}\n{targets_str}\n")         
 
                     output_queues.put(result_json, block=False)
-            else:
+            elif true_world_size > 1:
                 process_groups_mapping = {
                     true_world_size: None
                 }
+
                 while True:
+                    # sync on all devices, get task args
                     broadcast_test_case = [None]
                     if true_rank == 0:
                         test_case = input_queues.get()
                         broadcast_test_case[0] = test_case
-
                     if true_world_size > 1:
                         dist_module.broadcast_object_list(broadcast_test_case, 0)
-
                     test_case = broadcast_test_case[0]
                     if test_case is None:
                         break
                     
+                    result_list = [None for _ in range(true_world_size)]
+
+                    # according to given world_size, some devices work, some devices sleep
                     world_size = test_case.get("world_size", 1)
                     if world_size > 1 and world_size not in process_groups_mapping:
                         process_groups_mapping[world_size] = backend.new_group(range(world_size))
 
                     if true_rank < world_size:
+                        # try create op
+                        op_instance = None
                         try:
-                            op_instance = create_op(self.op_name, test_case, backend, op_group=process_groups_mapping[world_size], group_size=world_size)
-                            latency_us = backend.perf(op_instance)
+                            op_instance = create_op(
+                                self.op_name, test_case, backend, 
+                                op_group=process_groups_mapping.get(world_size, None), 
+                                group_size=world_size
+                            )
                         except Exception as e:
-                            print(e)
                             print(traceback.format_exc())
-                        result_json = op_instance.summary(latency_us)
-                    else:
-                        continue
 
-                    result_list = [None for _ in range(world_size)]
-                    result_list[true_rank] = result_json
-                    if world_size > 1:
-                        dist_module.all_gather_object(result_list, result_json, group=process_groups_mapping[world_size])
+                        # try bench op
+                        result_list[true_rank] = {"arguments": test_case, "targets": {}}
+                        if op_instance is not None:
+                            latency_us = 0.
+                            try:
+                                latency_us = backend.perf(op_instance)
+                            except Exception as e:
+                                print(traceback.format_exc())
+                            result_list[true_rank] = op_instance.summary(latency_us)
 
-                    if true_rank == 0:
-                        if result_json["targets"]:
-                            latency_list = [result["targets"]["latency(us)"] for result in result_list]
-                            algo_bw_list = [result["targets"]["algo_bw(GB/s)"] for result in result_list]
-                            bus_bw_list = [result["targets"]["bus_bw(GB/s)"] for result in result_list]
-
-                            result_json["targets"]["algo_bw_sum(GB/s)"] = sum(algo_bw_list)
-                            result_json["targets"]["bus_bw_sum(GB/s)"] = sum(bus_bw_list)
-                            result_json["targets"]["latency_list(us)"] = latency_list
-                            result_json["targets"]["algo_bw_list(GB/s)"] = algo_bw_list
-                            result_json["targets"]["bus_bw_list(GB/s)"] = bus_bw_list
-
-                            arguments = result_json["arguments"]
-                            latency = result_json["targets"]["latency(us)"]
-
-                        arguments_str = json.dumps(result_json["arguments"])
-                        targets_str = json.dumps(result_json["targets"], indent=4)
-                        print(f"{arguments_str}\n{targets_str}\n")             
+                    # sync on all devices, gather all results    
+                    if true_world_size > 1:
+                        dist_module.all_gather_object(result_list, result_list[true_rank])
                         
-                        output_queues.put(result_json, block=False)
+                    if true_rank == 0:
+                        if result_list[0]["targets"]:
+                            latency_list = [result["targets"]["latency(us)"] for result in result_list[:world_size]]
+                            algo_bw_list = [result["targets"]["algo_bw(GB/s)"] for result in result_list[:world_size]]
+                            bus_bw_list = [result["targets"]["bus_bw(GB/s)"] for result in result_list[:world_size]]
 
-            # clean process group if necessary
-            backend.destroy_process_group()
+                            result_list[0]["targets"]["algo_bw_sum(GB/s)"] = sum(algo_bw_list)
+                            result_list[0]["targets"]["bus_bw_sum(GB/s)"] = sum(bus_bw_list)
+                            result_list[0]["targets"]["latency_list(us)"] = latency_list
+                            result_list[0]["targets"]["algo_bw_list(GB/s)"] = algo_bw_list
+                            result_list[0]["targets"]["bus_bw_list(GB/s)"] = bus_bw_list
+
+                        arguments_str = json.dumps(result_list[0]["arguments"])
+                        targets_str = json.dumps(result_list[0]["targets"], indent=4)
+                        print(f"device {backend.total_target_devices[:world_size]}\n{arguments_str}\n{targets_str}\n")
+
+                        output_queues.put(result_list[0], block=False)
+
+
+            if self.is_concurrent and true_world_size > 1:
+                backend.destroy_process_group()
+
+
         except Exception as e:
             traceback.print_exc()
             sys.exit(1)

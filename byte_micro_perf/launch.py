@@ -142,8 +142,8 @@ if __name__ == "__main__":
             hardware_list.append(file.stem)
 
     # task_list
-    csv_task_list = [task_csv.stem for task_csv in task_dir.glob("*.csv")]
-    json_task_list = [task_json.stem for task_json in task_dir.glob("*.json")]
+    csv_task_list = [task_csv.stem for task_csv in task_dir.rglob("*.csv")]
+    json_task_list = [task_json.stem for task_json in task_dir.rglob("*.json")]
     task_list = list(set(json_task_list) | set(csv_task_list))
 
     if args.show_hardware_list:
