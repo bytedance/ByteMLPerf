@@ -33,12 +33,16 @@ OP_MAPPING = {
     # reduction ops
     "softmax": SoftmaxOp,
 
-    # gemm_ops
-    "gemm": MLUGemmOp,
-
     # xccl_ops
     "all_gather": AllGatherOp, 
-    "all_reduce": AllReduceOp
+    "all_reduce": AllReduceOp, 
+    "all_to_all": AlltoAllOp,
+    "broadcast": BroadcastOp,
+    "reduce_scatter": ReduceScatterOp, 
+    "p2p": P2POp,
+
+    # gemm_ops
+    "gemm": MLUGemmOp,
 }
 
 
