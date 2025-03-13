@@ -18,6 +18,7 @@ import importlib
 import json
 import subprocess
 import time
+import traceback
 
 from typing import Any, Dict, Tuple
 import virtualenv
@@ -70,6 +71,19 @@ class PerfEngine:
         self.prev_sys_path = list(sys.path)
         self.real_prefix = sys.prefix
         self.compile_only_mode = False
+        self.version = self.get_version()
+
+    def get_version(self):
+        version = ""
+        try:
+            version_file = os.path.join(str(BYTE_MLPERF_ROOT), "../VERSION")
+            with open(version_file) as f:
+                _version = f.read().splitlines()
+            version = '.'.join(v.split('=')[1] for v in _version)
+        except Exception as e:
+            traceback.print_exc()
+            log.warning(f"get bytemlperf version failed, error msg: {e}")
+        return version
 
     def start_engine(self) -> None:
         '''
@@ -167,6 +181,9 @@ class PerfEngine:
         if self.compile_only_mode:
             base_report.pop("Backend")
             return compile_info["compile_status"], base_report
+
+        base_report["Version"] = self.version
+        base_report["Execution Date"] = time.strftime("%Y-%m-%d %H:%M:%S")
 
         # load runtime backend
         """

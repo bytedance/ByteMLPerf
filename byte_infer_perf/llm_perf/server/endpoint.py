@@ -1,3 +1,6 @@
+import sys
+import json
+import pathlib
 import asyncio
 import importlib
 from typing import Any, AsyncIterable, Dict, Iterable
@@ -10,71 +13,108 @@ from llm_perf.utils.logger import logger
 
 
 class LLMPerfEndpoint:
-    def __init__(
-        self, model_config, 
-        hardware_type, max_batch_size
-    ) -> None:
+    def __init__(self, xpu_cfg) -> None:
         super().__init__()
 
+        self.xpu_cfg = xpu_cfg
+        hardware_type = xpu_cfg["hardware_type"]
+        model_config = xpu_cfg["model_config"]
+    
         # load tokenizer
-        tokenizer_path = model_config["tokenizer"]["path"]
-        self.add_sep_token = model_config["tokenizer"]["add_sep_token"]
-        self.tokenizer : PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=tokenizer_path, 
-            local_files_only=True,
-            trust_remote_code=True
-        )
-        logger.info(f'load tokenizer: {tokenizer_path}')
+        try:
+            tokenizer_config = model_config["tokenizer"]
+            tokenizer_path = tokenizer_config["path"]
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                pretrained_model_name_or_path=tokenizer_path, 
+                local_files_only=True,
+                trust_remote_code=True
+            )
+            self.support_chn = tokenizer_config.get("support_chn", False)
+            self.apply_chat_template = tokenizer_config.get("apply_chat_template", False)
+        except Exception as e:
+            logger.error(f"load tokenizer error: {e}")
+            sys.exit(-1)
+
+        logger.info(f"load tokenizer: {tokenizer_path}")
+        logger.info("*"*50)
+        logger.info(f"bos_token_id: {self.tokenizer.bos_token_id}")
+        logger.info(f"eos_token_id: {self.tokenizer.eos_token_id}")
+        logger.info(f"unk_token_id: {self.tokenizer.unk_token_id}")
+        logger.info(f"pad_token_id: {self.tokenizer.pad_token_id}")
+        logger.info("*"*50)
         
+        xpu_cfg["bos_token_id"] = self.tokenizer.bos_token_id
+        xpu_cfg["eos_token_id"] = self.tokenizer.eos_token_id
+        xpu_cfg["unk_token_id"] = self.tokenizer.unk_token_id
+        xpu_cfg["pad_token_id"] = self.tokenizer.pad_token_id
+
         # import setup according to hardware_type
         setup = importlib.import_module(
             ".setup", package=f"llm_perf.backends.{hardware_type}"
         )
         logger.info(f"import setup: {setup}")
 
-        # set up scheduler
-        self.scheduler : CoreScheduler = setup.setup_scheduler(
-            model_config, 
-            self.tokenizer.pad_token_id, 
-            max_batch_size
-        )
+        # setup scheduler
+        self.scheduler : CoreScheduler = setup.setup_scheduler(xpu_cfg)
+        self.scheduler.start()
 
-        # start scheduler and warmup
-        if not self.scheduler.started:
-            self.scheduler.start()
-
-        
-        self.warmup()
+        self.warmup(xpu_cfg["max_batch_size"])
 
 
-    def warmup(self):
-        prompt = "中国的首都是哪里？"
+    def __del__(self):
+        if hasattr(self, "scheduler") and self.scheduler is not None:
+            self.scheduler.stop()
+
+
+    def warmup(self, max_batch_size):
+        if self.support_chn:
+            prompt = "7年前，我的年龄是我的儿子的6倍，我的儿子今年12岁，我今年多少岁？"
+        else:
+            prompt = "7 years ago, I was 6 times older than my son. My son is 12 years old now. How old am I now?"
+
         generate_config = {
             "min_new_tokens": 1,
             "max_new_tokens": 512,
             "top_k": 1,
-            "temperature": 0.2,
-            "presence_penalty": 1.0,
+            "get_input_logits": 0
         }
-        logger.info(f"warmup prompt: {prompt}\nconfig: {generate_config}")
+        logger.info(f"warmup prompt: {prompt}, config: {generate_config}")
 
         async def _steram_warmup():
             message = ""
             async for result in self.streaming_inference(prompt, generate_config):
-                message += result["choice"]["message"]
+                message = result["choice"]["message"]
             result["choice"]["message"] = message
             return result
 
-        result = asyncio.run(_steram_warmup())
-        logger.info(f"warmup response: {result}")
+        async def _multiple_warmup():
+            tasks = []
+            for _ in range(max_batch_size):
+                tasks.append(_steram_warmup())
+            res = await asyncio.gather(*tasks)
+            return res
 
+        single_result = asyncio.run(_steram_warmup())
+        message = single_result["choice"]["message"]
+        logger.info(f"single warmup response: {message}\n")
+
+        multiple_result = asyncio.run(_multiple_warmup())
+        for i, result in enumerate(multiple_result):
+            message = result["choice"]["message"]
+            logger.info(f"multiple warmup reponse {i}: {message}\n")
 
     async def prepare_request(
         self, prompt: str, generate_config: Dict[str, Any]
     ) -> GenerateRequest:
-        input_ids = self.tokenizer.encode(prompt)
-        if self.add_sep_token:
-            input_ids.append(self.tokenizer.sep_token_id)
+        if not self.apply_chat_template:
+            input_ids = self.tokenizer.encode(prompt)      
+        else:
+            input_ids = self.tokenizer.apply_chat_template(
+                [
+                    {"role": "user", "content": prompt}
+                ], 
+                add_generation_prompt=True
+            )
 
         # create generate config
         config = GenerateConfig(
@@ -99,45 +139,52 @@ class LLMPerfEndpoint:
         try:
             # create GenerateRequest object
             req = await self.prepare_request(prompt, generate_config)
+
             prompt_tokens = len(req.input_ids)
             completion_tokens = 0
+
+            tokens_buffer = []
+
             async for gen_res in self.scheduler.generate(req):
-                completion_tokens += 1
-                outputs = {
+                result = gen_res["result"]
+                if result is not None:
+                    completion_tokens += 1
+
+                infer_outputs = {
                     "usage": {
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
                         "total_tokens": prompt_tokens + completion_tokens,
                     },
-                    "choice": {},
+                    "choice": {
+                        "message": ""
+                    }
                 }
 
-                if req.generate_config.get_input_logits:
-                    result, perplexity, logits_dump = gen_res
-                    if result is None:
-                        outputs["choice"].update(
-                            {
-                                "message": "",
-                                "perplexity": perplexity,
-                                "logits_dump": logits_dump,
-                            }
-                        )
-                    else:
-                        outputs["choice"].update(
-                            {
-                                "message": self.tokenizer.decode(result.token_id),
-                                "perplexity": perplexity,
-                                "logits_dump": logits_dump,
-                            }
-                        )
-                else:
-                    result: GenerateResult = gen_res
-                    outputs["choice"].update(
-                        {"message": self.tokenizer.decode(result.token_id)}
+                if result is not None:
+                    tokens_buffer.append(result.token_id)
+
+                    text = self.tokenizer.decode(tokens_buffer, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+                    infer_outputs["choice"].update(
+                        {
+                            "message": text, 
+                            "wait_time": result.wait_time, 
+                            "model_time": result.model_time, 
+                            "post_process_time": result.post_process_time
+                        }
                     )
 
-                logger.debug(f"steam inference result: {outputs}")
-                yield outputs
+                if req.generate_config.get_input_logits:
+                    infer_outputs["choice"].update(
+                        {
+                            "perplexity": gen_res["perplexity"], 
+                            "logits_dump": gen_res["dump_file"]
+                        }
+                    )
+
+                logger.debug(f"steam inference result: {infer_outputs}")
+                yield infer_outputs
         except Exception as e:
             logger.error(f"stream inference error: {e}")
             raise e

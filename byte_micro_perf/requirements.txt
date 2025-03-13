@@ -1,13 +1,4 @@
-matplotlib
-pandas
-virtualenv
-scikit-learn
-prompt_toolkit
-tqdm
-opencv-python
-transformers
-tokenization
-fpdf
-attrs
-decorator
-typing-extensions
+prettytable
+jsonlines
+ninja
+packaging

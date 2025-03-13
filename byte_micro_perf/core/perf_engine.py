@@ -12,268 +12,152 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import os
+import sys
+import json
+import csv
+import time
+import random
+import datetime
+import signal
 import argparse
 import importlib
-import json
 import logging
-import math
-import os
 import subprocess
-import sys
+import pathlib
+import traceback
+import itertools
+import prettytable
+import jsonlines
+
 from typing import Any, Dict, List
-
-import torch
-import torch.multiprocessing as mp
-import virtualenv
-
-BYTE_MLPERF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, BYTE_MLPERF_ROOT)
-
-from backends.backend import Backend
-
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("PerfEngine")
+import itertools
+from collections import namedtuple
 
 
-def get_args():
-    """Parse commandline."""
+FILE_DIR = pathlib.Path(__file__).parent.absolute()
+MICRO_PERF_DIR = FILE_DIR.parent
+
+sys.path.insert(0, str(MICRO_PERF_DIR))
+
+from core.utils import logger, setup_logger
+from core.creators import create_backend
+from core.scheduler import Scheduler
+
+                
+
+def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--task",
-        default="gemm",
-        help="The task going to be evaluted, refs to workloads/",
-    )
-    parser.add_argument(
-        "--hardware_type",
-        default="GPU",
-        help="The backend going to be evaluted, refs to backends/",
-    )
-    parser.add_argument(
-        "--vendor_path",
-        required=False,
-        help="The hardware configs need to be loaded, refs to vendor_zoo/NVIDIA/A100-PCIe.json",
-    )
-    parser.add_argument(
-        "--compile_only", action="store_true", help="Run compilation only"
-    )
-
+    parser.add_argument("--hardware_type", type=str)
+    parser.add_argument("--task_dir", type=str)
+    parser.add_argument("--task", type=str)
+    parser.add_argument("--device", type=str)
+    parser.add_argument("--numa_world_size", type=int, default=1)
+    parser.add_argument("--numa_rank", type=int, default=0)
+    parser.add_argument("--disable_parallel", action="store_true")
+    parser.add_argument("--report_dir", type=str)
+    parser.add_argument("--log_level", type=str, default="INFO")
     args = parser.parse_args()
+    setup_logger(args.log_level)
     return args
 
 
-def load_workload(task: str) -> Dict[str, Any]:
-    """
-    Return a list of dictionary with model Configuration
-    Args: List[str]
-    Returns: List[dic]
-    """
-    modules_dir = (
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/workloads"
-    )
+def parse_task(task_dir, task):
+    task_dir = pathlib.Path(task_dir).absolute()
+    target_task_files = task_dir.rglob(task + ".json")
+    task_cases = []
+    for task_file in target_task_files:
+        with open(task_file, "r") as f:
+            json_data = json.load(f)
+        json_data_list = json_data.get("cases", [])
+        if json_data_list:
+            for argument_case in json_data_list:
+                keys = list(argument_case.keys())
+                values = list(argument_case.values())
+                for i, value in enumerate(values):
+                    if isinstance(value, str):
+                        values[i] = [value]                
+                total_cases = list(itertools.product(*values))
+                for case in total_cases:
+                    case_dict = dict(zip(keys, case))
 
-    for file in os.listdir(modules_dir):
-        path = os.path.join(modules_dir, file)
-        if (
-            not file.startswith("_")
-            and not file.startswith(".")
-            and (file.endswith(".json") or os.path.isdir(path))
-            and file[: file.find(".json")] == task
-        ):
-            module_name = file
-            with open("workloads/" + module_name, "r") as f:
-                workload_dict = json.load(f)
-            return workload_dict
-    else:
-        log.error(
-            "Task name: [ {} ] was not found, please check your task name".format(task)
-        )
+                    added_key_value = {}
+                    removed_key = []
+                    for key in case_dict:
+                        if "." in key:
+                            split_keys = key.split(".")
+                            for i, split_key in enumerate(split_keys):
+                                added_key_value[split_key] = case_dict[key][i]
+                            removed_key.append(key)
+                    for key in removed_key:
+                        del case_dict[key]
+                    case_dict.update(added_key_value)
+                    task_cases.append(case_dict)
+    return task_cases
 
-
-class PerfEngine:
-    def __init__(self) -> None:
-        super().__init__()
-        self.args = get_args()
-        self.workload = load_workload(self.args.task)
-        self.backend_type = self.args.hardware_type
-        self.old_os_path = os.environ["PATH"]
-        self.prev_sys_path = list(sys.path)
-        self.real_prefix = sys.prefix
-
-    def init_process(self, rank: int, world_size: int):
-        """
-        Initialize the distributed environment.
-
-        """
-        initialize_func = getattr(self.backend, "initialize_ccl")
-        initialize_func(rank, world_size)
-        status = self.start_perf(self.workload)
-
-    def init_backend(self, hardware_type: str) -> Backend:
-        """
-        Load related compile backend with input hardware type
-
-        Arguments: str
-
-        Returns: Heterogeneous Backend()
-        """
-        log.info("Loading Heterogeneous Backend: {}".format(hardware_type))
-
-        backend = importlib.import_module(
-            "backends." + hardware_type + ".backend_" + hardware_type.lower()
-        )
-        backend = getattr(backend, "Backend" + hardware_type)
-        return backend(self.workload, self.args.vendor_path)
-
-    def start_engine(self) -> None:
-        status = self.activate_venv(self.backend_type)
-        if not status:
-            log.warning("Activate virtualenv Failed, Please Check...")
-
-        self.backend = self.init_backend(self.backend_type)
-        output_dir = os.path.abspath("reports/" + self.backend_type)
-        os.makedirs(output_dir, exist_ok=True)
-
-        if self.args.task in ["allreduce", "allgather", "reducescatter", "alltoall"]:
-            for group in self.workload["group"]:
-                mp.spawn(fn=self.init_process, args=(group,), nprocs=group)
-        else:
-            status = self.start_perf(self.workload)
-
-        self.deactivate_venv()
-
-    def start_perf(self, workload: Dict[str, Any]) -> bool:
-        log.info(
-            "******************************************* Start to test op: {}. *******************************************".format(
-                workload["operator"]
-            )
-        )
-
-        # Initalize Output Dir and Reports
-        output_dir = os.path.abspath(
-            "reports/" + self.backend_type + "/" + workload["operator"]
-        )
-        os.makedirs(output_dir, exist_ok=True)
-
-        op_name = workload["operator"]
-        base_report = {
-            "Operator": op_name.upper(),
-            "Backend": self.backend_type,
-            "Host Info": self.get_cpu_name(),
-            "Device Info": getattr(self.backend, "get_device_name")(),
-        }
-
-        op = getattr(self.backend, op_name.lower(), None)
-        if op is not None and callable(op):
-            op()
-        else:
-            raise ValueError(f"Unknown operation: {op_name.lower()}")
-
-        perf_reports = []
-        if "input_shape_list" in self.workload:
-            shape_list = self.workload["input_shape_list"]
-        else:
-            shape_list = []
-            for M, N, K in self.workload["M/N/K"]:
-                shape_list.append([[M, K], [K, N]])
-
-        for dtype in self.workload["dtype"]:
-            perf_reports = []
-            base_report["Performance"] = {}
-            for input_shape in shape_list:
-                if isinstance(input_shape[0], int):
-                    input_shape = [input_shape]
-                try:
-                    reports = self.backend.perf(input_shape, dtype)
-                except Exception as e:
-                    print(e)
-                    reports = {}
-                perf_reports.append(reports)
-            base_report["Performance"] = perf_reports
-
-            # write output to json file
-            has_group = "Group" in base_report["Performance"][0]
-            output_report_path = (
-                f"result-{str(dtype)}"
-                + (
-                    f"-group{base_report['Performance'][0]['Group']}"
-                    if has_group
-                    else ""
-                )
-                + ".json"
-            )
-            output_report_path = os.path.join(output_dir, output_report_path)
-            local_rank = int(os.environ.get("LOCAL_RANK", 0))
-            if local_rank == 0:
-                logging.info(base_report["Performance"])
-                with open(output_report_path, "w") as file:
-                    json.dump(base_report, file, indent=4)
-
-        return True
-
-    def get_cpu_name(self):
-        command = "lscpu | grep 'Model name' | awk -F: '{print $2}'"
-        cpu_name = subprocess.check_output(command, shell=True)
-        return cpu_name.decode().strip()
-
-    def activate_venv(self, hardware_type: str) -> bool:
-        if os.path.exists("backends/" + hardware_type + "/requirements.txt"):
-            log.info("Activating Virtual Env for " + hardware_type)
-
-            venv_dir = os.path.join("backends", hardware_type + "/venv")
-            activate_file = os.path.join(venv_dir, "bin", "activate_this.py")
-            if not os.path.exists(venv_dir):
-                log.info("venv not exist, Creating Virtual Env for " + hardware_type)
-
-                virtualenv.create_environment(venv_dir, True)
-
-                exec(open(activate_file).read(), {"__file__": activate_file})
-                python_path = os.path.join(venv_dir, "bin", "python3")
-                subprocess.call(
-                    [python_path, "-m", "pip", "install", "--upgrade", "pip", "--quiet"]
-                )
-                subprocess.call(
-                    [
-                        python_path,
-                        "-m",
-                        "pip",
-                        "install",
-                        "-r",
-                        "backends/" + hardware_type + "/requirements.txt",
-                        "-q",
-                    ]
-                )
-            else:
-                exec(open(activate_file).read(), {"__file__": activate_file})
-                """
-                just in case install failed in pre-run.
-                """
-                python_path = os.path.join(venv_dir, "bin", "python3")
-                subprocess.call(
-                    [python_path, "-m", "pip", "install", "--upgrade", "pip", "--quiet"]
-                )
-                subprocess.call(
-                    [
-                        python_path,
-                        "-m",
-                        "pip",
-                        "install",
-                        "-r",
-                        "backends/" + hardware_type + "/requirements.txt",
-                        "-q",
-                    ]
-                )
-
-                if not hasattr(sys, "real_prefix"):
-                    return False
-                return True
-        return True
-
-    def deactivate_venv(self):
-        sys.path[:0] = self.prev_sys_path  # will also revert the added site-packages
-        sys.prefix = self.real_prefix
-        os.environ["PATH"] = self.old_os_path
 
 
 if __name__ == "__main__":
-    engine = PerfEngine()
-    engine.start_engine()
+    args = parse_args()
+    task_cases = parse_task(args.task_dir, args.task)
+    if len(task_cases) == 0:
+        logger.error("No task found")
+        sys.exit(1)
+
+    scheduler = Scheduler(args)
+    result_list = scheduler.run(task_cases)
+
+
+    if args.numa_rank == 0:
+        if len(result_list) == 0:
+            logger.error("No result found")
+            sys.exit(1)
+
+        sku_name = result_list[0]["sku_name"]
+
+        report_dir = pathlib.Path(args.report_dir).absolute()
+        backend_dir = report_dir.joinpath(args.hardware_type)
+        sku_dir = backend_dir.joinpath(sku_name)
+        op_dir = sku_dir.joinpath(args.task)
+        op_dir.mkdir(parents=True, exist_ok=True)
+
+
+        result_mapping = {}
+        for result in result_list:
+            arguments = result["arguments"]
+            targets = result["targets"]
+
+            args_type = arguments.get("args_type", "default")
+            world_size = arguments.get("world_size", 1)
+            dtype = arguments["dtype"]
+
+            key = (args_type, world_size, dtype)
+            if key not in result_mapping:
+                result_mapping[key] = []
+            result_mapping[key].append(result)
+
+        for key in result_mapping:
+            file_name = f"{key[0]}-group{key[1]}-{key[2]}"
+            result_list = result_mapping[key]
+
+            jsonl_file_path = op_dir.joinpath(file_name + ".jsonl")
+            with jsonlines.open(jsonl_file_path, "w") as writer:
+                for result in result_list:
+                    writer.write(result)
+
+            keys = ["task_name"]
+            keys.extend(list(result_list[0]["arguments"].keys()))
+            keys.extend(list(result_list[0]["targets"].keys()))
+
+            csv_file_path = op_dir.joinpath(file_name + ".csv")
+            with open(csv_file_path, "w") as f:
+                writer = csv.writer(f)
+                writer.writerow(keys)
+                for result in result_list:
+                    row = [args.task]
+                    row.extend(list(result["arguments"].values()))
+                    row.extend(list(result["targets"].values()))
+                    writer.writerow(row)
+
+        

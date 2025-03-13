@@ -18,7 +18,7 @@ from llm_perf.core.generation import (
     GenerateRequest,
     GenerateResult
 )
-from llm_perf.core.engine import CoreEngine
+from llm_perf.core.inferencer import CoreInferencer
 from llm_perf.core.sampler import CoreSampler
 from llm_perf.utils.logger import logger
 from llm_perf.utils.reporter import calc_perplexity
@@ -27,64 +27,41 @@ from llm_perf.utils.reporter import calc_perplexity
 class CoreScheduler(ABC):
     def __init__(
         self,
-        engine: CoreEngine,
+        inferencer: CoreInferencer,
         sampler: CoreSampler,
-        packet_cls=CoreEngine.Packet,
-        **kwargs,
+        task_cls=CoreInferencer.Task
     ) -> None:
         super().__init__()
 
-        self.engine: CoreEngine = engine
-        self.sampler: CoreSampler = sampler 
+        self.inferencer: CoreInferencer = inferencer
+        self.sampler: CoreSampler = sampler
 
-        self.Packet = packet_cls
-        self.packet_queue: Queue[self.Packet] = Queue()
+        self.Task = task_cls
+        self.task_queue: Queue[self.Task] = Queue()
 
         self.started = False
         self.scheduler_thread = None
 
 
     def start(self):
-        assert not self.started
-        self.started = True
-
-        if dist.is_initialized():
-            self.local_rank = dist.get_rank()
-            self.world_size = dist.get_world_size()
-        else:
-            self.local_rank = 0
-            self.world_size = 1
-
-        if self.local_rank > 0:
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-            self.worker_loop()
-        else:
-            signal.signal(signal.SIGTERM, self.stop)
-            signal.signal(signal.SIGINT, self.stop)
+        if not self.started:
+            logger.info("start scheduler thread")
+            self.started = True
             self.scheduler_thread = threading.Thread(target=self.scheduler_loop)
-            self.scheduler_thread.setDaemon(True)
             self.scheduler_thread.start()
 
     def stop(self):
-        assert self.local_rank == 0
-        self.started = False
-        if self.scheduler_thread:
-            self.scheduler_thread.join()
+        if self.started:
+            logger.info("stop scheduler thread")
+            self.started = False
+            if self.scheduler_thread and self.scheduler_thread.is_alive():
+                self.scheduler_thread.join(timeout=1.)
+
 
     @abstractmethod
-    @torch.inference_mode()
+    @torch.no_grad()
     def scheduler_loop(self):
         raise NotImplementedError
-
-    @torch.inference_mode()
-    def worker_loop(self):
-        try:
-            while True:
-                self.engine.do_inference([])
-        except Exception as e:
-            logger.info(f"worker {self.local_rank} exit: {e}")
-
 
     async def generate(
         self, 
@@ -92,98 +69,96 @@ class CoreScheduler(ABC):
     ) -> Union[
         AsyncIterable[GenerateResult], Tuple[AsyncIterable[GenerateResult], float, str]
     ]:
-        packet = self.Packet(request=req)
-        self.submit(packet)
+        task = self.Task(request=req)
+        self.submit(task)
 
         async for result in self.get_packet_results(
-            req.generate_config.get_input_logits, packet
+            req.generate_config.get_input_logits, task
         ):
             yield result
 
 
-    def submit(self, packet):
-        self.packet_queue.put_nowait(packet)
+    def submit(self, task):
+        self.task_queue.put_nowait(task)
 
 
     async def get_packet_results(
         self, 
         get_input_logits: bool, 
-        packet: CoreEngine.Packet
-    ) -> Union[
-        AsyncIterable[GenerateResult], Tuple[AsyncIterable[GenerateResult], float, str]
-    ]:
-        # Save last generate token index minus 1, cann't use len(generate_ids) because may generate
-        #  many times, but generate thread only schedule once, which means length bigger than last generate token index.
-        _gen_get_id = 0
-        while True:
-            result = await packet.get_result()
-            if result is None:
-                if packet.exception:
-                    raise packet.exception
-                break
+        task: CoreInferencer.Task
+    ):
 
+        gen_index = 0
+
+        while True:
+            result = await task.get_result()
+            if result is None:
+                if task.exception:
+                    raise task.exception
+                break
+            
+            cur_input_tokens = task.request.input_ids + task.generate_ids[:gen_index]
+            gen_index += 1
+
+            task_results = {
+                "result": result, 
+            }
             if get_input_logits:
-                gen_ids = packet.generate_ids[:_gen_get_id]
-                _gen_get_id += 1
-                # 1. label = input_ids + generate_ids[:-1], [:-1] is remove just generate token
-                labels = torch.LongTensor(packet.request.input_ids + gen_ids)
-                logger.debug(
-                    f"label shape: {labels.shape}, input_logits shape: {len(result.input_logits)}"
+                await self.update_logits(result, task)
+
+                cur_labels_tensor = torch.tensor(
+                    cur_input_tokens, 
+                    dtype=torch.int64, device='cpu'
                 )
-                # 2. .view convert List to Tensor view
-                input_logits = torch.FloatTensor(result.input_logits).view(
-                    1, labels.size(-1) - 1, -1
-                )
-                perplexity = calc_perplexity(input_logits=input_logits, labels=labels)
-                dump_file = await self.dump_last_logits(result, packet)
-                yield result, perplexity, dump_file
-            else:
-                yield result
+
+                input_logits_len = len(cur_input_tokens) - 1
+                input_logits = task.all_logits[:input_logits_len]
+
+                perplexity = calc_perplexity(input_logits, cur_labels_tensor)
+
+                task_results["dump_file"] = ""
+                task_results["perplexity"] = perplexity
+
+            yield task_results
+
+        task_results = {
+            "result": None, 
+            "perplexity": -1, 
+        }
 
         if get_input_logits:
-            dump_file = await self.dump_last_logits(result, packet)
-            yield None, -1, dump_file
+            dump_file = await self.dump_last_logits(task)
+            task_results["dump_file"] = dump_file
+            yield task_results
         return
+        
 
-
-
-    async def dump_last_logits(self, result, packet: CoreEngine.Packet):
-        """Dump prompt logits
-
-        Args:
-            result: prompt generate result
-            packet: prompt relate packet
-
-        Return:
-            dump_file: prompt output logits numpy saved file, logits shape: [1, generate_token_len, vocab_size]
-        """
-        if result is None:
-            tmp_dir = ".tmp_logits"
-            if not os.path.exists(tmp_dir):
-                os.mkdir(tmp_dir)
-            import numpy as np
-
-            dump_file = (
-                tmp_dir
-                + "/"
-                + str(random.randint(0, 100))
-                + "_"
-                + str(int(time.time()))
-                + ".npy"
-            )
-            # np_logits shape is [1, seq_len, vocab_size]
-            np_logits = np.expand_dims(np.array(packet.all_last_logits), axis=0)
-            np.save(dump_file, np_logits)
-            return dump_file
+    async def update_logits(self, result, task):
+        # [8, num_vocab]
+        if not hasattr(task, "all_logits"):
+            task.all_logits = result.logits
+        # [1, num_vocab]
         else:
-            # last_logits shape is [vocab_size]
-            # all_last_logits shape is [seq_len, vocab_size]
-            if not hasattr(packet, "all_last_logits"):
-                packet.all_last_logits = [result.last_logits]
-            else:
-                packet.all_last_logits.append(result.last_logits)
-            return ""
+            task.all_logits = torch.cat([task.all_logits, result.logits], dim=0)
 
 
 
+    async def dump_last_logits(self, task: CoreInferencer.Task):
+        tmp_dir = ".tmp_logits"
+        if not os.path.exists(tmp_dir):
+            os.mkdir(tmp_dir)
+        import numpy as np
 
+        dump_file = (
+            tmp_dir
+            + "/"
+            + str(random.randint(0, 100))
+            + "_"
+            + str(int(time.time_ns()))
+            + ".npy"
+        )
+        input_tokens_len = len(task.request.input_ids)
+        gen_tokens_len = len(task.generate_ids)
+        generate_logits = task.all_logits[-gen_tokens_len:].unsqueeze(0)
+        np.save(dump_file, generate_logits.numpy())
+        return dump_file
