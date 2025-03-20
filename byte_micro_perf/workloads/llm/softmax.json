@@ -1,7 +1,7 @@
 {
     "cases": [
         {
-            "args_type": "llm",
+            "arg_type": "llm",
             "dtype": ["float32"], 
             "batch_size": [1], 
             "head_num": [8], 

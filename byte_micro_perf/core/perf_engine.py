@@ -15,21 +15,13 @@
 
 import os
 import sys
-import json
 import csv
-import time
-import random
-import datetime
-import signal
+import json
 import argparse
-import importlib
-import logging
-import subprocess
 import pathlib
-import traceback
 import itertools
-import prettytable
 import jsonlines
+import shutil
 
 from typing import Any, Dict, List
 import itertools
@@ -56,6 +48,7 @@ def parse_args():
     parser.add_argument("--numa_world_size", type=int, default=1)
     parser.add_argument("--numa_rank", type=int, default=0)
     parser.add_argument("--disable_parallel", action="store_true")
+    parser.add_argument("--disable_profiling", action="store_true")
     parser.add_argument("--report_dir", type=str)
     parser.add_argument("--log_level", type=str, default="INFO")
     args = parser.parse_args()
@@ -115,49 +108,67 @@ if __name__ == "__main__":
             sys.exit(1)
 
         sku_name = result_list[0]["sku_name"]
-
         report_dir = pathlib.Path(args.report_dir).absolute()
         backend_dir = report_dir.joinpath(args.hardware_type)
         sku_dir = backend_dir.joinpath(sku_name)
         op_dir = sku_dir.joinpath(args.task)
-        op_dir.mkdir(parents=True, exist_ok=True)
+        if op_dir.exists():
+            shutil.rmtree(op_dir)
+        op_dir.mkdir(parents=True)
 
-
+        # grouped by arg_type
         result_mapping = {}
         for result in result_list:
-            arguments = result["arguments"]
-            targets = result["targets"]
+            # check arguments and targets
+            arguments = result.get("arguments", {})
+            targets = result.get("targets", {})
+            if arguments == {} or targets == {}:
+                continue
+            
+            arg_type = arguments.get("arg_type", "default")
+            if arg_type not in result_mapping:
+                result_mapping[arg_type] = {}
 
-            args_type = arguments.get("args_type", "default")
+            provider = result["provider"]
             world_size = arguments.get("world_size", 1)
             dtype = arguments["dtype"]
 
-            key = (args_type, world_size, dtype)
-            if key not in result_mapping:
-                result_mapping[key] = []
-            result_mapping[key].append(result)
+            key = (provider, world_size, dtype)
+            if key not in result_mapping[arg_type]:
+                result_mapping[arg_type][key] = []
+            result_mapping[arg_type][key].append(result)
+        
 
-        for key in result_mapping:
-            file_name = f"{key[0]}-group{key[1]}-{key[2]}"
-            result_list = result_mapping[key]
+        for arg_type in result_mapping:
+            for key in result_mapping[arg_type]:
+                target_folder = op_dir.joinpath(arg_type)
+                target_folder.mkdir(parents=True, exist_ok=True)
 
-            jsonl_file_path = op_dir.joinpath(file_name + ".jsonl")
-            with jsonlines.open(jsonl_file_path, "w") as writer:
-                for result in result_list:
-                    writer.write(result)
+                provider, world_size, dtype = key
 
-            keys = ["task_name"]
-            keys.extend(list(result_list[0]["arguments"].keys()))
-            keys.extend(list(result_list[0]["targets"].keys()))
+                if world_size == 1:
+                    file_name = f"{provider}-{dtype}"
+                else:
+                    file_name = f"{provider}-group{world_size}-{dtype}"
 
-            csv_file_path = op_dir.joinpath(file_name + ".csv")
-            with open(csv_file_path, "w") as f:
-                writer = csv.writer(f)
-                writer.writerow(keys)
-                for result in result_list:
-                    row = [args.task]
-                    row.extend(list(result["arguments"].values()))
-                    row.extend(list(result["targets"].values()))
-                    writer.writerow(row)
+                result_list = result_mapping[arg_type][key]
+                jsonl_file_path = target_folder.joinpath(file_name + ".jsonl")
+                with jsonlines.open(jsonl_file_path, "w") as writer:
+                    for result in result_list:
+                        writer.write(result)
+
+                keys = ["task_name"]
+                keys.extend(list(result_list[0]["arguments"].keys()))
+                keys.extend(list(result_list[0]["targets"].keys()))
+
+                csv_file_path = target_folder.joinpath(file_name + ".csv")
+                with open(csv_file_path, "w") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(keys)
+                    for result in result_list:
+                        row = [args.task]
+                        row.extend(list(result["arguments"].values()))
+                        row.extend(list(result["targets"].values()))
+                        writer.writerow(row)
 
         

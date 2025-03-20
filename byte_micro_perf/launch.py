@@ -79,7 +79,7 @@ def parse_args():
     # task
     parser.add_argument(
         "--task_dir", type=str, 
-        default=str(BYTE_MLPERF_ROOT.joinpath("workloads")), 
+        default=str(BYTE_MLPERF_ROOT.joinpath("workloads", "basic")), 
         help="The direcotry of tasks going to be evaluted, e.g., default set to workloads"
     )
     parser.add_argument(
@@ -117,6 +117,11 @@ def parse_args():
         "--disable_parallel", 
         action="store_true", 
         help="Disable parallel run for normal op."
+    )
+    parser.add_argument(
+        "--disable_profiling",
+        action="store_true", 
+        help="Disable profiling op kernels."
     )
     
     return parser.parse_args()
@@ -209,6 +214,8 @@ if __name__ == "__main__":
                     f" --report_dir {args.report_dir}"
         if args.disable_parallel:
             perf_cmd += " --disable_parallel"
+        if args.disable_profiling:
+            perf_cmd += " --disable_profiling"
 
         print(f"******************************************* Start to test op: [{task}]. *******************************************")
         subprocess_cmds = []

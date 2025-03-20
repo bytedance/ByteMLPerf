@@ -9,9 +9,10 @@ MICRO_PERF_DIR = FILE_DIR.parent.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.utils import logger
-from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
+from core.utils import OpTensorInfo, calc_tensor_size
 from core.op import BasicOp
 from core.ops.gemm_ops import GemmOp
+from core.ops.attn_ops import FlashAttentionOp
 
 class MLUGemmOp(GemmOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
@@ -119,3 +120,68 @@ class MLUGemmOp(GemmOp):
         else:
             torch.matmul(a, b, out=c)
         return c
+
+
+
+class MLUFlashAttentionOp(FlashAttentionOp):
+    def __init__(self, args_dict, backend, *args, **kwargs):
+        super().__init__(args_dict, backend, *args, **kwargs)
+        self._run_func = self.flash_attention_run
+
+
+    def create_tensors(self, instance_num : int):
+        # q, k, v, out
+        cu_seq_len_q = [0]
+        cu_seq_len_k = [0]
+        for i in range(self.batch_size):
+            cu_seq_len_q.append(cu_seq_len_q[-1] + self.q_seq_len)
+            cu_seq_len_k.append(cu_seq_len_k[-1] + self.kv_seq_len)
+        cu_seq_len_q = torch.tensor(cu_seq_len_q, dtype=torch.int32, device="mlu")
+        cu_seq_len_k = torch.tensor(cu_seq_len_k, dtype=torch.int32, device="mlu")
+
+        all_tensor_list = []
+        for i in range(instance_num):
+            tensor_mapping = {}
+            for key, value in self.input_tensor_info.items():
+                tensor_mapping[key] = torch.zeros(
+                    size=value.shape, 
+                    dtype=value.dtype,
+                    device=value.device
+                )
+                if value.device == "cpu":
+                    tensor_mapping[key] = tensor_mapping[key].pin_memory()
+            for key, value in self.output_tensor_info.items():
+                tensor_mapping[key] = torch.zeros(
+                    size=value.shape, 
+                    dtype=value.dtype,
+                    device=value.device
+                )
+                if value.device == "cpu":
+                    tensor_mapping[key] = tensor_mapping[key].pin_memory()
+
+            tensor_mapping["cu_seq_len_q"] = cu_seq_len_q
+            tensor_mapping["cu_seq_len_k"] = cu_seq_len_k
+
+            all_tensor_list.append(tensor_mapping)
+
+        return all_tensor_list
+
+
+
+    def flash_attention_run(self, tensor_mapping):
+        q = tensor_mapping["q"].reshape(self.q_seq_len, self.q_head_num, self.head_dim)
+        k = tensor_mapping["k"].reshape(self.kv_seq_len, self.kv_head_num, self.head_dim)
+        v = tensor_mapping["v"].reshape(self.kv_seq_len, self.kv_head_num, self.head_dim)
+
+        return torch_mlu_ops.flash_attention(
+            q, k, v, 
+            None, 
+            tensor_mapping["cu_seq_len_q"], 
+            tensor_mapping["cu_seq_len_k"], 
+            None, None, 
+            max_seq_len_q=self.q_seq_len, 
+            max_seq_len_kv=self.kv_seq_len, 
+            softmax_scale=self.softmax_scale, 
+            is_causal=self.is_causal, 
+            return_lse=False
+        )

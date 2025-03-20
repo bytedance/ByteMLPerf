@@ -2,6 +2,8 @@ import os
 import sys
 import pathlib
 import random
+import shutil
+import json
 from datetime import timedelta
 
 import torch
@@ -14,16 +16,32 @@ MICRO_PERF_DIR = BACKEND_DIR.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.backend import Backend
+from core.utils import suppress_stdout_stderr
 
 # ops
+from core.ops.unary_ops import *
 from core.ops.binary_ops import *
 from core.ops.reduction_ops import *
-from core.ops.gemm_ops import *
+from core.ops.index_ops import *
 from core.ops.ccl_ops import *
-from .custom_ops import MLUGemmOp
+from core.ops.h2d_ops import *
+from core.ops.gemm_ops import *
+from core.ops.attn_ops import *
+
+from .custom_ops import MLUGemmOp, MLUFlashAttentionOp
 
 
 OP_MAPPING = {
+    # unary ops
+    "cast": CastOp,
+    "cos": CosOp,
+    "exp": ExpOp,
+    "gelu": GeluOp,
+    "log": LogOp,
+    "silu": SiluOp,
+    "sin": SinOp,
+    "sqrt": SqrtOp,
+
     # binary_ops
     "add": AddOp, 
     "sub": SubOp,
@@ -31,7 +49,19 @@ OP_MAPPING = {
     "div": DivOp,
 
     # reduction ops
+    "layer_norm": LayerNormOp, 
+    "reduce_max": ReduceMaxOp, 
+    "reduce_sum": ReduceSumOp,
+    "reduce_min": ReduceMinOp,
     "softmax": SoftmaxOp,
+    "topk": TopkOp, 
+
+    # index ops
+    "index_select": IndexSelectOp, 
+    "gather": GatherOp, 
+    "embedding": EmbeddingOp, 
+    "scatter": ScatterOp, 
+    "index_add": IndexAddOp, 
 
     # xccl_ops
     "all_gather": AllGatherOp, 
@@ -41,9 +71,23 @@ OP_MAPPING = {
     "reduce_scatter": ReduceScatterOp, 
     "p2p": P2POp,
 
+    # h2d ops
+    "host2device": Host2DeviceOp,
+    "device2host": Device2HostOp,
+    "device2device": Device2DeviceOp,
+
     # gemm_ops
     "gemm": MLUGemmOp,
+
+    # attn ops
+    "flash_attention": MLUFlashAttentionOp,
 }
+
+
+
+
+
+
 
 
 class BackendMLU(Backend):
@@ -51,6 +95,18 @@ class BackendMLU(Backend):
         super().__init__()
 
         os.environ['TORCH_ALLOW_TF32_CNMATMUL_OVERRIDE'] = '0'
+
+    def __del__(self):
+        if self.numa_rank == 0:
+            
+            TORCH_PROFILER_RAW_DATA = pathlib.Path.cwd().joinpath("TORCH_PROFILER_RAW_DATA")
+            if TORCH_PROFILER_RAW_DATA.exists():
+                shutil.rmtree(TORCH_PROFILER_RAW_DATA)
+
+            PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling")
+            if PROFILER_DIR.exists():
+                shutil.rmtree(PROFILER_DIR)
+
 
     """
     device management related
@@ -95,24 +151,84 @@ class BackendMLU(Backend):
         return "cncl"
 
 
-
-
-    def core_perf(self, op_instance, warmup_iterations, prefer_iterations, tensor_list):
+    def core_perf(
+        self, op_instance, 
+        warmup_iterations, 
+        prefer_iterations, 
+        tensor_list, 
+        profiling=True
+    ):
         op_group = op_instance.op_group
         group_size = op_instance.group_size
 
-        start_event = torch.mlu.Event(enable_timing=True)
-        end_event = torch.mlu.Event(enable_timing=True)
-
-        for i in range(warmup_iterations):
-            index = random.randint(0, len(tensor_list) - 1)
-            op_instance.core_run(tensor_list[index])
-
+        # nessary sync for host2device, device2host test
+        self.op_group_barrier(op_group=op_group, group_size=group_size)
         self.device_synchronize()
-        start_event.record()
-        for i in range(prefer_iterations):
-            op_instance.core_run(tensor_list[i % len(tensor_list)])
-        end_event.record()
-        self.device_synchronize()
-        return start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
+        
+
+        if profiling:
+            process_id = os.getpid()
+            TORCH_PROFILER_RAW_DATA = pathlib.Path.cwd().joinpath("TORCH_PROFILER_RAW_DATA", f"{process_id}")
+            PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling", f"{process_id}")
+
+            
+            with suppress_stdout_stderr():
+                with torch.profiler.profile(
+                    activities=[torch.profiler.ProfilerActivity.MLU], 
+                    schedule=torch.profiler.schedule(wait=0, warmup=warmup_iterations, active=prefer_iterations, repeat=1)
+                ) as prof:
+                    for i in range(prefer_iterations+2):
+                        op_instance.core_run(tensor_list[i % len(tensor_list)])
+                        self.device_synchronize()
+                        prof.step()
+            
+            torch.profiler.tensorboard_trace_handler(f"{PROFILER_DIR}")(prof)
+
+            # delete cnperf data
+            if TORCH_PROFILER_RAW_DATA.exists():
+                shutil.rmtree(TORCH_PROFILER_RAW_DATA)
+
+            # parse and delete profiling json file
+            average_latency = 0.
+            kernel_latency_list = {}
+            if PROFILER_DIR.exists():
+                json_files = list(PROFILER_DIR.glob("*.json"))
+                if json_files:
+                    profiling_data = json.load(open(json_files[0]))
+                    for event in profiling_data["traceEvents"]:
+                        if event.get("cat", None) == "kernel":
+                            kernel_name = event["name"]
+                            kernel_latency = event["dur"]
+                            if kernel_name not in kernel_latency_list:
+                                kernel_latency_list[kernel_name] = []
+                            kernel_latency_list[kernel_name].append(kernel_latency)
+
+                    take_iters = prefer_iterations // 2
+                    iters_offset = prefer_iterations - take_iters
+
+                    removed_keys = []
+                    for kernel in kernel_latency_list:
+                        if len(kernel_latency_list[kernel]) != prefer_iterations:
+                            removed_keys.append(kernel)
+                        average_latency += sum(kernel_latency_list[kernel][iters_offset:])
+                    for kernel in removed_keys:
+                        kernel_latency_list.pop(kernel)
+
+                    average_latency /= take_iters
+                shutil.rmtree(PROFILER_DIR)
+            return average_latency, list(kernel_latency_list.keys())
+        else:
+            for i in range(warmup_iterations):
+                index = random.randint(0, len(tensor_list) - 1)
+                op_instance.core_run(tensor_list[index])
+            start_event = torch.mlu.Event(enable_timing=True)
+            end_event = torch.mlu.Event(enable_timing=True)
+            start_event.record()
+            for i in range(prefer_iterations):
+                op_instance.core_run(tensor_list[i % len(tensor_list)])
+            end_event.record()
+            self.device_synchronize()
+
+            latency_us = start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
+            return latency_us, []
     
