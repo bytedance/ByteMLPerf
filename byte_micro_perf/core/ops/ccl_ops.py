@@ -8,7 +8,7 @@ MICRO_PERF_DIR = FILE_DIR.parent.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.utils import logger
-from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
+from core.utils import OpTensorInfo, calc_tensor_size
 from core.op import BasicOp
 
 

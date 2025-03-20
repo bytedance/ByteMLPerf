@@ -8,7 +8,7 @@ MICRO_PERF_DIR = FILE_DIR.parent.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.utils import logger
-from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
+from core.utils import OpTensorInfo, calc_tensor_size
 from core.op import BasicOp
 
 
@@ -21,8 +21,8 @@ class FlashAttentionOp(BasicOp):
 
     def prepare(self):
         # llm args
-        self.args_type = self.args_dict["args_type"]
-        if self.args_type != "llm":
+        self.arg_type = self.args_dict["arg_type"]
+        if self.arg_type != "llm":
             raise NotImplementedError
 
         # llm phase: prefill or decode
@@ -48,6 +48,8 @@ class FlashAttentionOp(BasicOp):
         self.is_causal = self.args_dict["is_causal"]
         if not self.is_causal:
             raise NotImplementedError
+
+        self.softmax_scale = self.head_dim ** (-0.5)
 
 
         self.input_tensor_info = {
@@ -83,7 +85,6 @@ class FlashAttentionOp(BasicOp):
         self.write_bytes = self.output_tensor_size
         self.io_bytes = self.read_bytes + self.write_bytes
 
-        self.output_tensor_info = {}
 
         p_gemm_b = self.batch_size * self.q_head_num
         p_gemm_m = self.q_seq_len

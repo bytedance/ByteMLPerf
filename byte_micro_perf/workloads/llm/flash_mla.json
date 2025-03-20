@@ -1,7 +1,7 @@
 {
     "cases": [
         {
-            "args_type": "llm",
+            "arg_type": "llm",
             "phase": ["prefill"],
             "is_causal": [true],
             "varlen": [false], 
@@ -24,7 +24,7 @@
             ]
         }, 
         {
-            "args_type": "llm", 
+            "arg_type": "llm", 
             "phase": ["decode"], 
             "is_causal": [true],
             "varlen": [false], 

@@ -19,7 +19,8 @@ from core.utils import logger
 
 class Backend(ABC):
     def __init__(self):
-        pass
+        self.numa_world_size = 1
+        self.numa_rank = 0
 
     """
     device management related
@@ -90,7 +91,6 @@ class Backend(ABC):
             timeout=timedelta(seconds=1800)
         )
         return True
-    
 
     def new_group(self, ranks):
         dist_module = self.get_dist_module()
@@ -117,32 +117,39 @@ class Backend(ABC):
     
 
 
-    def core_perf(self, op_instance, warmup_iterations, prefer_iterations, tensor_list):
+    def core_perf(
+        self, op_instance, 
+        warmup_iterations, prefer_iterations, tensor_list, 
+        profiling=True
+    ):
         op_group = op_instance.op_group
         group_size = op_instance.group_size
 
+        # nessary sync for host2device, device2host test
+        self.op_group_barrier(op_group=op_group, group_size=group_size)
+        self.device_synchronize()
+
         for i in range(warmup_iterations):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
-
         self.device_synchronize()
         start_time = time.perf_counter_ns()
         for i in range(prefer_iterations):
             op_instance.core_run(tensor_list[i % len(tensor_list)])
         self.device_synchronize()
         end_time = time.perf_counter_ns()
-        return (end_time - start_time) / 1e3 / prefer_iterations
-            
+
+        latency_us = (end_time - start_time) / 1e3 / prefer_iterations
+        return latency_us, []
 
 
     
-    def perf(self, op_instance):
+    def perf(self, op_instance, profiling=True):
         if op_instance.is_custom_run():
             latency_us = op_instance.core_run()
             return latency_us
         
         # op
-        op_size_info = op_instance.get_size_info()
-        tensor_size = op_size_info.tensor_size
+        tensor_size = op_instance.tensor_size
 
         # device
         device_mem_info = self.get_mem_info()
@@ -152,9 +159,8 @@ class Backend(ABC):
         assume_cache_size = 1 * (1024 ** 3)
         assume_avail_bytes = int(avail_memory * 0.9)
 
-
         latency_us = 0.
-        min_test_iters = 32 if not type(op_instance).is_concurrent() else 4
+        min_test_iters = 32 if not type(op_instance).is_concurrent() else 10
         sleep_time = 0.2
         max_test_time = 1e6
 
@@ -171,7 +177,7 @@ class Backend(ABC):
                     max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), 32)
 
             tensor_list = op_instance.create_tensors(max_data_cnt)
-            latency_us = self.core_perf(op_instance, 2, 2, tensor_list)
+            latency_us, _ = self.core_perf(op_instance, 2, 2, tensor_list, profiling=False)
             prefer_iters = min(max(int(max_test_time / latency_us), 2), min_test_iters)
             if op_instance.group_size > 1:
                 dist_module = self.get_dist_module()
@@ -179,13 +185,13 @@ class Backend(ABC):
                 dist_module.all_gather_object(prefer_iters_list, prefer_iters, group=op_instance.op_group)
                 prefer_iters = max(prefer_iters_list)
             time.sleep(sleep_time)
-            latency_us = self.core_perf(op_instance, 2, prefer_iters, tensor_list)
+            latency_us, kernel_list = self.core_perf(op_instance, 2, prefer_iters, tensor_list, profiling=profiling)
 
             del tensor_list
             self.empty_cache()
         except Exception as e:
             print(traceback.format_exc())
 
-        return latency_us
+        return latency_us, kernel_list
 
 

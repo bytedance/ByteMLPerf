@@ -33,10 +33,11 @@ class Scheduler:
         self.backend_type = args.hardware_type
         self.op_name = args.task
         self.disable_parallel = args.disable_parallel
+        self.profiling = not args.disable_profiling
         self.report_dir = args.report_dir
 
         # create backend instance
-        self.backend = create_backend(args.hardware_type)    
+        self.backend = create_backend(args.hardware_type)
         self.backend.numa_world_size = args.numa_world_size
         self.backend.numa_rank = args.numa_rank
 
@@ -238,14 +239,17 @@ class Scheduler:
                         print(traceback.format_exc())
 
                     # try bench op
-                    result_json = {"arguments": test_case, "targets": {}}
+                    result_json = {"arguments": test_case}
                     if op_instance is not None:
-                        latecy_us = 0.
+                        latency_us = 0.
+                        kernel_list = []
                         try:
-                            latency_us = backend.perf(op_instance)
+                            latency_us, kernel_list = backend.perf(op_instance, profiling=self.profiling)
                         except Exception as e:
                             print(traceback.format_exc())
-                        result_json = op_instance.summary(latency_us)
+                        result_json["provider"] = op_instance.get_provider()
+                        result_json["targets"] = op_instance.summary(latency_us)
+                        result_json["kernels"] = kernel_list
 
                     arguments_str = json.dumps(result_json["arguments"])
                     targets_str = json.dumps(result_json["targets"], indent=4)
@@ -289,14 +293,17 @@ class Scheduler:
                             print(traceback.format_exc())
 
                         # try bench op
-                        result_list[true_rank] = {"arguments": test_case, "targets": {}}
+                        result_list[true_rank] = {"arguments": test_case}
                         if op_instance is not None:
                             latency_us = 0.
+                            kernel_list = []
                             try:
-                                latency_us = backend.perf(op_instance)
+                                latency_us, kernel_list = backend.perf(op_instance, profiling=self.profiling)
                             except Exception as e:
                                 print(traceback.format_exc())
-                            result_list[true_rank] = op_instance.summary(latency_us)
+                            result_list[true_rank]["provider"] = op_instance.get_provider()
+                            result_list[true_rank]["targets"] = op_instance.summary(latency_us)
+                            result_list[true_rank]["kernels"] = kernel_list
 
                     # sync on all devices, gather all results    
                     if true_world_size > 1:
@@ -308,8 +315,11 @@ class Scheduler:
                             algo_bw_list = [result["targets"]["algo_bw(GB/s)"] for result in result_list[:world_size]]
                             bus_bw_list = [result["targets"]["bus_bw(GB/s)"] for result in result_list[:world_size]]
 
-                            result_list[0]["targets"]["algo_bw_sum(GB/s)"] = sum(algo_bw_list)
-                            result_list[0]["targets"]["bus_bw_sum(GB/s)"] = sum(bus_bw_list)
+                            result_list[0]["targets"]["latency(us)"] = min(latency_list)
+                            result_list[0]["targets"]["algo_bw(GB/s)"] = max(algo_bw_list)
+                            result_list[0]["targets"]["bus_bw(GB/s)"] = max(bus_bw_list)
+                            result_list[0]["targets"]["algo_bw_sum(GB/s)"] = round(sum(algo_bw_list), 3)
+                            result_list[0]["targets"]["bus_bw_sum(GB/s)"] = round(sum(bus_bw_list), 3)
                             result_list[0]["targets"]["latency_list(us)"] = latency_list
                             result_list[0]["targets"]["algo_bw_list(GB/s)"] = algo_bw_list
                             result_list[0]["targets"]["bus_bw_list(GB/s)"] = bus_bw_list

@@ -2,16 +2,13 @@ import sys
 import pathlib
 import torch
 
-
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 MICRO_PERF_DIR = FILE_DIR.parent.parent
 
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
-from core.utils import logger
-from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
+from core.utils import OpTensorInfo, calc_tensor_size
 from core.op import BasicOp
-
 
 
 """
@@ -25,7 +22,6 @@ class AddOp(BasicOp):
         self.dtype = self.args_dict["dtype"]
         self.torch_dtype = getattr(torch, self.dtype)
         
-
         self.batch_size = self.args_dict["batch_size"]
         self.dim_size = self.args_dict["dim_size"]
 

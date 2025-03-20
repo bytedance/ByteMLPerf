@@ -11,7 +11,7 @@ MICRO_PERF_DIR = FILE_DIR.parent.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.utils import logger
-from core.utils import OpTensorInfo, OpSizeInfo, calc_tensor_size
+from core.utils import OpTensorInfo, calc_tensor_size
 from core.op import BasicOp
 from core.ops.gemm_ops import GemmOp, GemmFP8Op, GroupGemmFP8Op
 from core.ops.attn_ops import FlashAttentionOp
@@ -187,6 +187,9 @@ class GPUFlashAttentionOp(FlashAttentionOp):
         super().__init__(args_dict, backend, *args, **kwargs)
         self._run_func = self.flash_attention_run
 
+        # create output tensor during testing
+        self.output_tensor_info = {}
+
     def flash_attention_run(self, tensor_mapping):
         q = tensor_mapping["q"]
         k = tensor_mapping["k"]
@@ -214,8 +217,8 @@ class GPUFlashMLAOp(BasicOp):
 
     def prepare(self):
         # llm args
-        self.args_type = self.args_dict["args_type"]
-        if self.args_type != "llm":
+        self.arg_type = self.args_dict["arg_type"]
+        if self.arg_type != "llm":
             raise NotImplementedError
 
         # llm phase: prefill or decode
