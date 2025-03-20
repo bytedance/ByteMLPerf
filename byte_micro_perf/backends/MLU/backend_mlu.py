@@ -27,7 +27,8 @@ from core.ops.ccl_ops import *
 from core.ops.h2d_ops import *
 from core.ops.gemm_ops import *
 from core.ops.attn_ops import *
-from .custom_ops import GPUGemmOp, GPUGemmFP8Op, GPUGroupGemmFP8Op, GPUFlashAttentionOp, GPUFlashMLAOp
+
+from .custom_ops import MLUGemmOp, MLUFlashAttentionOp
 
 
 OP_MAPPING = {
@@ -41,7 +42,7 @@ OP_MAPPING = {
     "sin": SinOp,
     "sqrt": SqrtOp,
 
-    # binary ops
+    # binary_ops
     "add": AddOp, 
     "sub": SubOp,
     "mul": MulOp,
@@ -62,7 +63,7 @@ OP_MAPPING = {
     "scatter": ScatterOp, 
     "index_add": IndexAddOp, 
 
-    # xccl ops
+    # xccl_ops
     "all_gather": AllGatherOp, 
     "all_reduce": AllReduceOp, 
     "all_to_all": AlltoAllOp,
@@ -74,54 +75,69 @@ OP_MAPPING = {
     "host2device": Host2DeviceOp,
     "device2host": Device2HostOp,
     "device2device": Device2DeviceOp,
-    
-    # gemm ops
-    "gemm": GPUGemmOp,
-    "gemm_fp8": GPUGemmFP8Op,
-    "group_gemm_fp8": GPUGroupGemmFP8Op,
+
+    # gemm_ops
+    "gemm": MLUGemmOp,
 
     # attn ops
-    "flash_attention": GPUFlashAttentionOp,
-    "flash_mla": GPUFlashMLAOp,
+    "flash_attention": MLUFlashAttentionOp,
 }
 
 
 
 
-class BackendGPU(Backend):
+
+
+
+
+class BackendMLU(Backend):
     def __init__(self):
         super().__init__()
+
+        os.environ['TORCH_ALLOW_TF32_CNMATMUL_OVERRIDE'] = '0'
+
+    def __del__(self):
+        if self.numa_rank == 0:
+            
+            TORCH_PROFILER_RAW_DATA = pathlib.Path.cwd().joinpath("TORCH_PROFILER_RAW_DATA")
+            if TORCH_PROFILER_RAW_DATA.exists():
+                shutil.rmtree(TORCH_PROFILER_RAW_DATA)
+
+            PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling")
+            if PROFILER_DIR.exists():
+                shutil.rmtree(PROFILER_DIR)
+
 
     """
     device management related
     """
     def get_torch_device_name(self):
-        return "cuda"
+        return "mlu"
     
     def get_device_name(self, index = 0):
-        return torch.cuda.get_device_name(index)
+        return torch.mlu.get_device_name(index)
     
     def get_device_properties(self, index = 0):
-        return torch.cuda.get_device_properties(index)
+        return torch.mlu.get_device_properties(index)
 
     def get_mem_info(self, index = 0):
-        return torch.cuda.mem_get_info(index)
+        return torch.mlu.mem_get_info(index)
 
     def get_device_count(self):
-        device_count = torch.cuda.device_count()
+        device_count = torch.mlu.device_count()
         return device_count, list(range(device_count))
     
     def set_device(self, device_index : int):
-        torch.cuda.set_device(device_index)
+        torch.mlu.set_device(device_index)
 
     def get_device(self):
-        return torch.cuda.current_device()
+        return torch.mlu.current_device()
 
     def device_synchronize(self):
-        torch.cuda.synchronize()
+        torch.mlu.synchronize()
 
     def empty_cache(self):
-        torch.cuda.empty_cache()
+        torch.mlu.empty_cache()
 
 
 
@@ -132,9 +148,7 @@ class BackendGPU(Backend):
         return dist
     
     def get_dist_backend(self):
-        return "nccl"
-
-
+        return "cncl"
 
 
     def core_perf(
@@ -150,21 +164,30 @@ class BackendGPU(Backend):
         # nessary sync for host2device, device2host test
         self.op_group_barrier(op_group=op_group, group_size=group_size)
         self.device_synchronize()
+        
 
         if profiling:
             process_id = os.getpid()
+            TORCH_PROFILER_RAW_DATA = pathlib.Path.cwd().joinpath("TORCH_PROFILER_RAW_DATA", f"{process_id}")
             PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling", f"{process_id}")
+
+            
             with suppress_stdout_stderr():
                 with torch.profiler.profile(
-                    activities=[torch.profiler.ProfilerActivity.CUDA], 
+                    activities=[torch.profiler.ProfilerActivity.MLU], 
                     schedule=torch.profiler.schedule(wait=0, warmup=warmup_iterations, active=prefer_iterations, repeat=1)
                 ) as prof:
                     for i in range(prefer_iterations+2):
                         op_instance.core_run(tensor_list[i % len(tensor_list)])
                         self.device_synchronize()
                         prof.step()
-
+            
             torch.profiler.tensorboard_trace_handler(f"{PROFILER_DIR}")(prof)
+
+            # delete cnperf data
+            if TORCH_PROFILER_RAW_DATA.exists():
+                shutil.rmtree(TORCH_PROFILER_RAW_DATA)
+
             # parse and delete profiling json file
             average_latency = 0.
             kernel_latency_list = {}
@@ -198,8 +221,8 @@ class BackendGPU(Backend):
             for i in range(warmup_iterations):
                 index = random.randint(0, len(tensor_list) - 1)
                 op_instance.core_run(tensor_list[index])
-            start_event = torch.cuda.Event(enable_timing=True)
-            end_event = torch.cuda.Event(enable_timing=True)
+            start_event = torch.mlu.Event(enable_timing=True)
+            end_event = torch.mlu.Event(enable_timing=True)
             start_event.record()
             for i in range(prefer_iterations):
                 op_instance.core_run(tensor_list[i % len(tensor_list)])
@@ -208,3 +231,4 @@ class BackendGPU(Backend):
 
             latency_us = start_event.elapsed_time(end_event) * 1e3 / prefer_iterations
             return latency_us, []
+    

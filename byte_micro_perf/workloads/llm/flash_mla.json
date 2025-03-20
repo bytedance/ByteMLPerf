@@ -1,0 +1,41 @@
+{
+    "cases": [
+        {
+            "arg_type": "llm",
+            "phase": ["prefill"],
+            "is_causal": [true],
+            "varlen": [false], 
+            "dtype": ["bfloat16"],
+            "q_head_num.kv_head_num": [
+                [8, 8], 
+                [16, 16], 
+                [32, 32],
+                [64, 64],
+                [128, 128]
+            ], 
+            "qk_dim_size": [192], 
+            "v_dim_size": [128], 
+            "batch_size": [1, 2, 4, 8],
+            "q_seq_len.kv_seq_len": [
+                [1024, 1024], 
+                [2048, 2048], 
+                [4096, 4096], 
+                [8192, 8192]
+            ]
+        }, 
+        {
+            "arg_type": "llm", 
+            "phase": ["decode"], 
+            "is_causal": [true],
+            "varlen": [false], 
+            "dtype": ["bfloat16"], 
+            "q_head_num": [8, 16, 32, 64, 128],
+            "kv_head_num": [1], 
+            "qk_dim_size": [576], 
+            "v_dim_size": [512], 
+            "batch_size": [1, 2, 4, 8, 16, 32, 64, 128, 160, 192, 256], 
+            "q_seq_len": [1, 2], 
+            "kv_seq_len": [4096, 8192]
+        }
+    ]
+}

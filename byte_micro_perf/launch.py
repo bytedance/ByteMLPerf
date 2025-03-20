@@ -51,29 +51,36 @@ def get_numa_configs():
     return numa_configs
     
 
-
-if __name__ == "__main__":
-
-    # get numa config, for example: 
-    # 0: 0-31,64-95
-    # 1: 32-63,96-127
-    numa_configs = get_numa_configs()
-
-    avail_numa_node = [-1]
-    for i, numa_config in enumerate(numa_configs):
-        avail_numa_node.append(i)
+# get numa config, for example: 
+# 0: 0-31,64-95
+# 1: 32-63,96-127
+numa_configs = get_numa_configs()
+avail_numa_node = [-1]
+for i, numa_config in enumerate(numa_configs):
+    avail_numa_node.append(i)
 
 
+
+def parse_args():
     parser = argparse.ArgumentParser()
+
+    # hardware
     parser.add_argument(
         "--hardware_type",
         default="GPU", 
         help="The backend going to be evaluted, refs to backends/",
     )
     parser.add_argument(
+        "--show_hardware_list",
+        action="store_true",
+        help="Print all hardware bytemlperf supported",
+    )
+
+    # task
+    parser.add_argument(
         "--task_dir", type=str, 
-        default=str(BYTE_MLPERF_ROOT.joinpath("workloads").absolute()), 
-        help="The direcotry of tasks going to be evaluted, e.g., set to workloads"
+        default=str(BYTE_MLPERF_ROOT.joinpath("workloads", "basic")), 
+        help="The direcotry of tasks going to be evaluted, e.g., default set to workloads"
     )
     parser.add_argument(
         "--task", 
@@ -85,66 +92,69 @@ if __name__ == "__main__":
         action="store_true", 
         help="Print all available task names"
     )
+
+    # report dir
     parser.add_argument(
-        "--show_hardware_list",
-        action="store_true",
-        help="Print all hardware bytemlperf supported",
+        "--report_dir", 
+        type=str, 
+        default=str(BYTE_MLPERF_ROOT.joinpath("reports")), 
+        help="Report dir, default is reports/"
     )
 
-    parser.add_argument("--numa_node", type=int, choices=avail_numa_node, help="NUMA node id, -1 means all NUMA nodes, default is None which means numa_balance.")
-    parser.add_argument("--device", type=str, default="all")
-    parser.add_argument("--disable_parallel", action="store_true")
-    parser.add_argument("--report_dir", type=str, default=str(BYTE_MLPERF_ROOT.joinpath("reports").absolute()))
-    args = parser.parse_args()
+    # feature control, [-1, 0, 1]
+    parser.add_argument(
+        "--numa_node", 
+        type=int, 
+        choices=avail_numa_node, 
+        help="NUMA node id, -1 means normal run, default is None which means numa_balance.")
+    parser.add_argument(
+        "--device", 
+        type=str, 
+        default="all", 
+        help="Device id, default is all."
+    )
+    parser.add_argument(
+        "--disable_parallel", 
+        action="store_true", 
+        help="Disable parallel run for normal op."
+    )
+    parser.add_argument(
+        "--disable_profiling",
+        action="store_true", 
+        help="Disable profiling op kernels."
+    )
+    
+    return parser.parse_args()
 
 
-    args.task_dir = pathlib.Path(args.task_dir).absolute()
-    args.report_dir = pathlib.Path(args.report_dir).absolute()
-    args.report_dir.mkdir(parents=True, exist_ok=True)
 
 
 
-    os.chdir(str(BYTE_MLPERF_ROOT))
 
-    task_list = [task_json.stem for task_json in args.task_dir.glob("*.json")]
-    task_list.sort()
-    task_mapping = {
-        "all": task_list, 
-        "gemm_ops": [], 
-        "unary_ops": [], 
-        "binary_ops": [], 
-        "reduction_ops": [], 
-        "index_ops": [], 
-        "h2d_ops": [], 
-        "ccl_ops": []
-    }
-    for task in task_list:
-        if task in ["gemm", "gemv", "batch_gemm", "group_gemm"]:
-            task_mapping["gemm_ops"].append(task)
 
-        if task in ["sin", "cos", "exp", "exponential", "log", "sqrt", "cast", "silu", "gelu", "swiglu"]:
-            task_mapping["unary_ops"].append(task)
+if __name__ == "__main__":
+    args = parse_args()
 
-        if task in ["add", "mul", "sub", "div"]:
-            task_mapping["binary_ops"].append(task)
+    task_dir = pathlib.Path(args.task_dir).absolute()
+    report_dir = pathlib.Path(args.report_dir).absolute()
+    report_dir.mkdir(parents=True, exist_ok=True)
 
-        if task in ["layernorm", "softmax", "reduce_sum", "reduce_max", "reduce_min"]:
-            task_mapping["reduction_ops"].append(task)
-        
-        if task in ["index_add", "sort", "unique", "gather", "scatter", "hash_table", "topk"]:
-            task_mapping["index_ops"].append(task)
 
-        if task in ["host2device", "device2host", "device2device"]:
-            task_mapping["h2d_ops"].append(task)
-
-        if task in ["allgather", "allreduce", "alltoall", "broadcast", "p2p", "reducescatter"]:
-            task_mapping["ccl_ops"].append(task)
-
+    # hardware_list
     hardware_list = []
     for file in BYTE_MLPERF_ROOT.joinpath("backends").iterdir():
         if file.is_dir() and file.stem.startswith("_") is False:
             hardware_list.append(file.stem)
 
+    # task_list
+    csv_task_list = [task_csv.stem for task_csv in task_dir.rglob("*.csv")]
+    json_task_list = [task_json.stem for task_json in task_dir.rglob("*.json")]
+    task_list = list(set(json_task_list) | set(csv_task_list))
+
+    if args.show_hardware_list:
+        logger.info("***************** Supported Hardware Backend *****************")
+        print(hardware_list)
+        exit(0)
 
     # show task and hardware list
     if args.show_task_list:
@@ -152,27 +162,6 @@ if __name__ == "__main__":
         print(task_list)        
         exit(0)
 
-    if args.show_hardware_list:
-        logger.info("***************** Supported Hardware Backend *****************")
-        print(hardware_list)
-        exit(0)
-
-
-
-    # check task
-    test_cases = []
-    if args.task in task_mapping.keys():
-        test_cases = task_mapping[args.task]
-    else:
-        specified_tasks = args.task.split(",")
-        for task in specified_tasks:
-            if task not in task_list:
-                logger.error(f"Task {task} not found in {args.task_dir}")
-                exit(1)
-            test_cases.append(task)
-
-    logger.info(f"******************* Tasks: *****************")
-    logger.info(f"{test_cases}\n")
 
 
     # check hardware
@@ -180,14 +169,26 @@ if __name__ == "__main__":
     if hardware not in hardware_list:
         logger.error(f"Hardware {hardware} not found in {BYTE_MLPERF_ROOT.joinpath('backends')}")
         exit(1)
-
     logger.info(f"******************* hardware: *****************")
     logger.info(f"{hardware}\n")
 
 
+    # check task
+    if args.task == "all":
+        test_cases = task_list
+    else:
+        test_cases = []
+        specified_tasks = args.task.split(",")
+        for task in specified_tasks:
+            if task not in task_list:
+                logger.error(f"Task {task} not found in {args.task_dir}")
+                exit(1)
+            test_cases.append(task)
 
+    test_cases.sort()
 
-
+    logger.info(f"******************* Tasks: *****************")
+    logger.info(f"{test_cases}\n")
 
 
     # terminate core task perf process
@@ -204,7 +205,6 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
 
 
-
     for task in test_cases:
         perf_cmd =  f"python3 ./core/perf_engine.py"\
                     f" --hardware_type {args.hardware_type}"\
@@ -214,12 +214,13 @@ if __name__ == "__main__":
                     f" --report_dir {args.report_dir}"
         if args.disable_parallel:
             perf_cmd += " --disable_parallel"
+        if args.disable_profiling:
+            perf_cmd += " --disable_profiling"
 
         print(f"******************************************* Start to test op: [{task}]. *******************************************")
         subprocess_cmds = []
         subprocess_instances = []
         subprocess_pids = []
-
 
         if args.numa_node is None:
             for i, numa_config in enumerate(numa_configs):
