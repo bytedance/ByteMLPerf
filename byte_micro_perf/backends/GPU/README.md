@@ -1,7 +1,27 @@
-Recomnend using the following environments:
-- Driver version: [550.54.15](https://developer.nvidia.com/cuda-12-4-1-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Debian&target_version=10&target_type=runfile_local)
-- CUDA version: [12.4](https://developer.nvidia.com/cuda-12-4-1-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Debian&target_version=10&target_type=runfile_local)
-- Python version: 3.10
-- Pytorch version: [2.4.1](https://pytorch.org/get-started/previous-versions/#v241)
+## Basic components
+### [torch](https://pytorch.org/)
+prefer torch==2.5.1 cuda==12.4
+```bash
+pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+```
 
+## Third party libraries
+### [flash-attention](https://github.com/Dao-AILab/flash-attention)
+```bash
+# normal installation
+python setup.py install
 
+# for hopper gpu, could install flash_attention_3
+cd hopper
+python setup.py install
+```
+
+### [FlashMLA](https://github.com/deepseek-ai/FlashMLA)
+```bash
+python setup.py install
+```
+
+### [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM)
+```bash
+python setup.py install
+```
