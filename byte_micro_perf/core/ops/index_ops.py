@@ -35,19 +35,19 @@ class IndexSelectOp(BasicOp):
                 "src": OpTensorInfo(
                     shape=[self.src_batch_size, self.dim_size],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ), 
                 "index": OpTensorInfo(
                     shape=[self.dst_batch_size],
                     dtype=torch.int64,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
             self.output_tensor_info = {
                 "dst": OpTensorInfo(
                     shape=[self.dst_batch_size, self.dim_size], 
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
 
@@ -69,7 +69,7 @@ class IndexSelectOp(BasicOp):
   
 
     def create_tensors(self, instance_num):
-        cur_device = self.backend.get_device()
+        cur_device = self.backend.get_torch_device_name()
 
         all_tensor_list = []
         for _ in range(instance_num):
@@ -119,7 +119,7 @@ class GatherOp(IndexSelectOp):
         self._run_func = self.gather_run
 
     def create_tensors(self, instance_num):
-        cur_device = self.backend.get_device()
+        cur_device = self.backend.get_torch_device_name()
 
         all_tensor_list = []
         for _ in range(instance_num):
@@ -189,7 +189,7 @@ class ScatterOp(IndexSelectOp):
         self._run_func = self.scatter_run
 
     def create_tensors(self, instance_num):
-        cur_device = self.backend.get_device()
+        cur_device = self.backend.get_torch_device_name()
 
         all_tensor_list = []
         for _ in range(instance_num):
@@ -257,7 +257,7 @@ class IndexAddOp(IndexSelectOp):
         
 
     def create_tensors(self, instance_num):
-        cur_device = self.backend.get_device()
+        cur_device = self.backend.get_torch_device_name()
 
         all_tensor_list = []
         for _ in range(instance_num):

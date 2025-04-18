@@ -163,7 +163,7 @@ class BackendGPU(Backend):
                     activities=[torch.profiler.ProfilerActivity.CUDA], 
                     schedule=torch.profiler.schedule(wait=0, warmup=warmup_iterations, active=prefer_iterations, repeat=1)
                 ) as prof:
-                    for i in range(prefer_iterations + 2):
+                    for i in range(prefer_iterations + warmup_iterations):
                         op_instance.core_run(tensor_list[i % len(tensor_list)])
                         self.device_synchronize()
                         prof.step()

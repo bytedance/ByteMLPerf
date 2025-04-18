@@ -75,12 +75,7 @@ class Backend(ABC):
     
 
     def initialize_ccl(self, rank: int, world_size: int):
-        os.environ["MASTER_ADDR"] = "127.0.0.1"
-        os.environ["MASTER_PORT"] = "49373"
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["RANK"] = str(rank)
-        os.environ["WORLD_SIZE"] = str(world_size)
-
+        os.environ["MASTER_PORT"] = os.environ["BACKEND_PORT"]
         dist_module = self.get_dist_module()
         dist_backend_name = self.get_dist_backend()
 
@@ -105,7 +100,7 @@ class Backend(ABC):
         dist_module = self.get_dist_module()
         if dist_module.is_initialized() and group_size > 1:
             dist_module.all_reduce(
-                torch.tensor([1], dtype=torch.int32, device=self.get_device()),
+                torch.tensor([1], dtype=torch.int32, device=self.get_torch_device_name()),
                 op=dist_module.ReduceOp.SUM,
                 group=op_group
             )

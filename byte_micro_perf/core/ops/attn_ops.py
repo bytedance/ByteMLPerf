@@ -56,24 +56,24 @@ class FlashAttentionOp(BasicOp):
             "q": OpTensorInfo(
                 shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             ),
             "k": OpTensorInfo(
                 shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             ),
             "v": OpTensorInfo(
                 shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "out": OpTensorInfo(
                 shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )    
         }
 

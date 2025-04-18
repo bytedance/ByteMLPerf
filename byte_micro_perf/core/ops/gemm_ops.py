@@ -57,19 +57,19 @@ class GemmOp(BasicOp):
                 "a": OpTensorInfo(
                     shape=[self.M, self.K],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "b": OpTensorInfo(
                     shape=[self.K, self.N],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
             }
             self.output_tensor_info = {
                 "c": OpTensorInfo(
                     shape=[self.M, self.N],
                     dtype=self.out_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
         elif self.dtype == "int8":
@@ -77,29 +77,29 @@ class GemmOp(BasicOp):
                 "a": OpTensorInfo(
                     shape=[self.M, self.K],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "b": OpTensorInfo(
                     shape=[self.K, self.N],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "a_scale": OpTensorInfo(
                     shape=[self.M],
                     dtype=torch.float32,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "b_scale": OpTensorInfo(
                     shape=[self.N],
                     dtype=torch.float32,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
             }
             self.output_tensor_info = {
                 "c": OpTensorInfo(
                     shape=[self.M, self.N],
                     dtype=self.out_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
         
@@ -155,29 +155,29 @@ class GemmFP8Op(BasicOp):
             "a": OpTensorInfo(
                 shape=[self.M, self.K],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             ),
             "b": OpTensorInfo(
                 shape=[self.N, self.K],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             ),
             "a_scale": OpTensorInfo(
                 shape=[self.M, self.K_BLOCK],
                 dtype=self.scale_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             ), 
             "b_scale": OpTensorInfo(
                 shape=[self.N_BLOCK, self.K_BLOCK],
                 dtype=self.scale_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             ),
         }
         self.output_tensor_info = {
             "c": OpTensorInfo(
                 shape=[self.M, self.N],
                 dtype=self.out_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -222,34 +222,34 @@ class GroupGemmFP8Op(BasicOp):
                 "a": OpTensorInfo(
                     shape=[self.num_groups * self.M, self.K],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "b": OpTensorInfo(
                     shape=[self.num_groups, self.N, self.K],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ), 
                 "a_scale": OpTensorInfo(
                     shape=[self.num_groups * self.M, self.K_BLOCK],
                     dtype=self.scale_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "b_scale": OpTensorInfo(
                     shape=[self.num_groups, self.N_BLOCK, self.K_BLOCK],
                     dtype=self.scale_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "m_indices": OpTensorInfo(
                     shape=[self.num_groups * self.M],
                     dtype=torch.int32,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
             self.output_tensor_info = {
                 "c": OpTensorInfo(
                     shape=[self.num_groups * self.M, self.N],
                     dtype=self.out_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
         elif self.mode == "masked":
@@ -257,34 +257,34 @@ class GroupGemmFP8Op(BasicOp):
                 "a": OpTensorInfo(
                     shape=[self.num_groups, self.M, self.K],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ),
                 "b": OpTensorInfo(
                     shape=[self.num_groups, self.N, self.K],
                     dtype=self.torch_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ), 
                 "a_scale": OpTensorInfo(
                     shape=[self.num_groups, self.M, self.K_BLOCK],
                     dtype=self.scale_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ), 
                 "b_scale": OpTensorInfo(
                     shape=[self.num_groups, self.N_BLOCK, self.K_BLOCK],
                     dtype=self.scale_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 ), 
                 "masked_m": OpTensorInfo(
                     shape=[self.num_groups],
                     dtype=torch.int32, 
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
             self.output_tensor_info = {
                 "c": OpTensorInfo(
                     shape=[self.num_groups, self.M, self.N],
                     dtype=self.out_dtype,
-                    device=self.backend.get_device(),
+                    device=self.backend.get_torch_device_name(),
                 )
             }
         else:

@@ -8,6 +8,7 @@ import traceback
 import prettytable
 
 from typing import List, Dict, Any
+import torch.distributed as dist
 import torch.multiprocessing as mp
 
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
@@ -30,79 +31,103 @@ class Scheduler:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
 
+        # store args
+        self.args_device = args.device
         self.backend_type = args.hardware_type
-        self.op_name = args.task
         self.disable_parallel = args.disable_parallel
         self.profiling = not args.disable_profiling
         self.report_dir = args.report_dir
 
+
         # create backend instance
         self.backend = create_backend(args.hardware_type)
+
+        self.backend.node_world_size = args.node_world_size
+        self.backend.node_rank = args.node_rank
+
         self.backend.numa_world_size = args.numa_world_size
         self.backend.numa_rank = args.numa_rank
 
+        self.backend.all_process_size = args.all_process_size
+        self.backend.all_process_rank = args.all_process_rank
+
+
+
+    def prepare_task(self, task):
         # get op cls
+        self.op_name = task
         self.op_cls = get_op_cls(self.backend_type, self.op_name)
         self.is_concurrent = self.op_cls.is_concurrent()
 
-
         # get device info
-        if args.device == "all":
+        if self.args_device == "all":
             ori_target_devices = self.backend.avail_devices
         else:
             try:
                 ori_target_devices = []
-                for d in args.device.split(","):
+                for d in self.args_device.split(","):
                     if d.isdigit() and int(d) < self.backend.device_count:
                         ori_target_devices.append(int(d))
             except Exception as e:
-                logger.error(f"invalid device config: {args.device}, error msg: {e}")
-                exit(1)
+                logger.error(f"invalid device config: {self.args_device}, error msg: {e}")
+                return
         ori_target_device_count = len(ori_target_devices)
         if ori_target_device_count == 0:
             logger.error("no valid device")
-            exit(1)
+            return
 
+
+        # for each node, each numa process, provide:
+        # 1. ori_target_devices: [0, 1, 2, 3, 4, 5, 6, 7]
+        # 2. total_target_devices: [0, 1, 2 ,3, 4, 5, 6, 7]
+        # 3. target_devices: [0, 1, 2, 3] or [4, 5, 6, 7]
+        # 4. device_num_per_numa: 4
+        # 5. all_node_devices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7] for 2 nodes
+        # one node, one process, specified devices
         if not self.is_concurrent:
-            if self.backend.numa_rank != 0:
-                exit(0)
+            if self.backend.numa_rank == 0:
+                self.backend.ori_target_devices = ori_target_devices
+                self.backend.target_devices = ori_target_devices if not self.disable_parallel else ori_target_devices[0:1]
+                self.backend.total_target_devices = ori_target_devices if not self.disable_parallel else ori_target_devices[0:1]
+                self.backend.device_num_per_numa = ori_target_device_count if not self.disable_parallel else 1
+                self.backend.all_node_devices = ori_target_devices
             else:
-                self.backend.numa_world_size = 1
+                return None
 
-
-        # split numa nodes on ori_target_devices
-        target_devices = []
-        total_target_devices = []
-        device_num_per_numa = ori_target_device_count // self.backend.numa_world_size
-
-        # not concurrent and disable_parallel, only enable 1 device
-        if not self.is_concurrent and self.disable_parallel:
-            if self.backend.numa_rank != 0:
-                exit(0)
-            target_devices = ori_target_devices[0:1]
-            total_target_devices = ori_target_devices[0:1]
-            device_num_per_numa = 1
-            self.backend.numa_world_size = 1
-            self.backend.numa_rank = 0
+        # multiple nodes, multiple processes, specified devices on each
         else:
-            if self.backend.numa_world_size > ori_target_device_count:
-                if self.backend.numa_rank >= ori_target_device_count:
-                    exit(0)
-                self.backend.numa_world_size = ori_target_device_count
-                device_num_per_numa = 1
-                target_devices = ori_target_devices[self.backend.numa_rank:self.backend.numa_rank+1] 
+            total_target_devices = []
+            target_devices = []
+            device_num_per_numa = ori_target_device_count // self.backend.numa_world_size
+
+            if device_num_per_numa == 0:
+                if self.backend.numa_rank < ori_target_device_count:
+                    target_devices = ori_target_devices[self.backend.numa_rank:self.backend.numa_rank+1]
                 total_target_devices = ori_target_devices
             else:
-                for i in range(self.backend.numa_rank * device_num_per_numa, (self.backend.numa_rank + 1) * device_num_per_numa):
-                    target_devices.append(ori_target_devices[i])
+                target_devices = ori_target_devices[self.backend.numa_rank * device_num_per_numa:(self.backend.numa_rank + 1) * device_num_per_numa]
                 total_target_devices = ori_target_devices[0:self.backend.numa_world_size * device_num_per_numa]
 
-        
-        self.backend.ori_target_devices = ori_target_devices
-        self.backend.total_target_devices = total_target_devices
-        self.backend.target_devices = target_devices
-        self.backend.device_num_per_numa = device_num_per_numa
-        
+            temp_all_node_devices = [None for _ in range(self.backend.all_process_size)]
+            dist.all_gather_object(temp_all_node_devices, target_devices)
+
+            if len(target_devices) == 0:
+                return
+
+            all_node_devices = []
+            for process_target_devices in temp_all_node_devices:
+                all_node_devices.extend(process_target_devices)
+
+
+
+            self.backend.ori_target_devices = ori_target_devices
+            self.backend.total_target_devices = total_target_devices
+            self.backend.target_devices = target_devices
+            self.backend.device_num_per_numa = device_num_per_numa
+            self.backend.all_node_devices = all_node_devices
+            
+
+
 
         # print readable config
         pt = prettytable.PrettyTable()
@@ -112,21 +137,18 @@ class Scheduler:
         pt.add_row(["op_name", self.op_name])
         pt.add_row(["is_concurrent", self.is_concurrent])
 
+        pt.add_row(["node_rank", f"{self.backend.node_rank} / {self.backend.node_world_size}"])
         pt.add_row(["numa_rank", f"{self.backend.numa_rank} / {self.backend.numa_world_size}"])
+        pt.add_row(["process_rank", f"{self.backend.all_process_rank} / {self.backend.all_process_size}"])
         pt.add_row(["avail_devices", self.backend.avail_devices])
         pt.add_row(["ori_target_devices", self.backend.ori_target_devices])
-        pt.add_row(["total_target_devices", total_target_devices])
+        pt.add_row(["total_target_devices", self.backend.total_target_devices])
         pt.add_row(["target_devices", self.backend.target_devices])
-        pt.add_row(["device_num_per_numa_node", self.backend.device_num_per_numa])
+        pt.add_row(["all_node_devices", self.backend.all_node_devices])
+        pt.add_row(["device_num_per_numa", self.backend.device_num_per_numa])
         print(pt)
 
-        try:
-            mp.set_start_method("spawn", force=True)
-        except Exception as e:
-            traceback.print_exc()
-            logger.exception(f"failed to set spawn context: {e}")
-            sys.exit(-1)
-
+        return True
 
 
     def __del__(self):
@@ -139,6 +161,7 @@ class Scheduler:
                 pid = process.pid
                 if pid is not None:
                     os.kill(pid, signal.SIGTERM)
+        self._subprocesses.clear()
 
 
 
@@ -151,29 +174,26 @@ class Scheduler:
         try:
             _subprocess = mp.spawn(
                 fn=self.subprocess_func,
-                args=(input_queues,output_queues),
+                args=(input_queues, output_queues),
                 nprocs=instance_num,
                 join=False,
                 daemon=False
             )
-
         except Exception as e:
             logger.error(f"Create subprocesses failed, error msg: {e}")
-            sys.exit(1)
+            return []
 
         self._subprocesses = _subprocess.processes
         for _ in range(instance_num):
             assert "ready" == output_queues.get()
         logger.info("all ranks are ready and listening, init done")
 
-
-
         result_list = []
         if self.backend.numa_rank == 0:
             valid_case_set = set()
             for index, test_case in enumerate(test_cases):
                 world_size = test_case.get("world_size", 1)
-                if world_size <= self.backend.device_num_per_numa * self.backend.numa_world_size:
+                if world_size <= len(self.backend.all_node_devices):
                     test_case["index"] = index
                     valid_case_set.add(index)
                     input_queues.put(test_case, False)
@@ -205,24 +225,23 @@ class Scheduler:
     def subprocess_func(self, instance_rank : int, *args): 
         try:
             input_queues, output_queues = args
-
-            # get backend instance
             backend = self.backend
-            true_world_size = backend.numa_world_size * backend.device_num_per_numa
-            true_rank = backend.numa_rank * backend.device_num_per_numa + instance_rank
-            true_device_index = backend.target_devices[instance_rank]
-            print(f"true_world_size: {true_world_size}, true_rank: {true_rank}, true_device_index: {true_device_index}")
 
-            
-            backend.set_device(true_device_index)
-            if self.is_concurrent and true_world_size > 1:
-                backend.initialize_ccl(true_rank, true_world_size)
-                dist_module = backend.get_dist_module()
-
-            output_queues.put("ready")
-
-
+            # computation ops
             if not self.is_concurrent:
+                # world_size: 8
+                # index: [0, 1, 2, 3, 4, 5, 6, 7]
+                # device_id: [0, 1, 2, 3, 4, 5, 6, 7]
+                true_world_size = len(backend.target_devices)
+                true_rank = backend.numa_rank * backend.device_num_per_numa + instance_rank
+                true_device_index = backend.target_devices[true_rank]
+                print(f"true_world_size: {true_world_size}, true_rank: {true_rank}, true_device_index: {true_device_index}")
+                backend.set_device(true_device_index)
+
+                # device process is ready
+                output_queues.put("ready")
+
+                # loop function
                 while True:
                     # get task args
                     test_case = input_queues.get()
@@ -260,11 +279,30 @@ class Scheduler:
                     targets_str = json.dumps(result_json["targets"], indent=4)
                     print(f"{arguments_str}\n{targets_str}\n")         
                     output_queues.put(result_json, block=False)
-            elif true_world_size > 1:
-                process_groups_mapping = {
-                    true_world_size: None
-                }
+            
 
+            # communication ops
+            else:
+                # world_size: 16
+                # index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+                # device_id: [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7]
+                true_world_size = len(backend.all_node_devices)
+                true_rank = backend.all_process_rank * backend.device_num_per_numa + instance_rank
+                true_device_index = backend.all_node_devices[true_rank]
+                print(f"true_world_size: {true_world_size}, true_rank: {true_rank}, true_device_index: {true_device_index}")
+                backend.set_device(true_device_index)
+
+                # init dist env
+                dist_module = backend.get_dist_module()
+                backend.initialize_ccl(true_rank, true_world_size)                
+
+                # device process is ready
+                output_queues.put("ready")
+
+                # store process group for each group_size config
+                process_groups_mapping = {true_world_size: None}
+
+                # loop function
                 while True:
                     # sync on all devices, get task args
                     broadcast_test_case = [None]
@@ -319,7 +357,7 @@ class Scheduler:
                     if true_world_size > 1:
                         dist_module.all_gather_object(result_list, result_list[true_rank])
                         
-                    if true_rank == 0:
+                    if backend.numa_rank == 0 and instance_rank == 0:
                         if result_list[0]["targets"]:
                             latency_list = [result["targets"]["latency(us)"] for result in result_list[:world_size]]
                             algo_bw_list = [result["targets"]["algo_bw(GB/s)"] for result in result_list[:world_size]]
@@ -340,8 +378,6 @@ class Scheduler:
 
                         output_queues.put(result_list[0], block=False)
 
-
-            if self.is_concurrent and true_world_size > 1:
                 backend.destroy_process_group()
 
 

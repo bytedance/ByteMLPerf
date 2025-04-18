@@ -38,7 +38,7 @@ class Host2DeviceOp(BasicOp):
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -84,7 +84,7 @@ class Device2HostOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
@@ -136,14 +136,14 @@ class Device2DeviceOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }    
 

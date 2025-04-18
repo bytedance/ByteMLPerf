@@ -29,19 +29,19 @@ class AddOp(BasicOp):
             "a": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.torch_dtype, 
-                device=self.backend.get_device(), 
+                device=self.backend.get_torch_device_name(), 
             ), 
             "b": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.torch_dtype, 
-                device=self.backend.get_device(), 
+                device=self.backend.get_torch_device_name(), 
             )
         }
         self.output_tensor_info = {
             "c": OpTensorInfo(
                 shape=[self.batch_size, self.dim_size],
                 dtype=self.torch_dtype, 
-                device=self.backend.get_device(), 
+                device=self.backend.get_torch_device_name(), 
             )
         }
 

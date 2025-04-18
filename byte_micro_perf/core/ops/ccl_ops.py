@@ -33,14 +33,14 @@ class AllGatherOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size // self.world_size],
                 dtype=self.torch_dtype, 
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype, 
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -87,14 +87,14 @@ class AllReduceOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -144,14 +144,14 @@ class AlltoAllOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -199,14 +199,14 @@ class BroadcastOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.world_size, self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.world_size, self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -259,14 +259,14 @@ class ReduceScatterOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size // self.world_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 
@@ -319,14 +319,14 @@ class P2POp(BasicOp):
             "send": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
         self.output_tensor_info = {
             "recv": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device=self.backend.get_device(),
+                device=self.backend.get_torch_device_name(),
             )
         }
 

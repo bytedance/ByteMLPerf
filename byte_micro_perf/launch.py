@@ -19,27 +19,21 @@ import pathlib
 import logging
 import argparse
 import subprocess
+import traceback
+import psutil
+import torch.multiprocessing as mp
 
 
 # directory config
-CUR_DIR = pathlib.Path.cwd().absolute()
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 BYTE_MLPERF_ROOT = FILE_DIR
 sys.path.insert(0, str(BYTE_MLPERF_ROOT))
 
-# logger config
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("lanuch")
+from core.perf_engine import engine_run
+from core.utils import logger, setup_logger
 
 
-def parse_task(task_dir):
-    tasks = []
-    if os.path.isdir(task_dir):
-        for root, _, files in os.walk(task_dir, topdown=False):
-            for name in files:
-                if name.endswith(".json"):
-                    tasks.append(name.rsplit('.', 1)[0])
-    return tasks
+
 
 
 def get_numa_configs():
@@ -47,7 +41,13 @@ def get_numa_configs():
     numa_node_num = int(subprocess.check_output("lscpu | grep 'NUMA node(s)' | awk -F: '{print $2}'", shell=True).decode().strip())
     for i in range(numa_node_num):
         numa_cores = subprocess.check_output(f"lscpu | grep 'NUMA node{i}' | awk -F: '{{print $2}}'", shell=True).decode().strip()
-        numa_configs.append(numa_cores)
+        core_list = []
+        for item in numa_cores.split(','):
+            item_split = item.split('-')
+            start = int(item_split[0])
+            end = int(item_split[1]) + 1
+            core_list.extend(range(start, end))
+        numa_configs.append(core_list)
     return numa_configs
     
 
@@ -66,7 +66,7 @@ def parse_args():
 
     # hardware
     parser.add_argument(
-        "--hardware_type",
+        "--hardware_type", type=str, 
         default="GPU", 
         help="The backend going to be evaluted, refs to backends/",
     )
@@ -101,17 +101,22 @@ def parse_args():
         help="Report dir, default is reports/"
     )
 
-    # feature control, [-1, 0, 1]
+
+    parser.add_argument("--node_world_size", type=int, default=1)
+    parser.add_argument("--node_rank", type=int, default=0)
+    parser.add_argument("--master_addr", type=str, default="127.0.0.1")
+    parser.add_argument("--gloo_port", type=str, default="49373")
+    parser.add_argument("--backend_port", type=str, default="49374")
+
+
     parser.add_argument(
         "--numa_node", 
         type=int, 
         choices=avail_numa_node, 
         help="NUMA node id, -1 means normal run, default is None which means numa_balance.")
     parser.add_argument(
-        "--device", 
-        type=str, 
-        default="all", 
-        help="Device id, default is all."
+        "--device", type=str, default="all", 
+        help="Device id, seperated by comma, default is all"
     )
     parser.add_argument(
         "--disable_parallel", 
@@ -123,22 +128,25 @@ def parse_args():
         action="store_true", 
         help="Disable profiling op kernels."
     )
+    parser.add_argument("--log_level", type=str, default="INFO")
+    args = parser.parse_args()
+    setup_logger(args.log_level)
+
     
-    return parser.parse_args()
+    os.environ["MASTER_ADDR"] = args.master_addr
+    os.environ["GLOO_PORT"] = args.gloo_port
+    os.environ["BACKEND_PORT"] = args.backend_port
 
-
-
-
-
+    return args
 
 
 if __name__ == "__main__":
     args = parse_args()
 
+    # get task and report dirs
     task_dir = pathlib.Path(args.task_dir).absolute()
     report_dir = pathlib.Path(args.report_dir).absolute()
     report_dir.mkdir(parents=True, exist_ok=True)
-
 
     # hardware_list
     hardware_list = []
@@ -151,18 +159,18 @@ if __name__ == "__main__":
     json_task_list = [task_json.stem for task_json in task_dir.rglob("*.json")]
     task_list = list(set(json_task_list) | set(csv_task_list))
 
-    if args.show_hardware_list:
-        logger.info("***************** Supported Hardware Backend *****************")
-        print(hardware_list)
-        exit(0)
 
-    # show task and hardware list
     if args.show_task_list:
         logger.info("******************* Supported Task *******************")
         print(task_list)        
         exit(0)
 
-
+    # check hardware
+    if args.hardware_type not in hardware_list:
+        logger.error(f"Hardware {args.hardware_type} not found in {BYTE_MLPERF_ROOT.joinpath('backends')}")
+        exit(1)
+    logger.info(f"******************* Hardware: *****************")
+    logger.info(f"{args.hardware_type}\n")
 
     # check hardware
     hardware = args.hardware_type
@@ -184,6 +192,8 @@ if __name__ == "__main__":
                 logger.error(f"Task {task} not found in {args.task_dir}")
                 exit(1)
             test_cases.append(task)
+    test_cases.sort()
+    args.task = ",".join(test_cases)
 
     test_cases.sort()
 
@@ -191,7 +201,37 @@ if __name__ == "__main__":
     logger.info(f"{test_cases}\n")
 
 
+
+
+
+    # launch num_numa_node subprocesses, and set cpu affinity for each subprocess
+    if args.numa_node is None:
+        world_size = len(numa_configs)
+        cpu_affinity = []
+        for i in range(world_size):
+            cpu_affinity.append(numa_configs[i])
+    # launch one subprocess
+    elif args.numa_node == -1:
+        world_size = 1
+        cpu_affinity = []
+        for numa_config in numa_configs:
+            cpu_affinity.extend(numa_config)
+    # launch one subprocess and set cpu affinity
+    else:
+        world_size = 1
+        cpu_affinity = [numa_configs[args.numa_node]]
+
+
+    try:
+        mp.set_start_method("spawn", force=True)
+    except Exception as e:
+        logger.exception(f"failed to set spawn context: {e}")
+        traceback.print_exc()
+        sys.exit(-1)
+
+
     # terminate core task perf process
+    cur_process_id = os.getpid()
     subprocess_pids = []
     def signal_handler(signum, frame):
         logger.info(f"Received signal {signum}, exiting...")
@@ -200,49 +240,37 @@ if __name__ == "__main__":
             for pid in subprocess_pids:
                 os.kill(pid, signal.SIGTERM)
         sys.exit(0)
-
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
 
-    for task in test_cases:
-        perf_cmd =  f"python3 ./core/perf_engine.py"\
-                    f" --hardware_type {args.hardware_type}"\
-                    f" --task_dir {args.task_dir}"\
-                    f" --task {task}"\
-                    f" --device {args.device}"\
-                    f" --report_dir {args.report_dir}"
-        if args.disable_parallel:
-            perf_cmd += " --disable_parallel"
-        if args.disable_profiling:
-            perf_cmd += " --disable_profiling"
+    try:
+        queue_instance = mp.Queue()
+        _subprocess = mp.spawn(
+            fn=engine_run, 
+            args=(world_size, queue_instance, args), 
+            nprocs=world_size, 
+            join=False, 
+            daemon=False
+        )
+        for process in _subprocess.processes:
+            subprocess_pids.append(process.pid)
+        print(f"current process id: {cur_process_id}")
+        print(f"start subprocesses: {subprocess_pids}")
+    except Exception as e:
+        logger.error(f"Create subprocesses failed, error msg: {e}")
+        traceback.print_exc()
+        sys.exit(-1)
 
-        print(f"******************************************* Start to test op: [{task}]. *******************************************")
-        subprocess_cmds = []
-        subprocess_instances = []
-        subprocess_pids = []
+    # block subprocess and set cpu affinity
+    for i in range(world_size):
+        child_process = psutil.Process(subprocess_pids[i])
+        child_process.cpu_affinity(cpu_affinity[i])
 
-        if args.numa_node is None:
-            for i, numa_config in enumerate(numa_configs):
-                cmd = f"taskset -c {numa_config} {perf_cmd} --numa_world_size {len(numa_configs)} --numa_rank {i}"
-                subprocess_cmds.append(cmd)
-        elif args.numa_node == -1:
-            cmd = perf_cmd
-            subprocess_cmds.append(cmd)
-        else:
-            cmd = f"taskset -c {numa_configs[args.numa_node]} {perf_cmd}"
-            subprocess_cmds.append(cmd)
+    # start subprocess
+    for _ in range(world_size):
+        queue_instance.put("start")
 
-        for cmd in subprocess_cmds:
-            print(f"{cmd}")
-            process_instance = subprocess.Popen(cmd, shell=True)
-            subprocess_instances.append(process_instance)
-            process_pid = process_instance.pid
-            subprocess_pids.append(process_pid)
-
-        print(f"perf_subprocess_pids: {subprocess_pids}")
-        print("")
-
-        for process in subprocess_instances:
-            process.wait()
-        print("")
+    # wait for subprocess
+    for process in _subprocess.processes:
+        process.join()
