@@ -157,6 +157,31 @@ class OptimizerParamScheduler:
         assert decay_ratio <= 1.0
         delta_lr = max_lr - min_lr
 
+        if self.lr_decay_style == 'multi-step':
+            # Extract decay stage ratios from the configuration.
+            # The three values define the proportion of total decay steps assigned to each stage.
+            
+            first_decay_ratio, second_decay_ratio, last_decay_ratio = self.optimizer.config.lr_decay_multi_step
+            assert abs(first_decay_ratio + second_decay_ratio + last_decay_ratio - 1.0) < 1e-6, \
+                        "The sum of first_decay_ratio, second_decay_ratio, and last_decay_ratio must equal 1"
+
+            # Compute the boundaries for each decay stage based on the total decay steps.
+            first_stage_end = first_decay_ratio
+            second_stage_end = first_decay_ratio + second_decay_ratio
+
+            # Stage 1: Maintain max_lr for the initial portion of training.
+            if decay_ratio <= first_stage_end:
+                return max_lr
+            # Stage 2: Decay learning rate to max_lr / sqrt(10).
+            elif decay_ratio <= second_stage_end:
+                lr = max_lr * (1 / math.sqrt(10))
+            # Stage 3: Further decay learning rate to max_lr / 10.
+            else:
+                lr = max_lr * 0.1
+
+            # Ensure learning rate does not fall below the minimum threshold.
+            return max(min_lr, lr)
+
         if self.lr_decay_style == 'linear':
             coeff = 1.0 - decay_ratio
         elif self.lr_decay_style == 'cosine':

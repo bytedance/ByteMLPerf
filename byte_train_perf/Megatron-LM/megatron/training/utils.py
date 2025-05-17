@@ -230,9 +230,15 @@ def report_memory(name):
         torch.cuda.memory_reserved() / mega_bytes)
     string += ' | max reserved: {}'.format(
         torch.cuda.max_memory_reserved() / mega_bytes)
-    if mpu.get_data_parallel_rank() == 0:
+    args = get_args()
+    # Test memory, report all rank memory info.
+    if args.test_memory:
         print("[Rank {}] {}".format(torch.distributed.get_rank(), string),
               flush=True)
+    else:
+        if mpu.get_data_parallel_rank() == 0:
+            print("[Rank {}] {}".format(torch.distributed.get_rank(), string),
+                  flush=True)
 
 
 def print_params_min_max_norm(optimizer, iteration):

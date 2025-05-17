@@ -12,12 +12,14 @@ NUM_NODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
 
-CHECKPOINT_PATH=$1 #<Specify path>
-TENSORBOARD_LOGS_PATH=$2 #<Specify path>
-VOCAB_FILE=$3 #<Specify path to file>/gpt2-vocab.json
-MERGE_FILE=$4 #<Specify path to file>/gpt2-merges.txt
-DATA_PATH=$5 #<Specify path and file prefix>_text_document
-TOKENIZER_MODEL=$6  #tokenizer path
+PRETRAIN_MODEL_PATH=$1 #<Specify path>
+CHECKPOINT_SAVE_PATH=$2 #<Specify path>
+TENSORBOARD_LOGS_PATH=$3 #<Specify path>
+# VOCAB_FILE=$3 #<Specify path to file>/gpt2-vocab.json
+# MERGE_FILE=$4 #<Specify path to file>/gpt2-merges.txt
+DATA_PATH=$4 #<Specify path and file prefix>_text_document
+TOKENIZER_MODEL=$5  #tokenizer path
+MAX_TRAIN_STEPS=$6 #train iters
 
 export NCCL_ALGO=Ring # for deterministic
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=0  # for deterministic
@@ -68,7 +70,7 @@ TRAINING_ARGS=(
     --micro-batch-size 1
     --global-batch-size 256
     --lr 1e-4
-    --train-iters 500000
+    --train-iters $MAX_TRAIN_STEPS
     --lr-decay-iters 320000
     --lr-decay-style cosine
     --min-lr 1.0e-5
@@ -101,15 +103,16 @@ DATA_ARGS=(
 #  )
 
 EVAL_AND_LOGGING_ARGS=(
-    --log-interval 100
+    --log-interval 1
     --save-interval 10000 
     --eval-interval 1000 
-    --save $CHECKPOINT_PATH 
-    --load $CHECKPOINT_PATH 
+    --save $CHECKPOINT_SAVE_PATH 
+    --load $PRETRAIN_MODEL_PATH 
     --eval-iters 10
-    --wandb-project benchmark_training
-    --wandb-exp-name moe8x2-7B
-    --tensorboard-dir $TENSORBOARD_LOGS_PATH
+    --data-cache-path ./cache
+    # --wandb-project benchmark_training
+    # --wandb-exp-name moe8x2-7B
+    # --tensorboard-dir $TENSORBOARD_LOGS_PATH
 )
 
 

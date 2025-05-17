@@ -553,6 +553,113 @@ class GPTDataset(MegatronDataset):
         return num_epochs
 
 
+
+class GPTVariableDataset(GPTDataset):
+    """The base GPT dataset
+
+    Args:
+        indexed_dataset (IndexedDataset): The IndexedDataset around which to build the GPTDataset
+
+        dataset_path (Optional[str]): The real path on disk to the dataset, for bookkeeping
+
+        indexed_indices (numpy.ndarray): The set of the documents indices to expose
+
+        num_samples (Optional[int]): The number of samples to draw from the indexed dataset. When
+            None, build as many samples as correspond to one epoch.
+
+        index_split (Split): The indexed_indices Split
+
+        config (GPTDatasetConfig): The config
+    """
+
+    def __init__(
+        self,
+        indexed_dataset: IndexedDataset,
+        dataset_path: Optional[str],
+        indexed_indices: numpy.ndarray,
+        num_samples: Optional[int],
+        index_split: Split,
+        config: GPTDatasetConfig,
+    ) -> None:
+        super().__init__(
+            indexed_dataset, dataset_path, indexed_indices, num_samples, index_split, config
+        )
+        self.seq_length = config.sequence_length
+        self.seq_length_min = config.sequence_length_min
+        self.seq_length_step = config.sequence_length_step
+
+
+    def _get_rand_var_seq_length(self):
+        cur_step_num = numpy.random.randint(1, 10)
+        return self.seq_length - cur_step_num * self.seq_length_step
+
+
+    def __getitem__(self, idx: Optional[int]) -> Dict[str, torch.Tensor]:
+        """Abstract method implementation
+
+        Args:
+            idx (Optioal[int]): The index into the dataset
+
+        Returns:
+            Dict[str, torch.Tensor]: The sample information wrapped in a dictionary
+        """
+        if idx is None:
+            # Batch padding sequence so the index does not matter
+            text, _ = self._query_document_sample_shuffle_indices(0)
+        else:
+            text, _ = self._query_document_sample_shuffle_indices(idx)
+
+        seq_length = self._get_rand_var_seq_length()
+        text = text[:seq_length]
+        text = numpy.concatenate((text, [self.config.tokenizer.eod]))
+        text = torch.from_numpy(text).long()
+        if self.config.add_extra_token_to_sequence:
+            tokens = text[:-1].contiguous()
+            labels = text[1:].contiguous()
+        else:
+            tokens = text
+            labels = torch.roll(text, shifts=-1, dims=0)
+            labels[-1] = self._pad_token_id
+
+
+        attention_mask, loss_mask, position_ids = _get_ltor_masks_and_position_ids(
+            tokens,
+            self.config.tokenizer.eod,
+            self.config.reset_position_ids,
+            self.config.reset_attention_mask,
+            self.config.eod_mask_loss,
+            self.config.create_attention_mask,
+        )
+
+
+        # For padded sequences, mask the loss
+        loss_mask[labels == self._pad_token_id] = 0.0
+
+        # For padded sequences, ensure the embedding layer can map the token ID
+        tokens[tokens == self._pad_token_id] = 0
+        labels[labels == self._pad_token_id] = 0
+
+        # Batch padding sequence so we mask the loss
+        if idx is None:
+            loss_mask = torch.zeros_like(loss_mask)
+
+        if self.config.create_attention_mask:
+            return {
+                "tokens": tokens,
+                "labels": labels,
+                "attention_mask": attention_mask,
+                "loss_mask": loss_mask,
+                "position_ids": position_ids,
+            }
+        else:
+            return {
+                "tokens": tokens,
+                "labels": labels,
+                "loss_mask": loss_mask,
+                "position_ids": position_ids,
+            }
+
+
 def _build_document_index(
     documents: numpy.ndarray,
     num_epochs: int,

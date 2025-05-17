@@ -9,9 +9,46 @@ import numpy as np
 from torch.utils.data import Dataset
 from megatron.training import get_args
 from megatron.core import mpu
+import torch.nn.functional as F
+
+def batch_pad(batch):
+    cur_batch_max_seq_length = 0
+    cur_batch_max_seq_length_idx = 0
+    idx = -1
+    for sample in batch:
+        idx += 1
+        if sample["tokens"].shape[0] > cur_batch_max_seq_length:
+            cur_batch_max_seq_length_idx = idx
+            cur_batch_max_seq_length = sample["tokens"].shape[0]
+
+    tokens = []
+    labels = []
+    attention_mask = []
+    loss_mask = []
+    position_ids = []
+    for sample in batch:
+        tokens.append(F.pad(sample["tokens"], pad=(0, cur_batch_max_seq_length - sample["tokens"].shape[0]), value=0).unsqueeze(0))
+        labels.append(F.pad(sample["labels"], pad=(0, cur_batch_max_seq_length - sample["tokens"].shape[0]), value=0).unsqueeze(0))
+        attention_mask.append(batch[cur_batch_max_seq_length_idx]["attention_mask"].unsqueeze(0))
+        loss_mask.append(F.pad(sample["loss_mask"], pad=(0, cur_batch_max_seq_length - sample["tokens"].shape[0]), value=0).unsqueeze(0))
+        position_ids.append(batch[cur_batch_max_seq_length_idx]["position_ids"].unsqueeze(0))
+
+    tokens = torch.concatenate(tokens)
+    labels = torch.concatenate(labels)
+    attention_mask = torch.concatenate(attention_mask)
+    loss_mask = torch.concatenate(loss_mask)
+    position_ids = torch.concatenate(position_ids)
+
+    batch_new = {}
+    batch_new["tokens"] = tokens
+    batch_new["labels"] = labels
+    batch_new["attention_mask"] = attention_mask
+    batch_new["loss_mask"] = loss_mask
+    batch_new["position_ids"] = position_ids
+    return batch_new
 
 
-def build_pretraining_data_loader(dataset, consumed_samples):
+def build_pretraining_data_loader(dataset, consumed_samples, need_pad=False):
     """Build dataloader given an input dataset."""
 
     if dataset is None:
@@ -44,12 +81,21 @@ def build_pretraining_data_loader(dataset, consumed_samples):
                 args.dataloader_type))
 
     # Torch dataloader.
-    return torch.utils.data.DataLoader(dataset,
-                                       batch_sampler=batch_sampler,
-                                       num_workers=args.num_workers,
-                                       pin_memory=True,
-                                       persistent_workers=True if args.num_workers > 0 else False,
-                                       )
+    if not need_pad:
+        return torch.utils.data.DataLoader(dataset,
+                                        batch_sampler=batch_sampler,
+                                        num_workers=args.num_workers,
+                                        pin_memory=True,
+                                        persistent_workers=True if args.num_workers > 0 else False
+                                        )
+    else:
+        return torch.utils.data.DataLoader(dataset,
+                                        batch_sampler=batch_sampler,
+                                        num_workers=args.num_workers,
+                                        pin_memory=True,
+                                        persistent_workers=True if args.num_workers > 0 else False,
+                                        collate_fn=batch_pad
+                                        )
 
 class MegatronPretrainingSampler:
 

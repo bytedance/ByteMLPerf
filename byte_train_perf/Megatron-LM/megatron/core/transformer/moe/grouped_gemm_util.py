@@ -5,6 +5,12 @@ try:
 except ImportError:
     grouped_gemm = None
 
+if grouped_gemm == None:
+    try:
+        from apex.contrib import grouped_gemm
+    except:
+        grouped_gemm = None
+
 
 def grouped_gemm_is_available():
     """Check if grouped_gemm is available."""

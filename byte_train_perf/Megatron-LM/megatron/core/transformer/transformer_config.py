@@ -104,6 +104,9 @@ class TransformerConfig(ModelParallelConfig):
     """True is rotate pairs of even and odd dimensions (RoFormer style), False is rotate pairs of
     first half and second half (LLaMa style). Default to False."""
 
+    apply_rope_offload: bool = False
+    """Precompute RoPE's sin/cos tables for fast lookup, avoiding runtime trig computations."""
+
     window_size: Optional[Tuple[int, int]] = None
     """If not None, then will use sliding window attention. The size of the window is specified by
     the numbers inside the tuple; -1 is special value meaning "infinite window size"."""
@@ -277,6 +280,11 @@ class TransformerConfig(ModelParallelConfig):
     moe_router_topk: int = 2
     """Number of experts to route to for each token."""
 
+    moe_router_dtype: Optional[str] = None
+    """Data type for routing and expert output weighted averaging. Using fp32 or fp64 can
+    improve stability especially when the number of experts is large (e.g. finegrained-moe).
+    None means no changes for dtype."""
+
     moe_router_topk_limited_devices: int = None
     """Number of expert parallel ranks to consider for each token during routing. Perform top-k
     routing on a subset of expert parallel ranks by first selecting N ranks for each token, then
@@ -286,9 +294,18 @@ class TransformerConfig(ModelParallelConfig):
     """Enable pre-softmax routing for MoE, which means softmax is before the top-k selection. 
     By default, softmax is done after top-k."""
 
+    enable_shared_expert: bool = False
+    """Shared expert for deepseek_v2"""
+
+    num_shared_experts: int = None
+    """Number of shared experts"""
+    
     moe_router_topk_scaling_factor: float = None
-    """Scaling factor for routing score in top-k selection, only works when moe_router_pre_softmax 
+    """Scaling factor for routing score in top-k selection, only works when moe_router_pre_softmax
     enabled. Defaults to None, which means no scaling."""
+
+    first_k_dense_replace: int = 0
+    """First k layers are dense layers"""
 
     moe_grouped_gemm: bool = False
     """When there are multiple experts per rank, compress multiple local (potentially small) gemms
@@ -338,6 +355,9 @@ class TransformerConfig(ModelParallelConfig):
 
     moe_layer_recompute: bool = False
     """Memory optimization: checkpointing moe_layer to save actiavtion memory."""
+
+    moe_unbalanced_recompute_activation_scale: float = None
+    """ Recalculate based on the threshold to determine the degree of imbalance in the number of experts."""
 
     ##################
     # Context Parallel
@@ -448,6 +468,10 @@ class TransformerConfig(ModelParallelConfig):
                 raise ValueError(
                     f'moe_shared_expert_overlap only works with alltoall token dispatcher.'
                 )
+        elif self.enable_shared_expert and self.num_shared_experts is not None and self.num_shared_experts > 0:
+            self.moe_shared_expert_intermediate_size = self.num_shared_experts * self.moe_ffn_hidden_size
+        else:
+            self.moe_shared_expert_intermediate_size = None
 
         if self.moe_expert_capacity_factor is not None:
             if self.moe_token_dispatcher_type not in ["alltoall", "alltoall_seq"]:

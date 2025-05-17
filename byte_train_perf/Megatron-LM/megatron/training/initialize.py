@@ -160,6 +160,10 @@ def _compile_dependencies():
             "seconds".format(time.time() - start_time),
             flush=True,
         )
+    # MLU use fused kernel api, do not need load and compile kernel.
+    from megatron.training import device_type
+    if device_type == 'mlu':
+        return
 
     # ==================
     # Load fused kernels
@@ -375,7 +379,7 @@ def set_jit_fusion_options():
         torch._C._jit_override_can_fuse_on_cpu(False)
         torch._C._jit_override_can_fuse_on_gpu(False)
         torch._C._jit_set_texpr_fuser_enabled(False)
-        torch._C._jit_set_nvfuser_enabled(True)
+        torch._C._jit_set_nvfuser_enabled(not torch.mlu.is_available())
         torch._C._debug_set_autodiff_subgraph_inlining(False)
     else:
         # legacy pytorch fuser

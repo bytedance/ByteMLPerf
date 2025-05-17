@@ -16,7 +16,7 @@ from megatron.core import mpu
 from megatron.core.enums import ModelType
 from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
-from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
+from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset, GPTVariableDataset
 from megatron.core.rerun_state_machine import get_rerun_state_machine
 import megatron.legacy.model
 from megatron.core.models.gpt import GPTModel
@@ -222,6 +222,8 @@ def forward_step(data_iterator, model: GPTModel):
         tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
             data_iterator)
     timers('batch-generator').stop()
+    if args.variable_data:
+        print("variable seq length: ", tokens.shape[-1])
 
     with stimer:
         output_tensor = model(tokens, position_ids, attention_mask,
@@ -247,6 +249,8 @@ def core_gpt_dataset_config_from_args(args):
     return GPTDatasetConfig(
         random_seed=args.seed,
         sequence_length=args.seq_length,
+        sequence_length_min=args.seq_length_min,
+        sequence_length_step=args.seq_length_step,
         blend=blend,
         blend_per_split=blend_per_split,
         renormalize_blend_weights=args.renormalize_blend_weights,
@@ -275,6 +279,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
     if args.mock_data:
         dataset_type = MockGPTDataset
+    elif args.variable_data:
+        dataset_type = GPTVariableDataset
     else:
         dataset_type = GPTDataset
 

@@ -178,6 +178,7 @@ class MoEAllGatherTokenDispatcher(MoETokenDispatcher):
                 hidden_states, group=self.tp_ep_group, use_global_buffer=True
             )
         self.hidden_shape_before_permute = hidden_states.shape
+        self.num_global_tokens_per_local_expert_cpu = routing_map.sum(dim=0).cpu()
 
         # The routing map and probs that for local experts.
         self.local_map = routing_map[

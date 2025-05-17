@@ -46,6 +46,7 @@ def parse_args(extra_args_provider=None, ignore_unknown_args=False):
     parser = _add_biencoder_args(parser)
     parser = _add_vision_args(parser)
     parser = _add_moe_args(parser)
+    parser = _add_yarn_args(parser)
     parser = _add_mla_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_straggler_detector_args(parser)
@@ -552,8 +553,10 @@ def validate_args(args, defaults={}):
 
     if args.moe_grouped_gemm:
         assert args.bf16, 'Currently GroupedGEMM for MoE only supports bf16 dtype.'
-        dc = torch.cuda.get_device_capability()
-        assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels."
+        from megatron.training import device_type
+        if device_type == 'gpu':
+            dc = torch.cuda.get_device_capability()
+            assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels."
 
     if args.weight_decay_incr_style == 'constant':
         assert args.start_weight_decay is None
@@ -758,6 +761,9 @@ def validate_args(args, defaults={}):
         if not args.no_load_rng:
             args.no_load_rng = True
             print('Warning: disabling --no-load-rng for upcycling.')
+
+    if args.variable_data:
+        assert args.seq_length_step is not None, "When using variable_data, the --seq-length-step must be specified."
 
     # Print arguments.
     _print_args("arguments", args)
@@ -993,6 +999,8 @@ def _add_network_size_args(parser):
                        help='Percent of rotary dimension to use, default 100%%')
     group.add_argument('--rotary-interleaved', action='store_true',
                           help='Use interleaved rotary embedding.')
+    group.add_argument('--apply-rope-offload', action='store_true',
+                          help='enable cos and sin offload for rope.')
     group.add_argument('--rotary-seq-len-interpolation-factor', type=int, default=None,
                        help='Sequence length interpolation factor for rotary embeddings.')
     group.add_argument('--use-rope-scaling', action='store_true',
@@ -1491,8 +1499,12 @@ def _add_learning_rate_args(parser):
                        'and initial warmup, the learning rate at each '
                        'iteration would be different.')
     group.add_argument('--lr-decay-style', type=str, default='linear',
-                       choices=['constant', 'linear', 'cosine', 'inverse-square-root', 'WSD'],
+                       choices=['constant', 'linear', 'cosine', 'inverse-square-root', 'WSD', 'multi-step'],
                        help='Learning rate decay function.')
+    parser.add_argument('--lr-decay-multi-step', type=float, nargs=3, default=[0.6, 0.3, 0.1],
+                        help="Learning rate decay schedule with three milestones: maintains max_lr until the first ratio (default: 60%), "
+                        "decays to max_lr / sqrt(10) until the second ratio (default: 30%), and then decays to max_lr / 10 "
+                        "for the remaining ratio (default: 10%).")              
     group.add_argument('--lr-wsd-decay-style', type=str, default='exponential',
                        choices=['exponential', 'linear', 'cosine'],
                        help='Decay style for the annealing phase of WSD'),
@@ -1847,6 +1859,7 @@ def _add_tokenizer_args(parser):
                                 'HuggingFaceTokenizer',
                                 'Llama2Tokenizer',
                                 'TikTokenizer',
+                                'PreTrainedTokenizerFast',
                                 'MultimodalTokenizer',
                                 'NullTokenizer'],
                        help='What type of tokenizer to use.')
@@ -1910,8 +1923,16 @@ def _add_data_args(parser):
     group.add_argument('--mock-data', action='store_true',
                        help='Skip data loading and validation and opt for artificial '
                        'generation of mock data when an implementation is available.')
+    group.add_argument('--test-memory', action='store_true',
+                       help='Print more memory info for testing.')
+    group.add_argument('--variable-data', action='store_true',
+                       help='Use GTPDataset produce variable sample with different seq_length.')
     group.add_argument('--seq-length', type=int, default=None,
                        help='Maximum sequence length to process.')
+    group.add_argument('--seq-length-min', type=int, default=128,
+                       help='Minimum sequence length to process.')
+    group.add_argument('--seq-length-step', type=int, default=None,
+                       help='Variable sequence length step.')
     group.add_argument('--encoder-seq-length', type=int, default=None,
                        help='Maximum encoder sequence length to process.'
                        'This should be exclusive of --seq-length')
@@ -1943,6 +1964,10 @@ def _add_data_args(parser):
                        help='Number of parallel threads per rank for dataset builder')
     group.add_argument('--s3-cache-path', type=str, default=None,
                        help='Path to cache index files when using s3 dataloader')
+    group.add_argument('--no-shared-storage', action='store_true', default=False,
+                       help='Cache data locally. False by default.')
+    group.add_argument('--tokenizer-name-or-path', type=str, default=None,
+                       help='Tokenizer path for HF model.')
     return parser
 
 
@@ -2086,6 +2111,20 @@ def _add_vision_args(parser):
 
     return parser
 
+def _add_yarn_args(parser):
+    group = parser.add_argument_group(title='yarn')
+    group.add_argument('--beta-fast', type=int, default=32,
+                        help='Yarn rope: rope beta fast')
+    group.add_argument('--beta-slow', type=int, default=1,
+                        help='Yarn rope: rope beta slow')
+    group.add_argument('--mscale', type=float, default=1.0,
+                        help='Yarn rope: rope mscale')
+    group.add_argument('--mscale-all-dim', type=float, default=0.0,
+                        help='Yarn rope: rope mscale all dim')
+    group.add_argument('--original-max-position-embeddings', type=int, default=None,
+                       help='Yarn rope: rope original max position embeddings')
+    return parser
+
 def _add_moe_args(parser):
     group = parser.add_argument_group(title="moe")
     # General arguments
@@ -2123,6 +2162,13 @@ def _add_moe_args(parser):
                        help='Determines the load balancing strategy for the router. "aux_loss" corresponds to the load balancing loss used in GShard and SwitchTransformer; "seq_aux_loss" corresponds to the load balancing loss used in DeepSeekV2, which computes the loss for each individual sample; "sinkhorn" corresponds to the balancing algorithm used in S-BASE, and "none" implies no load balancing. The default is "aux_loss".')
     group.add_argument('--moe-router-topk', type=int, default=2,
                        help='Number of experts to route to for each token. The default is 2.')
+    group.add_argument('--moe-router-dtype', type=str, 
+                        choices=['fp32', 'fp64'], 
+                        default=None,
+                        help='Data type for routing computation and expert output weighted averaging. '
+                             'Fp32/fp64 enhances numerical stability, especially with numerous experts. '
+                             'The perf impact should be negligible when used with permute fusion. '
+                             'None means no changes for dtype.')
     group.add_argument('--moe-router-pre-softmax', action='store_true',
                        help='Enable pre-softmax routing for MoE, which means softmax is before the top-k selection. By default, softmax is done after top-k.')
     group.add_argument('--moe-router-topk-limited-devices', type=int, default=None, 
@@ -2158,6 +2204,15 @@ def _add_moe_args(parser):
                        help='Load a checkpoint of a dense model, convert it into an MoE model, and save the converted model to the path specified by --save. '
                        'Upcycling is implemented on the top of distributed checkpointing, so it supports parallel modes different from the dense model.')
 
+    #NOTE deepseek arguments
+    group.add_argument('--first-k-dense-replace', type=int, default=0,
+                       help='Set first k layer as dense layer')
+    group.add_argument("--enable-shared-expert", action="store_true")
+    group.add_argument("--num-shared-experts", type=int, default=None)
+
+    #NOTE moe compute argument
+    group.add_argument('--moe-unbalanced-recompute-activation-scale', type=float, default=None,
+                       help='MoE unbalanced recompute threshold factor.')
     return parser
 
 def _add_mla_args(parser):

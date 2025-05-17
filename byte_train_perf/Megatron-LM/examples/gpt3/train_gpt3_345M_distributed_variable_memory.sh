@@ -3,6 +3,8 @@
 # Runs the "175B" parameter model
 
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export TORCH_CNCL_AVOID_RECORD_STREAMS=1
+export PYTORCH_MLU_ALLOC_CONF=expandable_segments:True
 
 GPUS_PER_NODE=8
 # Change for multinode config
@@ -32,17 +34,21 @@ DISTRIBUTED_ARGS=(
 )
 
 GPT_MODEL_ARGS=(
+    --test-memory \
     --num-layers 12 \
     --hidden-size 512 \
     --num-attention-heads 8 \
-    --seq-length 1024 \
-    --max-position-embeddings 2048 
+    --seq-length 32768 \
+    --variable-data
+    --seq-length-min 1024
+    --seq-length-step 1024
+    --max-position-embeddings 32768
     --attention-backend auto # Can use (flash/fused/unfused/local)
 )
 
 TRAINING_ARGS=(
-    --micro-batch-size 32 
-    --global-batch-size 512 #1536 
+    --micro-batch-size 4
+    --global-batch-size 32 #1536 
     --train-iters $MAX_TRAIN_STEPS 
     --weight-decay 0.1 
     --adam-beta1 0.9 
@@ -73,10 +79,10 @@ DATA_ARGS=(
 EVAL_AND_LOGGING_ARGS=(
     --log-interval 1
     --save-interval 10000 
-    --eval-interval 1000 
+    --eval-interval 2000 
     --save $CHECKPOINT_SAVE_PATH 
     --load $PRETRAIN_MODEL_PATH 
-    --eval-iters 1000
+    --eval-iters 2000
     --data-cache-path ./cache 
     #--wandb-project benchmark_training
     #--wandb-exp-name gpt3_345M_deterministic

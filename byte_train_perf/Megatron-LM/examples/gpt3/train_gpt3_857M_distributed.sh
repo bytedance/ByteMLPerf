@@ -12,11 +12,13 @@ NUM_NODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
 
-CHECKPOINT_PATH=$1 #<Specify path>
+CHECKPOINT_SAVE_PATH=$1 #<Specify path>
 TENSORBOARD_LOGS_PATH=$2 #<Specify path>
 VOCAB_FILE=$3 #<Specify path to file>/gpt2-vocab.json
 MERGE_FILE=$4 #<Specify path to file>/gpt2-merges.txt
 DATA_PATH=$5 #<Specify path and file prefix>_text_document
+PRETRAIN_MODEL_PATH=$6
+MAX_TRAIN_STEPS=$7
 
 export NCCL_ALGO=Ring # for deterministic
 export NVTE_ALLOW_NONDETERMINISTIC_ALGO=0  # for deterministic
@@ -41,13 +43,13 @@ GPT_MODEL_ARGS=(
 TRAINING_ARGS=(
     --micro-batch-size 4 
     --global-batch-size 512 #1536 
-    --train-iters 500000 
+    --train-iters $MAX_TRAIN_STEPS  
     --weight-decay 0.1 
     --adam-beta1 0.9 
     --adam-beta2 0.95 
     --init-method-std 0.006 
     --clip-grad 1.0 
-    --fp16
+    --bf16
     --lr 6.0e-5 
     --lr-decay-style cosine 
     --min-lr 6.0e-6
@@ -69,15 +71,16 @@ DATA_ARGS=(
 )
 
 EVAL_AND_LOGGING_ARGS=(
-    --log-interval 100
+    --log-interval 1
     --save-interval 10000 
     --eval-interval 1000 
-    --save $CHECKPOINT_PATH 
-    --load $CHECKPOINT_PATH 
-    --eval-iters 10
-    --wandb-project benchmark_training
-    --wandb-exp-name gpt3_875M_deterministic
-    --tensorboard-dir $TENSORBOARD_LOGS_PATH
+    --save $CHECKPOINT_SAVE_PATH 
+    --load $PRETRAIN_MODEL_PATH 
+    --eval-iters 1000
+    --data-cache-path ./cache 
+    # --wandb-project benchmark_training
+    # --wandb-exp-name gpt3_875M_deterministic
+    # --tensorboard-dir $TENSORBOARD_LOGS_PATH
 )
 
 torchrun ${DISTRIBUTED_ARGS[@]} pretrain_gpt.py \

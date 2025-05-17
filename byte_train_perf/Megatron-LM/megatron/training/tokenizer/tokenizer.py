@@ -15,7 +15,7 @@ from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
 from .gpt2_tokenization import GPT2Tokenizer
 from megatron.training.tokenizer.multimodal_tokenizer import MultimodalTokenizer
-
+from transformers import PreTrainedTokenizerFast
 
 def build_tokenizer(args, **kwargs):
     """Initialize tokenizer."""
@@ -62,6 +62,9 @@ def build_tokenizer(args, **kwargs):
             num_special_tokens=args.tiktoken_num_special_tokens,
             special_tokens=args.tiktoken_special_tokens,
         )
+    elif args.tokenizer_type == 'PreTrainedTokenizerFast':
+        assert args.tokenizer_name_or_path is not None
+        tokenizer = _PreTrainedTokenizerFast(args.tokenizer_name_or_path)
     elif args.tokenizer_type == 'NullTokenizer':
         assert args.vocab_size is not None
         tokenizer = _NullTokenizer(args.vocab_size)
@@ -821,3 +824,33 @@ class _NullTokenizer(MegatronTokenizer):
     @property
     def additional_special_tokens_ids(self):
         return None
+
+
+class _PreTrainedTokenizerFast(MegatronTokenizer):
+    def __init__(self, tokenizer_path):
+        super().__init__(tokenizer_path)
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            tokenizer_path, legacy=False, from_slow=False)
+
+    def tokenize(self, text):
+        text_tokens = self.tokenizer.tokenize(text)
+        return self.tokenizer.convert_tokens_to_ids(text_tokens)
+
+    def detokenize(self, token_ids):
+        return self.tokenizer.decode(token_ids)
+
+    @property
+    def vocab(self):
+        return self.tokenizer.vocab
+
+    @property
+    def vocab_size(self):
+        return len(self.tokenizer.vocab)
+
+    @property
+    def inv_vocab(self):
+        return self.tokenizer._decode
+
+    @property
+    def eod(self):
+        return self.tokenizer.eos_token_id

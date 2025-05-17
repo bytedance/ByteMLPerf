@@ -44,7 +44,7 @@ TRAINING_ARGS=(
     --adam-beta2 0.95 
     --init-method-std 0.006 
     --clip-grad 1.0 
-    --fp16
+    --bf16
     --lr 6.0e-5 
     --lr-decay-style cosine 
     --min-lr 6.0e-6

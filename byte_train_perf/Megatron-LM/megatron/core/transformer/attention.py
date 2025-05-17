@@ -6,6 +6,7 @@ from typing import Tuple, Union
 import torch
 from torch import Tensor
 
+from megatron.core.models.common.embeddings.rope_utils import RotaryOffload
 from megatron.core import InferenceParams, parallel_state, tensor_parallel
 from megatron.core.models.common.embeddings.rope_utils import (
     apply_rotary_pos_emb,
@@ -429,10 +430,16 @@ class Attention(MegatronModule, ABC):
                     cu_seqlens_kv = packed_seq_params.cu_seqlens_kv
             else:
                 cu_seqlens_q = cu_seqlens_kv = None
-            query = apply_rotary_pos_emb(
-                query, q_pos_emb, config=self.config, cu_seqlens=cu_seqlens_q
-            )
-            key = apply_rotary_pos_emb(key, k_pos_emb, config=self.config, cu_seqlens=cu_seqlens_kv)
+
+            if self.config.apply_rope_offload:
+                rotaryoffload = RotaryOffload()
+                query = rotaryoffload.apply_rope_offload_func(query, q_pos_emb, cu_seqlens_q, is_query=True)
+                key = rotaryoffload.apply_rope_offload_func(key, k_pos_emb, cu_seqlens_kv, is_query=False)
+            else:
+                query = apply_rotary_pos_emb(
+                    query, q_pos_emb, config=self.config, cu_seqlens=cu_seqlens_q
+                )
+                key = apply_rotary_pos_emb(key, k_pos_emb, config=self.config, cu_seqlens=cu_seqlens_kv)
 
             # TODO, can apply positional embedding to value_layer so it has
             # absolute positional embedding.

@@ -1,6 +1,6 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 
-from dataclasses import dataclass
+from dataclasses import dataclass,field
 from typing import Callable, Optional
 
 import torch
@@ -31,6 +31,9 @@ class OptimizerConfig:
     """Minimum value for learning rate for the input and output layer. The scheduler clip values
        below this threshold.
     """
+
+    lr_decay_multi_step: list[float] = field(default_factory=lambda: [0.6, 0.3, 0.1])
+    """Learning rate decay stages: first stage ratio, second stage ratio, last stage ratio."""
 
     weight_decay: float = 0.01
     """Weight decay coefficient for L2 regularization."""

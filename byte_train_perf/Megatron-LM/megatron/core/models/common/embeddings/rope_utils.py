@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 # Prefer fused RoPE from Apex as we need the `transpose_output_memory` argument for the bshd trick.
 # See https://gitlab-master.nvidia.com/ADLR/megatron-lm/-/merge_requests/2469.
 try:
-    from apex.transformer.functional import fused_apply_rotary_pos_emb
+    from apex.transformer.functional import fused_apply_rotary_pos_emb, fused_apply_rotary_pos_emb_lookup
 except ImportError:
     try:
         from megatron.core.extensions.transformer_engine import fused_apply_rotary_pos_emb
+        fused_apply_rotary_pos_emb_lookup = None
     except:
-        fused_apply_rotary_pos_emb = None
+        fused_apply_rotary_pos_emb = fused_apply_rotary_pos_emb_lookup = None
 
 
 try:
@@ -186,7 +187,6 @@ def apply_rotary_pos_emb(
     Reroute to the appropriate apply_rotary_pos_emb function depending on
     fused/unfused kernels, or bshd (conventional) / thd (packed seq) format
     """
-
     if config.apply_rope_fusion:
         if cu_seqlens is None:
             assert fused_apply_rotary_pos_emb is not None, "apply_rope_fusion is not available."
@@ -259,3 +259,22 @@ def apply_rotary_pos_emb_with_cos_sin(
         y = y.permute(1, 0, 2, 3)
 
     return y
+
+
+class RotaryOffload(object):
+    cos_sin_lookup = {}
+
+    def apply_rope_offload_func(self, t: Tensor, freqs: Tensor, cu_seqlen: Tensor = None, is_query: bool = True):
+        prefix = 'q' if is_query else 'k'
+
+        if not all(f'{prefix}_{key}' in RotaryOffload.cos_sin_lookup for key in ('cos', 'sin')):
+            freqs_cpu = freqs.cpu()
+            RotaryOffload.cos_sin_lookup.update({
+                f'{prefix}_cos': torch.cos(freqs_cpu).to(t.device),
+                f'{prefix}_sin': torch.sin(freqs_cpu).to(t.device)
+            })
+
+        cos = RotaryOffload.cos_sin_lookup[f'{prefix}_cos']
+        sin = RotaryOffload.cos_sin_lookup[f'{prefix}_sin']
+
+        return fused_apply_rotary_pos_emb_lookup(t, cos, sin, cu_seqlen, transpose_output_memory=True)

@@ -114,6 +114,17 @@ class MoELayer(BaseMoELayer):
             if self.shared_expert_overlap:
                 self.token_dispatcher.set_shared_experts(self.shared_experts)
 
+        self.moe_unbalanced_recompute_activation_scale = config.moe_unbalanced_recompute_activation_scale
+
+        if self.moe_unbalanced_recompute_activation_scale is not None:
+            self.recompute_threshold = parallel_state.get_tensor_model_parallel_world_size() * \
+                    parallel_state.get_data_parallel_world_size() * config.moe_router_topk * \
+                    self.moe_unbalanced_recompute_activation_scale / config.num_moe_experts
+
+        assert not(self.moe_unbalanced_recompute_activation_scale is not None and self.moe_layer_recompute), \
+                "unbalanced_recompute and layer_recompute can't be set True together"
+
+
     def forward(self, hidden_states: torch.Tensor):
         if (
             self.training
@@ -131,7 +142,12 @@ class MoELayer(BaseMoELayer):
             (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
                 hidden_states, probs, routing_map
             )
-            expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
+            if self.moe_unbalanced_recompute_activation_scale is not None and \
+               torch.max(self.token_dispatcher.num_global_tokens_per_local_expert_cpu).item() > \
+                hidden_states.size(0) * hidden_states.size(1) * self.moe_unbalanced_recompute_activation_scale:
+                expert_output, mlp_bias = tensor_parallel.checkpoint(self.experts, False, dispatched_input, tokens_per_expert)
+            else:
+                expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
             output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
             if self.use_shared_expert and not self.shared_expert_overlap:
                 # if shared_expert_overlap is True, the expert calculation happens in
