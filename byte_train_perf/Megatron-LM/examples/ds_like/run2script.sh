@@ -3,7 +3,6 @@
 
 HDFS_trainingdata=/mnt/hdfs/training_data
 
-## /home/tiger/ByteMLPerf/byte_train_perf/Megatron-LM
 WORK_PATH=/home/tiger/ByteMLPerf/byte_train_perf/Megatron-LM
 
 cd /home/tiger/
@@ -18,13 +17,9 @@ echo "=== check 0 ===, $WORK_PATH, $HDFS_trainingdata"
 
 
 
-export http_proxy="http://sys-proxy-rd-relay.byted.org:8118"
-export https_proxy="http://sys-proxy-rd-relay.byted.org:8118"
-export no_proxy="*.byted.org"
 pip install -e . 
 pip install -r requirements.txt
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-#MAX_JOBS=4  pip install flash_attn==2.4.2  --no-build-isolatio
 git clone https://github.com/Dao-AILab/flash-attention
 cd flash-attention 
 git submodule update --init --recursive
@@ -54,7 +49,6 @@ DATA_PATH=$1
 TOKENIZER_MODEL=/home/tiger/ByteMLPerf/byte_train_perf/Megatron-LM/examples/ds_like/Llama2tokenizer.model
 #bash examples/mixtral/train_moe.sh $CHECKPOINT_PATH $VOCAB_FILE $MERGE_FILE $DATA_PATH $TOKENIZER_MODEL 
 
-#source /home/tiger/ByteMLPerf/byte_train_perf/Megatron-LM/venv/bin/activate
 
 
 if [ -z "${CHECKPOINT_PATH}" ]; then
