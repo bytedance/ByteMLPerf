@@ -267,7 +267,7 @@ class GPUFlashMLAOp(BasicOp):
                 device=self.backend.get_torch_device_name()
             )
             self.v = torch.randn(
-                self.batch_size, self.kv_seq_len, self.kv_head_num, self.qk_dim_size,
+                self.batch_size, self.kv_seq_len, self.kv_head_num, self.v_dim_size,
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name()
             )
@@ -284,7 +284,7 @@ class GPUFlashMLAOp(BasicOp):
                     device=self.backend.get_torch_device_name()
                 ),
                 "v": OpTensorInfo(
-                    shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.qk_dim_size],
+                    shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.v_dim_size],
                     dtype=self.torch_dtype,
                     device=self.backend.get_torch_device_name()
                 )
