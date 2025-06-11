@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import copy
 import signal
 import pathlib
 import traceback
@@ -17,12 +18,11 @@ MICRO_PERF_DIR = FILE_DIR.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.utils import logger
-from core.creators import get_backend_cls, get_op_cls
-from core.creators import create_backend, create_op
+from core.creators import create_backend_instance, get_op_info, create_op_instance
+
 
 class Scheduler:
     def __init__(self, args):
-        # sub process control
         self._subprocesses = []
         def signal_handler(signum, frame):
             logger.info(f"Received signal {signum}, exiting...")
@@ -40,7 +40,7 @@ class Scheduler:
 
 
         # create backend instance
-        self.backend = create_backend(args.hardware_type)
+        self.backend = create_backend_instance(self.backend_type)
 
         self.backend.node_world_size = args.node_world_size
         self.backend.node_rank = args.node_rank
@@ -51,31 +51,37 @@ class Scheduler:
         self.backend.all_process_size = args.all_process_size
         self.backend.all_process_rank = args.all_process_rank
 
+        # for example, "NVIDIA A800-SXM4-80GB"
+        self.backend.device_name = self.backend.get_device_name()
+
+        # for example, "cuda"
+        self.backend.torch_device_name = self.backend.get_torch_device_name()
+
+
+        # get device info
+        if self.args_device == "all":
+            self.ori_target_devices = self.backend.avail_devices
+        else:
+            try:
+                self.ori_target_devices = []
+                for d in self.args_device.split(","):
+                    if d.isdigit() and int(d) < self.backend.device_count:
+                        self.ori_target_devices.append(int(d))
+            except Exception as e:
+                raise RuntimeError(f"invalid device config: {self.args_device}, error msg: {e}")
+        self.ori_target_device_count = len(self.ori_target_devices)
+        if self.ori_target_device_count == 0:
+            raise RuntimeError("no valid device")
+
 
 
     def prepare_task(self, task):
         # get op cls
         self.op_name = task
-        self.op_cls = get_op_cls(self.backend_type, self.op_name)
-        self.is_concurrent = self.op_cls.is_concurrent()
 
-        # get device info
-        if self.args_device == "all":
-            ori_target_devices = self.backend.avail_devices
-        else:
-            try:
-                ori_target_devices = []
-                for d in self.args_device.split(","):
-                    if d.isdigit() and int(d) < self.backend.device_count:
-                        ori_target_devices.append(int(d))
-            except Exception as e:
-                logger.error(f"invalid device config: {self.args_device}, error msg: {e}")
-                return
-        ori_target_device_count = len(ori_target_devices)
-        if ori_target_device_count == 0:
-            logger.error("no valid device")
-            return
-
+        self.is_concurrent, self.op_cls_mapping = get_op_info(self.backend_type, task)
+        if not self.op_cls_mapping:
+            return False
 
         # for each node, each numa process, provide:
         # 1. ori_target_devices: [0, 1, 2, 3, 4, 5, 6, 7]
@@ -86,48 +92,44 @@ class Scheduler:
         # one node, one process, specified devices
         if not self.is_concurrent:
             if self.backend.numa_rank == 0:
-                self.backend.ori_target_devices = ori_target_devices
-                self.backend.target_devices = ori_target_devices if not self.disable_parallel else ori_target_devices[0:1]
-                self.backend.total_target_devices = ori_target_devices if not self.disable_parallel else ori_target_devices[0:1]
-                self.backend.device_num_per_numa = ori_target_device_count if not self.disable_parallel else 1
-                self.backend.all_node_devices = ori_target_devices
+                self.backend.ori_target_devices = self.ori_target_devices
+                self.backend.target_devices = self.ori_target_devices if not self.disable_parallel else self.ori_target_devices[0:1]
+                self.backend.total_target_devices = self.ori_target_devices if not self.disable_parallel else self.ori_target_devices[0:1]
+                self.backend.device_num_per_numa = self.ori_target_device_count if not self.disable_parallel else 1
+                self.backend.all_node_devices = self.ori_target_devices
             else:
-                return None
+                return False
 
         # multiple nodes, multiple processes, specified devices on each
         else:
             total_target_devices = []
             target_devices = []
-            device_num_per_numa = ori_target_device_count // self.backend.numa_world_size
+            device_num_per_numa = self.ori_target_device_count // self.backend.numa_world_size
 
             if device_num_per_numa == 0:
-                if self.backend.numa_rank < ori_target_device_count:
-                    target_devices = ori_target_devices[self.backend.numa_rank:self.backend.numa_rank+1]
-                total_target_devices = ori_target_devices
+                if self.backend.numa_rank < self.ori_target_device_count:
+                    target_devices = self.ori_target_devices[self.backend.numa_rank:self.backend.numa_rank+1]
+                total_target_devices = self.ori_target_devices
             else:
-                target_devices = ori_target_devices[self.backend.numa_rank * device_num_per_numa:(self.backend.numa_rank + 1) * device_num_per_numa]
-                total_target_devices = ori_target_devices[0:self.backend.numa_world_size * device_num_per_numa]
+                target_devices = self.ori_target_devices[self.backend.numa_rank * device_num_per_numa:(self.backend.numa_rank + 1) * device_num_per_numa]
+                total_target_devices = self.ori_target_devices[0:self.backend.numa_world_size * device_num_per_numa]
 
             temp_all_node_devices = [None for _ in range(self.backend.all_process_size)]
             dist.all_gather_object(temp_all_node_devices, target_devices)
 
             if len(target_devices) == 0:
-                return
+                return False
 
             all_node_devices = []
             for process_target_devices in temp_all_node_devices:
                 all_node_devices.extend(process_target_devices)
 
-
-
-            self.backend.ori_target_devices = ori_target_devices
+            self.backend.ori_target_devices = self.ori_target_devices
             self.backend.total_target_devices = total_target_devices
             self.backend.target_devices = target_devices
             self.backend.device_num_per_numa = device_num_per_numa
             self.backend.all_node_devices = all_node_devices
             
-
-
 
         # print readable config
         pt = prettytable.PrettyTable()
@@ -136,6 +138,7 @@ class Scheduler:
         pt.add_row(["backend", self.backend_type])
         pt.add_row(["op_name", self.op_name])
         pt.add_row(["is_concurrent", self.is_concurrent])
+        pt.add_row(["op_cls_mapping", self.op_cls_mapping])
 
         pt.add_row(["node_rank", f"{self.backend.node_rank} / {self.backend.node_world_size}"])
         pt.add_row(["numa_rank", f"{self.backend.numa_rank} / {self.backend.numa_world_size}"])
@@ -146,6 +149,10 @@ class Scheduler:
         pt.add_row(["target_devices", self.backend.target_devices])
         pt.add_row(["all_node_devices", self.backend.all_node_devices])
         pt.add_row(["device_num_per_numa", self.backend.device_num_per_numa])
+
+        pt.add_row(["", ""])
+        for key, value in self.backend.env_dict.items():
+            pt.add_row([key, value])
         print(pt)
 
         return True
@@ -205,15 +212,16 @@ class Scheduler:
                 input_queues.put(None, False)
         
             while len(valid_case_set) > 0:
-                result_json = output_queues.get()
-                result_list.append(result_json)
-                valid_case_set.remove(result_json["arguments"]["index"])
+                result_dict = output_queues.get()
+                result_list.extend(result_dict["results"])
+                valid_case_set.remove(result_dict["index"])
 
             result_list = sorted(result_list, key=lambda x: x["arguments"]["index"])
             for result in result_list:
                 result["sku_name"] = self.backend.get_device_name()
                 result["op_name"] = self.op_name
-                result["arguments"].pop("index")
+                if "arguments" in result and "index" in result["arguments"]:
+                    result["arguments"].pop("index")
 
         for process in self._subprocesses:
             process.join()
@@ -243,43 +251,45 @@ class Scheduler:
 
                 # loop function
                 while True:
-                    # get task args
+                    # get test case and check exit
                     test_case = input_queues.get()
                     if test_case is None:
                         break
                 
-                    # try create op
-                    op_instance = None
-                    try:
-                        op_instance = create_op(
-                            self.op_name, test_case, backend
-                        )
-                    except Exception as e:
-                        print(traceback.format_exc())
-
-                    # try bench op
-                    result_json = {
-                        "arguments": test_case, 
-                        "targets": {}    
-                    }
-                    if op_instance is not None:
-                        latency_us = 0.
-                        kernel_list = []
+                    # results for multiple providers
+                    provider_results = []
+                    for op_provider, op_cls in self.op_cls_mapping.items():
+                        # try create op instance on current device
+                        op_instance = None
                         try:
-                            latency_us, kernel_list = backend.perf(
-                                op_instance, 
-                                profiling=self.profiling
-                            )
+                            op_instance = op_cls(test_case, backend)
+                            op_instance.is_concurrent = False
                         except Exception as e:
-                            print(traceback.format_exc())
-                        result_json["provider"] = op_instance.get_provider()
-                        result_json["targets"] = op_instance.summary(latency_us)
-                        result_json["kernels"] = kernel_list
-                    arguments_str = json.dumps(result_json["arguments"])
-                    targets_str = json.dumps(result_json["targets"], indent=4)
-                    print(f"{arguments_str}\n{targets_str}\n")         
-                    output_queues.put(result_json, block=False)
-            
+                            print(f"op {self.op_name} provider {op_provider} init failed, error msg: {e}")
+                            continue
+                        
+                        # try bench op and get result
+                        target_dict, env_dict = backend.perf(
+                            op_instance, 
+                            profiling=self.profiling
+                        )
+                        arguments_str = json.dumps(test_case)
+                        targets_str = json.dumps(target_dict, indent=4)
+                        print(f"{op_provider}\n{arguments_str}\n{targets_str}\n")
+
+                        if target_dict:
+                            template_dict = {
+                                "provider": op_provider,
+                                "arguments": copy.deepcopy(test_case),
+                                "targets": target_dict,
+                                "env": env_dict,
+                            }
+                            provider_results.append(template_dict)
+
+                    output_queues.put({
+                        "index": test_case["index"],
+                        "results": provider_results
+                    }, block=False)
 
             # communication ops
             else:
@@ -314,72 +324,75 @@ class Scheduler:
                     test_case = broadcast_test_case[0]
                     if test_case is None:
                         break
-                    
-                    result_list = [None for _ in range(true_world_size)]
 
-                    # according to given world_size, some devices work, some devices sleep
-                    world_size = test_case.get("world_size", 1)
-                    if world_size > 1 and world_size not in process_groups_mapping:
-                        process_groups_mapping[world_size] = backend.new_group(range(world_size))
+                    provider_results = []
+                    for op_provider, op_cls in self.op_cls_mapping.items():
+                        # create current exchange area for all cooperative devices
+                        # maybe on different node or numa
+                        exchange_area = [None for _ in range(true_world_size)]
 
-                    if true_rank < world_size:
-                        # try create op
+                        # create corresponding process group
+                        world_size = test_case.get("world_size", 1)
+                        if world_size > 1 and world_size not in process_groups_mapping:
+                            process_groups_mapping[world_size] = backend.new_group(range(world_size))
+
+                        # create op instance on all target devices
                         op_instance = None
-                        try:
-                            op_instance = create_op(
-                                self.op_name, test_case, backend, 
-                                op_group=process_groups_mapping.get(world_size, None), 
-                                group_size=world_size
-                            )
-                        except Exception as e:
-                            print(traceback.format_exc())
-
-                        # try bench op
-                        result_list[true_rank] = {
-                            "arguments": test_case, 
-                            "targets": {}    
-                        }
-                        if op_instance is not None:
-                            latency_us = 0.
-                            kernel_list = []
+                        if true_rank < world_size:
                             try:
-                                latency_us, kernel_list = backend.perf(
-                                    op_instance, 
-                                    profiling=self.profiling
+                                op_instance = op_cls(
+                                    test_case, backend, 
+                                    op_group=process_groups_mapping.get(world_size, None), 
+                                    group_size=world_size
                                 )
-                            except Exception as e:
-                                print(traceback.format_exc())
-                            result_list[true_rank]["provider"] = op_instance.get_provider()
-                            result_list[true_rank]["targets"] = op_instance.summary(latency_us)
-                            result_list[true_rank]["kernels"] = kernel_list
+                                op_instance.is_concurrent = True
+                            except:
+                                pass
+                        exchange_area[true_rank] = op_instance is not None
 
-                    # sync on all devices, gather all results    
-                    if true_world_size > 1:
-                        dist_module.all_gather_object(result_list, result_list[true_rank])
-                        
+                        if true_world_size > 1:
+                            dist_module.all_gather_object(exchange_area, exchange_area[true_rank])
+
+                        # check whether needed devices have created op instance
+                        if not all(exchange_area[:world_size]):
+                            continue
+
+                        # according to given world_size, 
+                        # some devices work, some devices sleep
+                        if true_rank < world_size:
+                            target_dict, env_dict = backend.perf(
+                                op_instance, 
+                                profiling=self.profiling
+                            )
+                            exchange_area[true_rank] = target_dict
+                        else:
+                            exchange_area[true_rank] = {}
+
+                        # sync on all cooperative devices
+                        if true_world_size > 1:
+                            dist_module.all_gather_object(exchange_area, exchange_area[true_rank])
+
+                        if backend.numa_rank == 0 and instance_rank == 0:
+                            target_dict = op_instance.merge_summary(exchange_area)
+                            arguments_str = json.dumps(test_case)
+                            targets_str = json.dumps(target_dict, indent=4)
+                            print(f"device {backend.total_target_devices[:world_size]}\n{arguments_str}\n{targets_str}\n")
+
+                            if target_dict:
+                                template_dict = {
+                                    "provider": op_provider,
+                                    "arguments": copy.deepcopy(test_case),
+                                    "targets": target_dict,
+                                    "env": env_dict,
+                                }
+                                provider_results.append(template_dict)
+                            
                     if backend.numa_rank == 0 and instance_rank == 0:
-                        if result_list[0]["targets"]:
-                            latency_list = [result["targets"]["latency(us)"] for result in result_list[:world_size]]
-                            algo_bw_list = [result["targets"]["algo_bw(GB/s)"] for result in result_list[:world_size]]
-                            bus_bw_list = [result["targets"]["bus_bw(GB/s)"] for result in result_list[:world_size]]
-
-                            result_list[0]["targets"]["latency(us)"] = min(latency_list)
-                            result_list[0]["targets"]["algo_bw(GB/s)"] = max(algo_bw_list)
-                            result_list[0]["targets"]["bus_bw(GB/s)"] = max(bus_bw_list)
-                            result_list[0]["targets"]["algo_bw_sum(GB/s)"] = round(sum(algo_bw_list), 3)
-                            result_list[0]["targets"]["bus_bw_sum(GB/s)"] = round(sum(bus_bw_list), 3)
-                            result_list[0]["targets"]["latency_list(us)"] = latency_list
-                            result_list[0]["targets"]["algo_bw_list(GB/s)"] = algo_bw_list
-                            result_list[0]["targets"]["bus_bw_list(GB/s)"] = bus_bw_list
-
-                        arguments_str = json.dumps(result_list[0]["arguments"])
-                        targets_str = json.dumps(result_list[0]["targets"], indent=4)
-                        print(f"device {backend.total_target_devices[:world_size]}\n{arguments_str}\n{targets_str}\n")
-
-                        output_queues.put(result_list[0], block=False)
-
+                        output_queues.put({
+                            "index": test_case["index"],
+                            "results": provider_results,
+                        }, block=False)
                 backend.destroy_process_group()
-
 
         except Exception as e:
             traceback.print_exc()

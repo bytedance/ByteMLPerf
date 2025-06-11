@@ -25,32 +25,31 @@ class FlashAttentionOp(BasicOp):
         if self.arg_type != "llm":
             raise NotImplementedError
 
-        # llm phase: prefill or decode
-        self.phase = self.args_dict["phase"]
+        # llm phase: prefill
+        self.phase = self.args_dict.get("phase", "prefill")
         if self.phase not in ["prefill"]:
             raise NotImplementedError
 
         # dtype: bfloat16
-        self.dtype = self.args_dict["dtype"]
+        self.dtype = self.args_dict.get("dtype", "bfloat16")
         if self.dtype != "bfloat16":
             raise NotImplementedError
         self.torch_dtype = getattr(torch, self.dtype)
-        self.torch_dtype_size = torch.tensor([], dtype=self.torch_dtype).element_size()
 
+        # parse args
+        self.is_causal = self.args_dict.get("is_causal", True)
+        if not self.is_causal:
+            raise NotImplementedError
+
+        self.q_head_num = self.args_dict.get("q_head_num", 64)
+        self.kv_head_num = self.args_dict.get("kv_head_num", 8)
+        self.head_dim = self.args_dict.get("head_dim", 128)
 
         self.batch_size = self.args_dict["batch_size"]
         self.q_seq_len = self.args_dict["q_seq_len"]
         self.kv_seq_len = self.args_dict["kv_seq_len"]
-        self.q_head_num = self.args_dict["q_head_num"]
-        self.kv_head_num = self.args_dict["kv_head_num"]
-        self.head_dim = self.args_dict["head_dim"]
         
-        self.is_causal = self.args_dict["is_causal"]
-        if not self.is_causal:
-            raise NotImplementedError
-
         self.softmax_scale = self.head_dim ** (-0.5)
-
 
         self.input_tensor_info = {
             "q": OpTensorInfo(
@@ -100,9 +99,6 @@ class FlashAttentionOp(BasicOp):
 
         flops_ratio = (1 + self.kv_seq_len) * self.q_seq_len / 2 / (self.q_seq_len * self.kv_seq_len) if self.is_causal else 1
         self.calc_flops = (p_gemm_calc_flops + o_gemm_calc_flops) * flops_ratio
-
-
-
 
 
 

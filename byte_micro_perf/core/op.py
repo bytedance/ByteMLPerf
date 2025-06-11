@@ -1,6 +1,7 @@
 import sys
 import time
 import torch
+import copy
 import pathlib
 from typing import List
 from collections import namedtuple
@@ -14,18 +15,27 @@ sys.path.insert(0, str(MICRO_PERF_DIR))
 
 class BasicOp:
     def __init__(self, args_dict, backend, *args, **kwargs):
+        # store args
         self.args_dict = args_dict
+
+        # get backend instance
         self.backend = backend
         
+        # store distributed info
         self.op_group = kwargs.get("op_group", None)
         self.group_size = kwargs.get("group_size", 1)
 
+        # default create input and output tensors based on given tensor shapes
         self._create_tensors_func = partial(
             self._create_in_out_tensors, 
             create_inputs=True, 
             create_outputs=True
         )
+
+        # whether run default testing process
         self._custom_run = False
+
+        # default function call, empty run
         self._run_func = self._empty_run
 
 
@@ -63,6 +73,12 @@ class BasicOp:
         # 8. specify run function, custom run or obey standard test process
         self.prepare()
 
+        self.is_concurrent = False
+
+
+        # extra providers
+        self.extra_providers = []
+
     def _empty_run(self):
         raise NotImplementedError("run func not implemented.")
 
@@ -78,7 +94,7 @@ class BasicOp:
         first_tensor_mapping = {}
         if create_inputs:
             for key, value in self.input_tensor_info.items():
-                first_tensor_mapping[key] = torch.zeros(
+                first_tensor_mapping[key] = value.creator(
                     size=value.shape,
                     dtype=value.dtype,
                     device=value.device
@@ -87,7 +103,7 @@ class BasicOp:
                     first_tensor_mapping[key] = first_tensor_mapping[key].pin_memory()
         if create_outputs:
             for key, value in self.output_tensor_info.items():
-                first_tensor_mapping[key] = torch.zeros(
+                first_tensor_mapping[key] = value.creator(
                     size=value.shape,
                     dtype=value.dtype,
                     device=value.device
@@ -107,14 +123,6 @@ class BasicOp:
         return all_tensor_list
 
 
-
-
-    # false:    add, gemm
-    # true:     all_reduce, all_gather
-    @staticmethod
-    def is_concurrent():
-        return False
-
     def is_custom_run(self):
         return self._custom_run
 
@@ -133,22 +141,56 @@ class BasicOp:
     def create_tensors(self, instance_num):
         return self._create_tensors_func(instance_num)
 
-    def summary(self, latency_us):
-        targets_json = {}
-        if latency_us > 0:
-            targets_json["latency(us)"] = round(latency_us, 3)
-            if type(self).is_concurrent():
-                targets_json["algo_size(B)"] = self.algo_size
-                targets_json["bus_size(B)"] = self.bus_size
-                targets_json["algo_bw(GB/s)"] = round(self.algo_size / latency_us / 1e3, 3)
-                targets_json["bus_bw(GB/s)"] = round(self.bus_size / latency_us / 1e3, 3)
-            else:
-                targets_json["read_bytes(B)"] = self.read_bytes
-                targets_json["write_bytes(B)"] = self.write_bytes
-                targets_json["io_bytes(B)"] = self.io_bytes
-                targets_json["mem_bw(GB/s)"] = round(self.io_bytes / latency_us / 1e3, 3)
-                targets_json["calc_flops"] = self.calc_flops
-                targets_json["calc_flops_power(tflops)"] = round(self.calc_flops / latency_us / 1e6, 3)
-                targets_json["calc_mem_ratio"] = round(self.calc_flops / self.io_bytes, 3) if self.io_bytes!= 0 else 0
-        return targets_json
 
+    def summary(self, latency_us):
+        target_dict = {}
+        env_dict = {}
+
+        if latency_us > 0:
+            target_dict["latency(us)"] = round(latency_us, 3)
+            if self.is_concurrent:
+                target_dict["algo_size(B)"] = self.algo_size
+                target_dict["bus_size(B)"] = self.bus_size
+                target_dict["algo_bw(GB/s)"] = round(self.algo_size / latency_us / 1e3, 3)
+                target_dict["bus_bw(GB/s)"] = round(self.bus_size / latency_us / 1e3, 3)
+            else:
+                target_dict["read_bytes(B)"] = self.read_bytes
+                target_dict["write_bytes(B)"] = self.write_bytes
+                target_dict["io_bytes(B)"] = self.io_bytes
+                target_dict["mem_bw(GB/s)"] = round(self.io_bytes / latency_us / 1e3, 3)
+                target_dict["calc_flops"] = self.calc_flops
+                target_dict["calc_flops_power(tflops)"] = round(self.calc_flops / latency_us / 1e6, 3)
+                target_dict["calc_mem_ratio"] = round(self.calc_flops / self.io_bytes, 3) if self.io_bytes!= 0 else 0
+
+
+        
+            env_dict.update(self.backend.env_dict)
+            if len(self.extra_providers) > 0:
+                for extra_provider in self.extra_providers:
+                    if extra_provider in self.backend.avail_providers:
+                        env_dict.update(self.backend.avail_providers[extra_provider])
+        return target_dict, env_dict
+
+
+    def merge_summary(self, target_dict_list):
+        if len(target_dict_list) == 0:
+            return {}
+        if not self.is_concurrent:
+            return target_dict_list[0]
+        
+        latency_list = [target_dict["latency(us)"] for target_dict in target_dict_list]
+        algo_bw_list = [target_dict["algo_bw(GB/s)"] for target_dict in target_dict_list]
+        bus_bw_list = [target_dict["bus_bw(GB/s)"] for target_dict in target_dict_list]
+
+        target_dict = copy.deepcopy(target_dict_list[0])
+        target_dict["latency(us)"] = min(latency_list)
+        
+        target_dict["algo_bw(GB/s)"] = max(algo_bw_list)
+        target_dict["bus_bw(GB/s)"] = max(bus_bw_list)
+        target_dict["algo_bw_sum(GB/s)"] = round(sum(algo_bw_list), 3)
+        target_dict["bus_bw_sum(GB/s)"] = round(sum(bus_bw_list), 3)
+        target_dict["latency_list(us)"] = latency_list
+        target_dict["algo_bw_list(GB/s)"] = algo_bw_list
+        target_dict["bus_bw_list(GB/s)"] = bus_bw_list
+
+        return target_dict

@@ -61,6 +61,10 @@ class Backend(ABC):
     def empty_cache(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def get_backend_env(self):
+        raise NotImplementedError
+
     
     """
     ccl related
@@ -139,9 +143,9 @@ class Backend(ABC):
 
     
     def perf(self, op_instance, profiling=True):
-        if op_instance.is_custom_run():
-            latency_us = op_instance.core_run()
-            return latency_us
+        # if op_instance.is_custom_run():
+        #     latency_us = op_instance.core_run()
+        #     return latency_us
         
         # op
         tensor_size = op_instance.tensor_size
@@ -156,14 +160,13 @@ class Backend(ABC):
 
         # preset return values
         latency_us = 0.
-        kernel_list = []
 
         try:
-            min_test_iters = 32 if not type(op_instance).is_concurrent() else 10
+            min_test_iters = 32 if not op_instance.is_concurrent else 10
             sleep_time = 0.2
             max_test_time = 1e6
             max_data_cnt = 1
-            if not type(op_instance).is_concurrent():
+            if not op_instance.is_concurrent:
                 if tensor_size > assume_avail_bytes:
                     raise RuntimeError("Not enough memory to run the op")
                 elif 2 * tensor_size > assume_avail_bytes:
@@ -189,6 +192,6 @@ class Backend(ABC):
         except Exception as e:
             print(traceback.format_exc())
 
-        return latency_us, kernel_list
+        return op_instance.summary(latency_us)
 
 

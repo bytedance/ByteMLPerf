@@ -33,9 +33,6 @@ from core.perf_engine import engine_run
 from core.utils import logger, setup_logger
 
 
-
-
-
 def get_numa_configs():
     numa_configs = []
     numa_node_num = int(subprocess.check_output("lscpu | grep 'NUMA node(s)' | awk -F: '{print $2}'", shell=True).decode().strip())
@@ -159,6 +156,12 @@ if __name__ == "__main__":
     json_task_list = [task_json.stem for task_json in task_dir.rglob("*.json")]
     task_list = list(set(json_task_list) | set(csv_task_list))
 
+    # check hardware
+    if args.hardware_type not in hardware_list:
+        logger.error(f"Hardware {args.hardware_type} not found in {BYTE_MLPERF_ROOT.joinpath('backends')}")
+        exit(1)
+    logger.info(f"******************* Hardware: *****************")
+    logger.info(f"{args.hardware_type}\n")
 
     if args.show_task_list:
         logger.info("******************* Supported Task *******************")
@@ -171,14 +174,6 @@ if __name__ == "__main__":
         exit(1)
     logger.info(f"******************* Hardware: *****************")
     logger.info(f"{args.hardware_type}\n")
-
-    # check hardware
-    hardware = args.hardware_type
-    if hardware not in hardware_list:
-        logger.error(f"Hardware {hardware} not found in {BYTE_MLPERF_ROOT.joinpath('backends')}")
-        exit(1)
-    logger.info(f"******************* hardware: *****************")
-    logger.info(f"{hardware}\n")
 
 
     # check task
@@ -194,8 +189,6 @@ if __name__ == "__main__":
             test_cases.append(task)
     test_cases.sort()
     args.task = ",".join(test_cases)
-
-    test_cases.sort()
 
     logger.info(f"******************* Tasks: *****************")
     logger.info(f"{test_cases}\n")
