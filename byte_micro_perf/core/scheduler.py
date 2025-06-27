@@ -333,6 +333,7 @@ class Scheduler:
                 true_device_index = backend.target_devices[true_rank]
                 print(f"true_world_size: {true_world_size}, true_rank: {true_rank}, true_device_index: {true_device_index}")
                 backend.set_device(true_device_index)
+                backend.true_device_index = true_device_index
 
                 # device process is ready
                 output_queues.put("ready")
@@ -403,6 +404,7 @@ class Scheduler:
                 device_true_rank = backend.numa_rank * backend.device_num_per_numa + instance_rank
                 print(f"true_world_size: {true_world_size}, true_rank: {true_rank}, true_device_index: {true_device_index}")
                 backend.set_device(true_device_index)
+                backend.true_device_index = true_device_index
 
                 # init dist env on all nodes
                 dist_module = backend.get_dist_module()
