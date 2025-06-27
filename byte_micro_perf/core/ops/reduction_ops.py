@@ -309,7 +309,7 @@ class SoftmaxOp(BasicOp):
         self.io_bytes = self.read_bytes + self.write_bytes
 
         self._run_func = self.softmax_run
-        self._create_in_out_tensors_func = partial(
+        self._create_tensors_func = partial(
             self._create_in_out_tensors,
             create_inputs=True,
             create_outputs=False
@@ -365,7 +365,7 @@ class TopkOp(BasicOp):
         self.io_bytes = self.read_bytes + self.write_bytes
 
         self._run_func = self.topk_run
-        self._create_in_out_tensors_func = partial(
+        self._create_tensors_func = partial(
             self._create_in_out_tensors,
             create_inputs=True,
             create_outputs=False
