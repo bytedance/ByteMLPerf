@@ -33,21 +33,79 @@ from core.perf_engine import engine_run
 from core.utils import logger, setup_logger
 
 
-
-
-
 def get_numa_configs():
+    num_threads = 0             # 192
+    num_threads_per_core = 0    # 2
+    num_cores_per_socket = 0    # 48
+    num_sockets = 0              # 2
+    ret = subprocess.run("lscpu", capture_output=True, text=True)
+    for line in ret.stdout.splitlines():
+        if line.startswith("CPU(s):"):
+            num_threads = int(line.split(":")[1].strip())
+        if line.startswith("Thread(s) per core:"):
+            num_threads_per_core = int(line.split(":")[1].strip())
+        if line.startswith("Core(s) per socket:"):
+            num_cores_per_socket = int(line.split(":")[1].strip())
+        if line.startswith("Socket(s):"):
+            num_sockets = int(line.split(":")[1].strip())
+    num_threads_per_socket = num_threads // num_sockets
+
+
+    is_core_continuous = True
+    is_thread_continuous = False
+    for line in ret.stdout.splitlines():
+        if line.startswith("NUMA node0 CPU(s):"):
+            numa_config_str = line.split(":")[1].strip()
+
+            if "-" in numa_config_str:
+                is_core_continuous = True
+                split_list = numa_config_str.split("-")
+                start_core_id = int(split_list[0])
+                end_core_id = int(split_list[-1])
+
+                if end_core_id - start_core_id > num_threads_per_socket:
+                    is_thread_continuous = False
+                else:
+                    is_thread_continuous = True
+            else:
+                is_core_continuous = False
+                is_thread_continuous = True
+            break
+
     numa_configs = []
-    numa_node_num = int(subprocess.check_output("lscpu | grep 'NUMA node(s)' | awk -F: '{print $2}'", shell=True).decode().strip())
-    for i in range(numa_node_num):
-        numa_cores = subprocess.check_output(f"lscpu | grep 'NUMA node{i}' | awk -F: '{{print $2}}'", shell=True).decode().strip()
-        core_list = []
-        for item in numa_cores.split(','):
-            item_split = item.split('-')
-            start = int(item_split[0])
-            end = int(item_split[1]) + 1
-            core_list.extend(range(start, end))
-        numa_configs.append(core_list)
+    try:
+        numa_node_num = int(subprocess.check_output("lscpu | grep 'NUMA node(s)' | awk -F: '{print $2}'", shell=True).decode().strip())
+        for i in range(numa_node_num):
+            numa_cores = subprocess.check_output(f"lscpu | grep 'NUMA node{i}' | awk -F: '{{print $2}}'", shell=True).decode().strip()
+            core_list = []
+            for item in numa_cores.split(','):
+                item_split = item.split('-')
+                start = int(item_split[0])
+                end = int(item_split[1]) + 1
+                core_list.extend(range(start, end))
+            numa_configs.append(core_list)
+    except:
+        for socket_id in range(num_sockets):
+            core_ids = []
+            
+            # 0: 0-95
+            # 1: 96-191
+            if is_core_continuous and is_thread_continuous:
+                core_start = socket_id * num_threads_per_socket
+                core_ids.extend(range(core_start, core_start + num_threads_per_socket))
+            # 0: 0-47, 96-143
+            # 1: 48-95,144-191
+            elif is_core_continuous and not is_thread_continuous:
+                for thread_id in range(num_threads_per_core):
+                    core_start = thread_id * (num_sockets * num_cores_per_socket) + socket_id * num_cores_per_socket
+                    core_ids.extend(range(core_start, core_start + num_cores_per_socket))
+            # 0: 0,2,4,8,...,94,...
+            # 1: 1,3,5,7,...,95,...
+            else:
+                core_ids.extend(range(socket_id, num_threads, num_sockets))
+
+            numa_configs.append(core_ids)
+
     return numa_configs
     
 
@@ -58,6 +116,7 @@ numa_configs = get_numa_configs()
 avail_numa_node = [-1]
 for i, numa_config in enumerate(numa_configs):
     avail_numa_node.append(i)
+
 
 
 
@@ -159,6 +218,10 @@ if __name__ == "__main__":
     json_task_list = [task_json.stem for task_json in task_dir.rglob("*.json")]
     task_list = list(set(json_task_list) | set(csv_task_list))
 
+    if args.show_hardware_list:
+        logger.info("***************** Supported Hardware Backend *****************")
+        print(hardware_list)
+        exit(0)
 
     if args.show_task_list:
         logger.info("******************* Supported Task *******************")
@@ -172,14 +235,6 @@ if __name__ == "__main__":
     logger.info(f"******************* Hardware: *****************")
     logger.info(f"{args.hardware_type}\n")
 
-    # check hardware
-    hardware = args.hardware_type
-    if hardware not in hardware_list:
-        logger.error(f"Hardware {hardware} not found in {BYTE_MLPERF_ROOT.joinpath('backends')}")
-        exit(1)
-    logger.info(f"******************* hardware: *****************")
-    logger.info(f"{hardware}\n")
-
 
     # check task
     if args.task == "all":
@@ -190,12 +245,10 @@ if __name__ == "__main__":
         for task in specified_tasks:
             if task not in task_list:
                 logger.error(f"Task {task} not found in {args.task_dir}")
-                exit(1)
+                continue
             test_cases.append(task)
     test_cases.sort()
     args.task = ",".join(test_cases)
-
-    test_cases.sort()
 
     logger.info(f"******************* Tasks: *****************")
     logger.info(f"{test_cases}\n")

@@ -61,6 +61,10 @@ class Backend(ABC):
     def empty_cache(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def get_backend_env(self):
+        raise NotImplementedError
+
     
     """
     ccl related
@@ -85,6 +89,13 @@ class Backend(ABC):
             rank=rank, 
             timeout=timedelta(seconds=1800)
         )
+
+        assigned_value = 1 if rank < world_size // 2 else -1
+        data = torch.ones([1], dtype=torch.float32, device=self.get_torch_device_name()) * assigned_value
+        dist_module.all_reduce(data, op=dist_module.ReduceOp.SUM)
+        print(data)
+
+
         return True
 
     def new_group(self, ranks):
@@ -138,11 +149,7 @@ class Backend(ABC):
 
 
     
-    def perf(self, op_instance, profiling=True):
-        if op_instance.is_custom_run():
-            latency_us = op_instance.core_run()
-            return latency_us
-        
+    def perf(self, op_instance, profiling=True):        
         # op
         tensor_size = op_instance.tensor_size
 
@@ -156,14 +163,13 @@ class Backend(ABC):
 
         # preset return values
         latency_us = 0.
-        kernel_list = []
 
         try:
-            min_test_iters = 32 if not type(op_instance).is_concurrent() else 10
+            min_test_iters = 32 if not op_instance.is_concurrent else 10
             sleep_time = 0.2
             max_test_time = 1e6
             max_data_cnt = 1
-            if not type(op_instance).is_concurrent():
+            if not op_instance.is_concurrent:
                 if tensor_size > assume_avail_bytes:
                     raise RuntimeError("Not enough memory to run the op")
                 elif 2 * tensor_size > assume_avail_bytes:
@@ -187,8 +193,19 @@ class Backend(ABC):
             del tensor_list
             self.empty_cache()
         except Exception as e:
-            print(traceback.format_exc())
+            traceback.print_exc()
 
-        return latency_us, kernel_list
+        return op_instance.summary(latency_us)
 
+
+    def fake_perf(self, group_size, op_group):
+        if group_size > 1:
+            dist_module = self.get_dist_module()
+
+            self.op_group_barrier(op_group=op_group, group_size=group_size)
+
+            prefer_iters_list = [None for _ in range(group_size)]
+            dist_module.all_gather_object(prefer_iters_list, 0, group=op_group)
+
+            self.op_group_barrier(op_group=op_group, group_size=group_size)
 

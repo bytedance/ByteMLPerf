@@ -23,6 +23,7 @@ import itertools
 import jsonlines
 import shutil
 import psutil
+import prettytable
 from datetime import timedelta
 
 from typing import Any, Dict, List
@@ -53,6 +54,13 @@ def parse_task(task_dir, task):
         json_data_list = json_data.get("cases", [])
         if json_data_list:
             for argument_case in json_data_list:
+                removed_keys = []
+                for key in argument_case:
+                    if key.startswith("__"):
+                        removed_keys.append(key)
+                for removed_key in removed_keys:
+                    argument_case.pop(removed_key)
+
                 keys = list(argument_case.keys())
                 values = list(argument_case.values())
                 for i, value in enumerate(values):
@@ -82,16 +90,23 @@ def engine_run(rank, *args):
     world_size, queue_instance, configs = args
     _ = queue_instance.get()
 
-
+    # assign node
     node_world_size = configs.node_world_size
     node_rank = configs.node_rank
 
+    # assign numa
     numa_world_size = world_size
     numa_rank = rank
+    configs.numa_world_size = numa_world_size
+    configs.numa_rank = numa_rank
 
+    # assign all process
     all_process_size = node_world_size * numa_world_size
     all_process_rank = node_rank * numa_world_size + numa_rank
+    configs.all_process_size = all_process_size
+    configs.all_process_rank = all_process_rank
 
+    # try init process dist
     os.environ['MASTER_PORT'] = os.environ['GLOO_PORT']
     try:
         dist.init_process_group(
@@ -106,57 +121,46 @@ def engine_run(rank, *args):
         traceback.print_exc()
         sys.exit(1)
         
-
-    if numa_rank == 0:
-        print("*" * 100)
-        print(f"node_world_size: {node_world_size}")
-        print(f"numa_world_size: {numa_world_size}")
-        print(f"all_process_size: {all_process_size}")
-        print(f"check gloo connnection: {data}")
-        print("*" * 100)
-
-
-    configs.node_world_size = node_world_size
-    configs.node_rank = node_rank
-
-    configs.numa_world_size = numa_world_size
-    configs.numa_rank = numa_rank
-
-    configs.all_process_size = all_process_size
-    configs.all_process_rank = all_process_rank
-
+    # try create scheduler
     try:
         scheduler = Scheduler(configs)
     except Exception as e:
         traceback.print_exc()
         sys.exit(-1)
 
+    for i, task in enumerate(configs.task.split(",")):
+        # sync for all processes
+        dist.barrier()
+        if numa_rank == 0:
+            print("")
+            print("=" * 100)
+            print(f"{i+1}: {task}")
+            print("=" * 100)
 
-    
-
-    for task in configs.task.split(","):
         try:
+            # parse task simutaneously
             task_cases = parse_task(configs.task_dir, task)
             if len(task_cases) == 0:
-                logger.error(f"{task} has not item")
+                print(f"{task} has no task case")
                 continue
-            if scheduler.prepare_task(task) is not None:
-                result_list = scheduler.run(task_cases)
-            dist.barrier()
+
+            # prepare task, exit if needed
+            result_list = []
+            prepare_ret = scheduler.prepare_task(task, task_cases)
+            if prepare_ret:
+                result_list = scheduler.run()
 
             if configs.numa_rank == 0:
                 if len(result_list) == 0:
-                    logger.error("No result found")
-                    sys.exit(1)
+                    logger.error("No result available")
+                    continue
 
                 sku_name = result_list[0]["sku_name"]
                 report_dir = pathlib.Path(configs.report_dir).absolute()
                 backend_dir = report_dir.joinpath(configs.hardware_type)
                 sku_dir = backend_dir.joinpath(sku_name)
                 op_dir = sku_dir.joinpath(task)
-                if op_dir.exists():
-                    shutil.rmtree(op_dir)
-                op_dir.mkdir(parents=True)
+                op_dir.mkdir(parents=True, exist_ok=True)
 
                 # grouped by arg_type
                 result_mapping = {}
@@ -171,7 +175,7 @@ def engine_run(rank, *args):
                     if arg_type not in result_mapping:
                         result_mapping[arg_type] = {}
 
-                    provider = result["provider"]
+                    provider = result.get("provider", "torch")
                     world_size = arguments.get("world_size", 1)
                     dtype = arguments["dtype"]
 
@@ -181,11 +185,14 @@ def engine_run(rank, *args):
                     result_mapping[arg_type][key].append(result)
                 
 
-                for arg_type in result_mapping:
-                    for key in result_mapping[arg_type]:
-                        target_folder = op_dir.joinpath(arg_type)
-                        target_folder.mkdir(parents=True, exist_ok=True)
 
+                for arg_type in result_mapping:
+                    target_folder = op_dir.joinpath(arg_type)
+                    if target_folder.exists():
+                        shutil.rmtree(target_folder)
+                    target_folder.mkdir(parents=True, exist_ok=True)
+
+                    for key in result_mapping[arg_type]:
                         provider, world_size, dtype = key
 
                         if world_size == 1:

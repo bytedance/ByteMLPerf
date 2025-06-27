@@ -3,6 +3,7 @@ import sys
 import logging
 import torch
 from collections import namedtuple
+from dataclasses import dataclass
 
 
 # logger functions
@@ -22,7 +23,15 @@ def setup_logger(loglevel: str):
 
 
 
-OpTensorInfo = namedtuple("TensorInfo", ["shape", "dtype", "device"])
+# shape: list or tuple
+# dtype: torch.dtype
+# device: str
+# creator: func, default is torch.zeros
+OpTensorInfo = namedtuple(
+    "OpTensorInfo", 
+    ["shape", "dtype", "device", "creator"], 
+    defaults=[torch.float32, "cpu", torch.zeros]
+)
 
 
 

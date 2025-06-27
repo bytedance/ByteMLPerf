@@ -1,9 +1,11 @@
 import os
 import sys
+import csv
+import json
 import pathlib
 import random
 import shutil
-import json
+import subprocess
 from datetime import timedelta
 
 import torch
@@ -16,81 +18,15 @@ MICRO_PERF_DIR = BACKEND_DIR.parent
 sys.path.insert(0, str(MICRO_PERF_DIR))
 
 from core.backend import Backend
+from backends.GPU.provider_gpu import GPU_PROVIDER
 from core.utils import suppress_stdout_stderr
-
-# ops
-from core.ops.unary_ops import *
-from core.ops.binary_ops import *
-from core.ops.reduction_ops import *
-from core.ops.index_ops import *
-from core.ops.ccl_ops import *
-from core.ops.h2d_ops import *
-from core.ops.gemm_ops import *
-from core.ops.attn_ops import *
-from .custom_ops import GPUGemmOp, GPUGemmFP8Op, GPUGroupGemmFP8Op, GPUFlashAttentionOp, GPUFlashMLAOp
-
-
-OP_MAPPING = {
-    # unary ops
-    "cast": CastOp,
-    "cos": CosOp,
-    "exp": ExpOp,
-    "gelu": GeluOp,
-    "log": LogOp,
-    "silu": SiluOp,
-    "sin": SinOp,
-    "sqrt": SqrtOp,
-
-    # binary ops
-    "add": AddOp, 
-    "sub": SubOp,
-    "mul": MulOp,
-    "div": DivOp,
-
-    # reduction ops
-    "layer_norm": LayerNormOp, 
-    "reduce_max": ReduceMaxOp, 
-    "reduce_sum": ReduceSumOp,
-    "reduce_min": ReduceMinOp,
-    "softmax": SoftmaxOp,
-    "topk": TopkOp, 
-
-    # index ops
-    "index_select": IndexSelectOp, 
-    "gather": GatherOp, 
-    "embedding": EmbeddingOp, 
-    "scatter": ScatterOp, 
-    "index_add": IndexAddOp, 
-
-    # xccl ops
-    "all_gather": AllGatherOp, 
-    "all_reduce": AllReduceOp, 
-    "all_to_all": AlltoAllOp,
-    "broadcast": BroadcastOp,
-    "reduce_scatter": ReduceScatterOp, 
-    "p2p": P2POp,
-
-    # h2d ops
-    "host2device": Host2DeviceOp,
-    "device2host": Device2HostOp,
-    "device2device": Device2DeviceOp,
-    
-    # gemm ops
-    "gemm": GPUGemmOp,
-    "gemm_fp8": GPUGemmFP8Op,
-    "group_gemm_fp8": GPUGroupGemmFP8Op,
-
-    # attn ops
-    "flash_attention": GPUFlashAttentionOp,
-    "flash_mla": GPUFlashMLAOp,
-}
-
-
 
 
 class BackendGPU(Backend):
     def __init__(self):
         super().__init__()
+
+        self.avail_providers = GPU_PROVIDER
 
     def __del__(self):
         if self.numa_rank == 0:
@@ -131,6 +67,26 @@ class BackendGPU(Backend):
         torch.cuda.empty_cache()
 
 
+    def get_backend_env(self):
+        __torch_version = torch.__version__
+        __cuda_version = torch.version.cuda
+        __driver_version = ''
+        nvidia_smi_output = subprocess.run(
+            ['nvidia-smi', '-q', '-i', '0'], 
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        for line in nvidia_smi_output.stdout.split('\n'):
+            if 'Driver Version' in line:
+                __driver_version = line.split(':')[1].strip()
+                break
+        return {
+            "torch": __torch_version,
+            "torch_cuda": __cuda_version,
+            "driver": __driver_version,
+        }
+
 
     """
     ccl related
@@ -153,7 +109,7 @@ class BackendGPU(Backend):
         op_group = op_instance.op_group
         group_size = op_instance.group_size
 
-        if not type(op_instance).is_concurrent() and profiling:
+        if not op_instance.is_concurrent and profiling:
             process_id = os.getpid()
             PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling", f"{process_id}")
 
