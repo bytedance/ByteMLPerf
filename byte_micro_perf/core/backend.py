@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import time
+import random
 import torch
 import pathlib
 import traceback
@@ -158,8 +159,8 @@ class Backend(ABC):
         avail_memory = device_mem_info[0]
 
         # assume
-        assume_cache_size = 1 * (1024 ** 3)
         assume_avail_bytes = int(avail_memory * 0.9)
+        assume_cache_size = 1 * (1024 ** 3)
 
         # preset return values
         latency_us = 0.
@@ -177,9 +178,14 @@ class Backend(ABC):
                 elif tensor_size > assume_cache_size:
                     max_data_cnt = 2
                 else:
-                    max_data_cnt = min(math.floor(assume_avail_bytes / tensor_size), 32)
+                    max_data_cnt = min(
+                        math.floor(max(assume_avail_bytes, assume_cache_size) / tensor_size), 
+                        math.floor(assume_cache_size / tensor_size)
+                    )
 
             tensor_list = op_instance.create_tensors(max_data_cnt)
+            random.shuffle(tensor_list)
+
             latency_us, _ = self.core_perf(op_instance, 2, 2, tensor_list, profiling=False)
             prefer_iters = min(max(int(max_test_time / latency_us), 2), min_test_iters)
             if op_instance.group_size > 1:

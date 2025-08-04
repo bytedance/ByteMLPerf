@@ -6,8 +6,8 @@ sys.path.insert(
     str(pathlib.Path(__file__).absolute().parents[3])
 )
 
-from core.ops.llm_ops import HeadRMSNormOp
+from core.ops.llm_ops import MoeScatterDynamicQuantOp
 
 OP_MAPPING = {
-    "torch": HeadRMSNormOp
+    "torch": MoeScatterDynamicQuantOp
 }

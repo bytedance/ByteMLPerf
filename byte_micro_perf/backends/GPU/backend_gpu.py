@@ -30,7 +30,6 @@ class BackendGPU(Backend):
 
     def __del__(self):
         if self.numa_rank == 0:
-
             PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling")
             if PROFILER_DIR.exists():
                 shutil.rmtree(PROFILER_DIR)
@@ -48,7 +47,11 @@ class BackendGPU(Backend):
         return torch.cuda.get_device_properties(index)
 
     def get_mem_info(self, index = 0):
-        return torch.cuda.mem_get_info(index)
+        total_memory = torch.cuda.get_device_properties(index).total_memory
+        allocated_memory = torch.cuda.memory_allocated(index)
+        cached_memory = torch.cuda.memory_reserved(index)
+        free_memory = (total_memory - allocated_memory)
+        return (free_memory, total_memory)
 
     def get_device_count(self):
         device_count = torch.cuda.device_count()
@@ -112,20 +115,24 @@ class BackendGPU(Backend):
         if not op_instance.is_concurrent and profiling:
             process_id = os.getpid()
             PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling", f"{process_id}")
+            PROFILER_DIR.mkdir(parents=True, exist_ok=True)
+            TRACE_FILE = PROFILER_DIR.joinpath("trace.json")
 
             # profiling
-            with suppress_stdout_stderr():
-                with torch.profiler.profile(
-                    activities=[torch.profiler.ProfilerActivity.CUDA], 
-                    schedule=torch.profiler.schedule(wait=0, warmup=warmup_iterations, active=prefer_iterations, repeat=1)
-                ) as prof:
-                    for i in range(prefer_iterations + warmup_iterations):
-                        op_instance.core_run(tensor_list[i % len(tensor_list)])
-                        self.device_synchronize()
-                        prof.step()
-
-            # export profiling results
-            torch.profiler.tensorboard_trace_handler(f"{PROFILER_DIR}")(prof)
+            with torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CUDA], 
+                schedule=torch.profiler.schedule(
+                    wait=0, 
+                    warmup=warmup_iterations, 
+                    active=prefer_iterations, 
+                    repeat=1
+                ), 
+                on_trace_ready=lambda prof: prof.export_chrome_trace(str(TRACE_FILE))
+            ) as prof:
+                for i in range(prefer_iterations + warmup_iterations):
+                    op_instance.core_run(tensor_list[i % len(tensor_list)])
+                    self.device_synchronize()
+                    prof.step()
 
             # parse and delete profiling json file
             average_latency = 0.
@@ -154,7 +161,7 @@ class BackendGPU(Backend):
                         kernel_latency_list.pop(kernel)
 
                     average_latency /= take_iters
-                shutil.rmtree(PROFILER_DIR)
+                TRACE_FILE.unlink()
             return average_latency, list(kernel_latency_list.keys())
         
         else:

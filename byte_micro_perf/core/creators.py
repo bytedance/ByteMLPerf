@@ -1,6 +1,7 @@
 import sys
 import pathlib
 import importlib
+import traceback
 
 sys.path.insert(
     0, 
@@ -78,35 +79,45 @@ OP_INFO_MAPPING = {
     "gemm": {"test_mode": "single"},
 
 
-    """
-    llm_ops
-    """
-    # vector ops
+    # llm: basic
     "scale_dynamic_quant": {"test_mode": "single"},
     "add_rms_norm_dynamic_quant": {"test_mode": "single"},
+    # all_reduce
+
+
+    # llm: MOE
+    "moe_gating_gemm": {"test_mode": "single"},
+    "moe_softmax_topk": {"test_mode": "single"},
+    "moe_scatter_dynamic_quant": {"test_mode": "single"},
+    "moe_quant_matmul": {"test_mode": "single"},
+    "moe_quant_group_gemm": {"test_mode": "single"},
+    "moe_swiglu_dynamic_quant": {"test_mode": "single"},
+    "moe_gather": {"test_mode": "single"},
+
+
+    # llm: ATTN
     "head_rms_norm": {"test_mode": "single"},
     "rotary_embedding": {"test_mode": "single"},
     "store_kv_cache": {"test_mode": "single"},
     "store_paged_kv_cache": {"test_mode": "single"},
-    "moe_softmax_topk": {"test_mode": "single"},
-    "moe_scatter_dynamic_quant": {"test_mode": "single"},
-    "moe_swiglu_dynamic_quant": {"test_mode": "single"},
-    "moe_gather": {"test_mode": "single"},
+    "flash_attention": {"test_mode": "single"},
+    "flash_attention_session_cache": {"test_mode": "single"},
+    "flash_decoding": {"test_mode": "single"}, 
+
+
 
     "moe_dispatch_tokens": {"test_mode": "concurrent"}, 
 
     # gemm ops
     "quant_matmul": {"test_mode": "single"},
-    "moe_quant_group_gemm": {"test_mode": "single"},
-
-    # attn ops
-    "flash_attention": {"test_mode": "single"},
-    "flash_attention_session_cache": {"test_mode": "single"},
-    "flash_decoding": {"test_mode": "single"}
+    
 }
 
 
-def get_op_info(backend_type: str, op_type: str):
+def get_op_info(
+    backend_type: str, 
+    op_type: str
+):
     if op_type in OP_INFO_MAPPING:
         if "op_mapping" not in OP_INFO_MAPPING[op_type] or backend_type not in OP_INFO_MAPPING[op_type]["op_mapping"]:
             OP_INFO_MAPPING[op_type]["op_mapping"] = {}
@@ -114,6 +125,7 @@ def get_op_info(backend_type: str, op_type: str):
                 backend_ops = importlib.import_module(f"backends.{backend_type}.ops.{op_type}")
                 OP_INFO_MAPPING[op_type]["op_mapping"][backend_type] = getattr(backend_ops, "OP_MAPPING")
             except:
+                traceback.print_exc()
                 OP_INFO_MAPPING[op_type]["op_mapping"][backend_type] = []
             return OP_INFO_MAPPING[op_type]["test_mode"], OP_INFO_MAPPING[op_type]["op_mapping"][backend_type]
     else:

@@ -41,6 +41,7 @@ class AllReduceOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.randn
             )
         }
         self.output_tensor_info = {
@@ -48,6 +49,7 @@ class AllReduceOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.randn
             )
         }
 
@@ -119,6 +121,7 @@ class ReduceScatterOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.randn
             )
         }
         self.output_tensor_info = {
@@ -126,6 +129,7 @@ class ReduceScatterOp(BasicOp):
                 shape=[self.batch_size * self.dim_size // self.world_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.randn
             )
         }
 
@@ -198,6 +202,7 @@ class AllGatherOp(BasicOp):
                 shape=[self.batch_size * self.dim_size // self.world_size],
                 dtype=self.torch_dtype, 
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
@@ -205,6 +210,7 @@ class AllGatherOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype, 
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
 
@@ -275,6 +281,7 @@ class AlltoAllOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
@@ -282,6 +289,7 @@ class AlltoAllOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
 
@@ -352,6 +360,7 @@ class BroadcastOp(BasicOp):
                 shape=[self.world_size, self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
@@ -359,6 +368,7 @@ class BroadcastOp(BasicOp):
                 shape=[self.world_size, self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
 
@@ -430,6 +440,7 @@ class P2POp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
@@ -437,6 +448,7 @@ class P2POp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
 
@@ -509,7 +521,8 @@ class Host2DeviceOp(BasicOp):
             "src": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device="cpu"
+                device="cpu", 
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
@@ -517,6 +530,7 @@ class Host2DeviceOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
 
@@ -569,13 +583,15 @@ class Device2HostOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
             "dst": OpTensorInfo(
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
-                device="cpu"
+                device="cpu", 
+                creator=torch.empty
             )
         }
 
@@ -627,6 +643,7 @@ class Device2DeviceOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }
         self.output_tensor_info = {
@@ -634,6 +651,7 @@ class Device2DeviceOp(BasicOp):
                 shape=[self.batch_size * self.dim_size],
                 dtype=self.torch_dtype,
                 device=self.backend.get_torch_device_name(),
+                creator=torch.empty
             )
         }    
 

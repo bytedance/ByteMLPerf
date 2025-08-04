@@ -416,14 +416,23 @@ class Scheduler:
 
                 # loop function
                 while True:
-                    # sync on all devices, get task args
-                    broadcast_test_case = [None]
                     if true_rank == 0:
                         test_case = input_queues.get()
-                        broadcast_test_case[0] = test_case
+                    else:
+                        test_case = None
+
+                    exchange_area = [None for _ in range(true_world_size)]
                     if true_world_size > 1:
-                        dist_module.broadcast_object_list(broadcast_test_case, 0)
-                    test_case = broadcast_test_case[0]
+                        dist_module.all_gather_object(
+                            exchange_area, 
+                            {
+                                "rank": true_rank, 
+                                "result": test_case
+                            }
+                        )
+                    sorted_exchange_area = sorted(exchange_area, key=lambda x: x["rank"])
+
+                    test_case = sorted_exchange_area[0]["result"]
                     if test_case is None:
                         break
 
@@ -545,16 +554,25 @@ class Scheduler:
 
                 # loop function
                 while True:
-                    # sync on all devices, get task args
-                    broadcast_test_case = [None]
                     if true_rank == 0:
                         test_case = input_queues.get()
-                        broadcast_test_case[0] = test_case
+                    else:
+                        test_case = None
+
+                    exchange_area = [None for _ in range(true_world_size)]
                     if true_world_size > 1:
-                        dist_module.broadcast_object_list(broadcast_test_case, 0)
-                    test_case = broadcast_test_case[0]
+                        dist_module.all_gather_object(
+                            exchange_area, 
+                            {
+                                "rank": true_rank, 
+                                "result": test_case
+                            }
+                        )
+                    sorted_exchange_area = sorted(exchange_area, key=lambda x: x["rank"])
+
+                    test_case = sorted_exchange_area[0]["result"]
                     if test_case is None:
-                        break    
+                        break
 
                     src_device = test_case["src_device"]
                     dst_device = test_case["dst_device"]
