@@ -500,7 +500,9 @@ def generate_prefill_data(
     cache_lens = [cache_len]
     cache_slot_ids = [0]
 
-    return q_lens, accum_q_lens, cache_lens, cache_slot_ids
+    kv_lens = [q_len + kv_len for q_len, kv_len in zip(q_lens, cache_lens)]
+
+    return q_lens, accum_q_lens, cache_lens, cache_slot_ids, kv_lens
 
 
 # generator for prefill_session_cache mode
@@ -533,7 +535,9 @@ def generate_prefill_session_cache_data(
     # sequential cache_slot_ids
     cache_slot_ids = [i for i in range(batch_size)]
 
-    return q_lens, accum_q_lens, cache_lens, cache_slot_ids
+    kv_lens = [q_len + kv_len for q_len, kv_len in zip(q_lens, cache_lens)]
+
+    return q_lens, accum_q_lens, cache_lens, cache_slot_ids, kv_lens
 
 
 # generator for decode mode
@@ -559,31 +563,457 @@ def generate_decode_data(
     # sequential cache_slot_ids
     cache_slot_ids = [i for i in range(batch_size)]
 
-    return q_lens, accum_q_lens, cache_lens, cache_slot_ids
+    kv_lens = [q_len + kv_len for q_len, kv_len in zip(q_lens, cache_lens)]
+
+    return q_lens, accum_q_lens, cache_lens, cache_slot_ids, kv_lens
 
 
 
 
 
-# to be implemented
 class RotaryEmbeddingOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
 
     def prepare(self):
-        pass
+        self.arg_type = self.args_dict["arg_type"]
+        if not self.arg_type in ["llm"]:
+            raise NotImplementedError
+        
+        # src_dtype
+        self.dtype = self.args_dict.get("dtype", "bfloat16")
+        if not self.dtype in ["bfloat16"]:
+            raise NotImplementedError
+        self.torch_dtype = getattr(torch, self.dtype)
+
+        # pre-defined attrs
+        self.q_head_num = self.args_dict["q_head_num"]
+        self.kv_head_num = self.args_dict["kv_head_num"]
+        self.head_dim = self.args_dict["head_dim"]
+        self.total_head_num = self.q_head_num + 2 * self.kv_head_num
+
+        self.rope_offset = self.args_dict.get("rope_offset", 0)
+        self.rope_dim = self.args_dict["rope_dim"]
+
+        self.mode = self.args_dict.get("mode", "prefill")
+        if self.mode == "prefill":
+            # [q_seq_len, total_head_num, head_dim]
+            self.batch_size = 1
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_prefill_data(
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        elif self.mode == "prefill_session_cache":
+            # [accumed_num_tokens, total_head_num, head_dim]
+            self.batch_size = self.args_dict.get("batch_size", 1)
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_prefill_session_cache_data(
+                    self.batch_size, 
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        elif self.mode == "decode":
+            # [batch_size * q_seq_len, total_head_num, head_dim]
+            self.batch_size = self.args_dict.get("batch_size", 1)
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_decode_data(
+                    self.batch_size, 
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        else:
+            raise NotImplementedError
 
 
-# to be implemented
+        # accum q_lens
+        self.num_tokens = sum(self.q_lens)
+        # accum cache_lens
+        self.num_cache_tokens = sum(self.cache_lens)
+        # max q_len + cache_len
+        self.max_kv_len = max(self.kv_lens)
+
+
+        # return cos/sin
+        def precompute_freqs_cis(dim, max_seq_len, theta: float = 10000.0):
+            freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+            t = torch.arange(max_seq_len, device=freqs.device)
+            freqs = torch.outer(t, freqs).float()
+            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)
+            return torch.real(freqs_cis), torch.imag(freqs_cis)
+
+        cos_tensor, sin_tensor = precompute_freqs_cis(
+            self.rope_dim, 
+            self.max_kv_len
+        )
+
+
+        self.input_tensor_info = {
+            "packed_qkv": OpTensorInfo(
+                shape=[self.num_tokens, self.total_head_num, self.head_dim], 
+                dtype=self.torch_dtype, 
+                device=self.backend.get_torch_device_name()
+            ), 
+            "q_lens": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.q_lens, dtype=dtype, device=device)
+            ), 
+            "accum_q_lens": OpTensorInfo(
+                shape=[self.batch_size + 1], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.accum_q_lens, dtype=dtype, device=device)
+            ), 
+            "cache_lens": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.cache_lens, dtype=dtype, device=device)
+            ), 
+            "cos": OpTensorInfo(
+                shape=[self.max_kv_len, self.rope_dim], 
+                dtype=self.torch_dtype, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: cos_tensor.to(device=device)
+            ), 
+            "sin": OpTensorInfo(
+                shape=[self.max_kv_len, self.rope_dim], 
+                dtype=self.torch_dtype, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: sin_tensor.to(device=device)
+            ), 
+        }
+        self.output_tensor_info = {
+            "y": OpTensorInfo(
+                shape=[self.num_tokens, self.total_head_num, self.head_dim], 
+                dtype=self.torch_dtype, 
+                device=self.backend.get_torch_device_name()
+            )
+        }
+
+
+
+        # calculator
+        self.input_tensor_size = sum([
+            calc_tensor_size(info) for info in self.input_tensor_info.values()
+        ])
+        self.output_tensor_size = sum([
+            calc_tensor_size(info) for info in self.output_tensor_info.values()
+        ])
+        self.tensor_size = self.input_tensor_size + self.output_tensor_size
+
+        self.read_bytes = \
+            calc_tensor_size(self.input_tensor_info["packed_qkv"]) / self.total_head_num * (self.q_head_num + self.kv_head_num) + \
+            calc_tensor_size(self.input_tensor_info["q_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["accum_q_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["cache_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["cos"]) + \
+            calc_tensor_size(self.input_tensor_info["sin"])
+
+        self.write_bytes = \
+            calc_tensor_size(self.output_tensor_info["y"]) / self.total_head_num * (self.q_head_num + self.kv_head_num)
+        
+        self.io_bytes = self.read_bytes + self.write_bytes
+
+
+        # creator func
+        self._create_tensors_func = partial(
+            self._create_in_out_tensors, 
+            create_inputs=True, 
+            create_outputs=True
+        )
+
+        # run func
+        self._run_func = self.rotary_embedding_run
+
+
+    def rotary_embedding_run(self, tensor_mapping):
+        # get pre-allocated input tensors
+        packed_qkv = tensor_mapping["packed_qkv"]
+        q_lens = tensor_mapping["q_lens"]
+        accum_q_lens = tensor_mapping["accum_q_lens"]
+        cache_lens = tensor_mapping["cache_lens"]
+        cos = tensor_mapping["cos"]
+        sin = tensor_mapping["sin"]
+
+        # get pre-allocated output tensors
+        y = tensor_mapping["y"]
+
+
+        def rotate(qk, cos, sin):
+            # [q_seq_len, q_head_num + kv_head_num, head_dim]
+            x1 = qk[..., :self.rope_dim//2]
+            x2 = qk[..., self.rope_dim//2:]
+
+            cos = cos.unsqueeze(1)
+            sin = sin.unsqueeze(1)
+
+            x1_rot = x1 * cos - x2 * sin
+            x2_rot = x1 * sin + x2 * cos
+
+            return torch.cat([x1_rot, x2_rot], dim=-1)
+            
+
+        # for each batch
+        for batch_idx in range(self.batch_size):
+            q_len = q_lens[batch_idx]
+            q_offset = accum_q_lens[batch_idx]
+            cur_cache_len = cache_lens[batch_idx]
+
+            token_start = q_offset
+            token_end = q_offset + q_len
+
+            qk_head_start = 0
+            qk_head_end = self.q_head_num + self.kv_head_num
+
+            dim_start = self.rope_offset
+            dim_end = self.rope_offset + self.rope_dim
+
+            cache_start = cur_cache_len
+            cache_end = cur_cache_len + q_len
+
+            y[token_start:token_end, qk_head_start:qk_head_end, dim_start:dim_end] = rotate(
+                packed_qkv[token_start:token_end, qk_head_start:qk_head_end, dim_start:dim_end], 
+                cos[cache_start : cache_end], 
+                sin[cache_start : cache_end]
+            )
+
+        return y
+
+
+
+
+
 class StoreKVCacheOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
 
     def prepare(self):
-        pass
+        self.arg_type = self.args_dict["arg_type"]
+        if not self.arg_type in ["llm"]:
+            raise NotImplementedError
+        
+        # src_dtype
+        self.dtype = self.args_dict.get("dtype", "bfloat16")
+        if not self.dtype in ["bfloat16"]:
+            raise NotImplementedError
+        self.torch_dtype = getattr(torch, self.dtype)
+
+        # dst_dtype
+        self.dst_dtype = self.args_dict.get("dst_dtype", "int8")
+        if not self.dst_dtype in ["int8"]:
+            raise NotImplementedError
+        self.torch_dst_dtype = getattr(torch, self.dst_dtype)
+
+        # pre-defined attrs
+        self.q_head_num = self.args_dict["q_head_num"]
+        self.kv_head_num = self.args_dict["kv_head_num"]
+        self.head_dim = self.args_dict["head_dim"]
+        self.total_head_num = self.q_head_num + 2 * self.kv_head_num
+
+        self.mode = self.args_dict.get("mode", "prefill")
+        if self.mode == "prefill":
+            # [q_seq_len, total_head_num, head_dim]
+            self.batch_size = 1
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_prefill_data(
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        elif self.mode == "prefill_session_cache":
+            # [accumed_num_tokens, total_head_num, head_dim]
+            self.batch_size = self.args_dict.get("batch_size", 1)
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_prefill_session_cache_data(
+                    self.batch_size, 
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        elif self.mode == "decode":
+            # [batch_size * q_seq_len, total_head_num, head_dim]
+            self.batch_size = self.args_dict.get("batch_size", 1)
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_decode_data(
+                    self.batch_size, 
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        else:
+            raise NotImplementedError
 
 
-# to be implemented
+        # accum q_lens
+        self.num_tokens = sum(self.q_lens)
+        # accum cache_lens
+        self.num_cache_tokens = sum(self.cache_lens)
+        # max q_len + cache_len
+        self.max_kv_len = max(self.kv_lens)
+
+
+        self.input_tensor_info = {
+            "packed_qkv": OpTensorInfo(
+                shape=[self.num_tokens, self.total_head_num, self.head_dim], 
+                dtype=self.torch_dtype, 
+                device=self.backend.get_torch_device_name()
+            ), 
+            "q_lens": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.q_lens, dtype=dtype, device=device)
+            ), 
+            "accum_q_lens": OpTensorInfo(
+                shape=[self.batch_size + 1], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.accum_q_lens, dtype=dtype, device=device)
+            ), 
+            "cache_lens": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.cache_lens, dtype=dtype, device=device)
+            ), 
+            "cache_slot_ids": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.cache_slot_ids, dtype=dtype, device=device)
+            ), 
+            "k_cache": OpTensorInfo(
+                shape=[self.batch_size, self.kv_head_num, self.max_kv_len, self.head_dim], 
+                dtype=self.torch_dst_dtype, 
+                device=self.backend.get_torch_device_name()
+            ), 
+            "v_cache": OpTensorInfo(
+                shape=[self.batch_size, self.kv_head_num, self.max_kv_len, self.head_dim], 
+                dtype=self.torch_dst_dtype, 
+                device=self.backend.get_torch_device_name(), 
+                creator=torch.empty
+            ),
+            "k_scale": OpTensorInfo(
+                shape=[self.kv_head_num, self.head_dim], 
+                dtype=torch.float32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=torch.ones
+            ), 
+            "v_scale": OpTensorInfo(
+                shape=[self.kv_head_num, self.head_dim], 
+                dtype=torch.float32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=torch.ones
+            )
+        }
+
+        self.output_tensor_info = {
+
+        }
+
+        # calculator
+        self.input_tensor_size = sum([
+            calc_tensor_size(info) for info in self.input_tensor_info.values()
+        ])
+        self.output_tensor_size = 0
+        self.tensor_size = self.input_tensor_size + self.output_tensor_size
+
+        self.read_bytes = \
+            calc_tensor_size(self.input_tensor_info["packed_qkv"]) / self.total_head_num * 2 * self.kv_head_num + \
+            calc_tensor_size(self.input_tensor_info["q_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["accum_q_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["cache_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["cache_slot_ids"]) + \
+            calc_tensor_size(self.input_tensor_info["k_scale"]) + \
+            calc_tensor_size(self.input_tensor_info["v_scale"])
+
+        self.write_bytes = \
+            calc_tensor_size(self.input_tensor_info["k_cache"]) / self.batch_size / self.max_kv_len * self.num_tokens + \
+            calc_tensor_size(self.input_tensor_info["v_cache"]) / self.batch_size / self.max_kv_len * self.num_tokens
+
+        self.io_bytes = self.read_bytes + self.write_bytes
+
+        # creator func
+        self._create_tensors_func = partial(
+            self._create_in_out_tensors, 
+            create_inputs=True, 
+            create_outputs=True
+        )
+
+        # run func
+        self._run_func = self.store_kv_cache_run
+
+
+    def store_kv_cache_run(self, tensor_mapping):
+        # get pre-allocated input tensors
+        packed_qkv = tensor_mapping["packed_qkv"]
+        q_lens = tensor_mapping["q_lens"]
+        accum_q_lens = tensor_mapping["accum_q_lens"]
+        cache_lens = tensor_mapping["cache_lens"]
+        cache_slot_ids = tensor_mapping["cache_slot_ids"]
+        k_cache = tensor_mapping["k_cache"]
+        v_cache = tensor_mapping["v_cache"]
+        k_scale = tensor_mapping["k_scale"]
+        v_scale = tensor_mapping["v_scale"]
+
+        # for each batch
+        for batch_idx in range(self.batch_size):
+            q_len = q_lens[batch_idx]
+            q_offset = accum_q_lens[batch_idx]
+            cur_cache_len = cache_lens[batch_idx]
+            cur_slot_id = cache_slot_ids[batch_idx]
+
+            token_start = q_offset
+            token_end = q_offset + q_len
+
+            k_head_start = self.q_head_num
+            k_head_end = self.q_head_num + self.kv_head_num
+            v_head_start = self.q_head_num + self.kv_head_num
+            v_head_end = self.q_head_num + self.kv_head_num * 2
+
+            cache_start = cur_cache_len
+            cache_end = cur_cache_len + q_len
+
+            # [num_tokens, total_head_num, head_dim]
+            # --> [q_len, kv_head_num, head_dim]
+            # --> [kv_head_num, q_len, head_dim]
+            cur_k = packed_qkv[token_start:token_end, k_head_start:k_head_end].transpose(0, 1)
+            cur_v = packed_qkv[token_start:token_end, v_head_start:v_head_end].transpose(0, 1)
+
+            # [max_batch_size, total_head_num, max_seq_len, head_dim]
+            # --> [kv_head_num, q_len, head_dim]
+
+            k_cache[cur_slot_id, k_head_start:k_head_end, cache_start:cache_end] = torch.round(
+                torch.mul(cur_k, k_scale.unsqueeze(1))).type(self.torch_dst_dtype)
+            v_cache[cur_slot_id, v_head_start:v_head_end, cache_start:cache_end] = torch.round(
+                torch.mul(cur_v, v_scale.unsqueeze(1))).type(self.torch_dst_dtype)
+
+
+
 class FlashAttentionOp(BasicOp):
     def __init__(self, args_dict, backend, *args, **kwargs):
         super().__init__(args_dict, backend, *args, **kwargs)
@@ -594,51 +1024,155 @@ class FlashAttentionOp(BasicOp):
         if not self.arg_type in ["llm"]:
             raise NotImplementedError
         
+        # src_dtype
+        # q in bf16, out bf16
         self.dtype = self.args_dict.get("dtype", "bfloat16")
         if not self.dtype in ["bfloat16"]:
             raise NotImplementedError
         self.torch_dtype = getattr(torch, self.dtype)
 
+        # cache_dtype
+        # bf16 or int8
+        self.cache_dtype = self.args_dict.get("cache_dtype", "bfloat16")
+        if not self.dtype in ["bfloat16", "int8"]:
+            raise NotImplementedError
+        self.cache_torch_dtype = getattr(torch, self.cache_dtype)
+
+        # pre-defined attrs
         self.is_causal = self.args_dict.get("is_causal", True)
         if not self.is_causal:
             raise NotImplementedError
-        
+
         self.q_head_num = self.args_dict["q_head_num"]
         self.kv_head_num = self.args_dict["kv_head_num"]
         self.head_dim = self.args_dict["head_dim"]
 
-        self.batch_size = self.args_dict["batch_size"]
-        self.q_seq_len = self.args_dict["q_seq_len"]
-        self.kv_seq_len = self.q_seq_len
-        self.cache_len = self.kv_seq_len - self.q_seq_len
+        self.mode = self.args_dict.get("mode", "prefill")
+        if self.mode == "prefill":
+            # [q_seq_len, total_head_num, head_dim]
+            self.batch_size = 1
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_prefill_data(
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        elif self.mode == "prefill_session_cache":
+            # [accumed_num_tokens, total_head_num, head_dim]
+            self.batch_size = self.args_dict.get("batch_size", 1)
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_prefill_session_cache_data(
+                    self.batch_size, 
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        elif self.mode == "decode":
+            # [batch_size * q_seq_len, total_head_num, head_dim]
+            self.batch_size = self.args_dict.get("batch_size", 1)
+            self.q_seq_len = self.args_dict["q_seq_len"]
+            self.cache_len = self.args_dict["cache_len"]
+
+            self.q_lens, self.accum_q_lens, self.cache_lens, self.cache_slot_ids, self.kv_lens = \
+                generate_decode_data(
+                    self.batch_size, 
+                    self.q_seq_len, 
+                    self.cache_len
+                )
+
+        else:
+            raise NotImplementedError
+
         self.softmax_scale = self.head_dim ** (-0.5)
+
+
+        # accum q_lens
+        self.num_tokens = sum(self.q_lens)
+        # accum cache_lens
+        self.num_cache_tokens = sum(self.cache_lens)
+        # max q_len + cache_len
+        self.max_kv_len = max(self.kv_lens)
+
+
 
         # define basic input/outpus, could be overrided
         self.input_tensor_info = {
+            # slice from packed_qkv, stride on head_num
             "q": OpTensorInfo(
-                shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
+                shape=[self.num_tokens, self.q_head_num, self.head_dim], 
                 dtype=self.torch_dtype, 
                 device=self.backend.get_torch_device_name()
             ), 
-            "k": OpTensorInfo(
-                shape=[self.batch_size, self.q_seq_len, self.kv_head_num, self.head_dim], 
-                dtype=self.torch_dtype, 
-                device=self.backend.get_torch_device_name()
+            "q_lens": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.q_lens, dtype=dtype, device=device)
             ), 
-            "v": OpTensorInfo(
-                shape=[self.batch_size, self.q_seq_len, self.kv_head_num, self.head_dim], 
-                dtype=self.torch_dtype, 
-                device=self.backend.get_torch_device_name()
-            )
+            "accum_q_lens": OpTensorInfo(
+                shape=[self.batch_size + 1], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.accum_q_lens, dtype=dtype, device=device)
+            ), 
+            "cache_lens": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.cache_lens, dtype=dtype, device=device)
+            ), 
+            "cache_slot_ids": OpTensorInfo(
+                shape=[self.batch_size], 
+                dtype=torch.int32, 
+                device=self.backend.get_torch_device_name(), 
+                creator=lambda size, dtype, device: torch.tensor(self.cache_slot_ids, dtype=dtype, device=device)
+            ), 
+            # reference kv_cache format
+            "k_cache": OpTensorInfo(
+                shape=[self.batch_size, self.kv_head_num, self.max_kv_len, self.head_dim], 
+                dtype=self.cache_torch_dtype, 
+                device=self.backend.get_torch_device_name(), 
+                creator=torch.empty
+            ), 
+            "v_cache": OpTensorInfo(
+                shape=[self.batch_size, self.kv_head_num, self.max_kv_len, self.head_dim], 
+                dtype=self.cache_torch_dtype, 
+                device=self.backend.get_torch_device_name(), 
+                creator=torch.empty
+            ),
         }
+        if self.dtype != self.cache_dtype:
+            self.input_tensor_info.update({
+                "k_scale": OpTensorInfo(
+                    shape=[self.kv_head_num, self.head_dim], 
+                    dtype=torch.float32, 
+                    device=self.backend.get_torch_device_name(), 
+                    creator=torch.ones
+                ), 
+                "v_scale": OpTensorInfo(
+                    shape=[self.kv_head_num, self.head_dim], 
+                    dtype=torch.float32, 
+                    device=self.backend.get_torch_device_name(), 
+                    creator=torch.ones
+                )
+            })
+
         self.output_tensor_info = {
             "out": OpTensorInfo(
-                shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
+                shape=[self.num_tokens, self.q_head_num, self.head_dim], 
                 dtype=self.torch_dtype, 
                 device=self.backend.get_torch_device_name()
             )
         }
 
+
+        # calculator
         self.input_tensor_size = sum([
             calc_tensor_size(info) for info in self.input_tensor_info.values()
         ])
@@ -647,24 +1181,40 @@ class FlashAttentionOp(BasicOp):
         ])
         self.tensor_size = self.input_tensor_size + self.output_tensor_size
 
-        self.read_bytes = self.input_tensor_size
+        self.read_bytes = \
+            calc_tensor_size(self.input_tensor_info["q"]) + \
+            calc_tensor_size(self.input_tensor_info["q_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["accum_q_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["cache_lens"]) + \
+            calc_tensor_size(self.input_tensor_info["cache_slot_ids"]) + \
+            calc_tensor_size(self.input_tensor_info["k_cache"]) / self.batch_size / self.max_kv_len * self.num_cache_tokens + \
+            calc_tensor_size(self.input_tensor_info["v_cache"]) / self.batch_size / self.max_kv_len * self.num_cache_tokens
+        if self.dtype != self.cache_dtype:
+            self.read_bytes += \
+                calc_tensor_size(self.input_tensor_info["k_scale"]) + \
+                calc_tensor_size(self.input_tensor_info["v_scale"])
         self.write_bytes = self.output_tensor_size
+
         self.io_bytes = self.read_bytes + self.write_bytes
 
-        p_gemm_b = self.batch_size * self.q_head_num
-        p_gemm_m = self.q_seq_len
-        p_gemm_k = self.head_dim
-        p_gemm_n = self.kv_seq_len
-        p_gemm_calc_flops = p_gemm_b * p_gemm_m * p_gemm_k * p_gemm_n * 2
 
-        o_gemm_b = self.batch_size * self.q_head_num
-        o_gemm_m = self.q_seq_len
-        o_gemm_k = self.kv_seq_len
-        o_gemm_n = self.head_dim
-        o_gemm_calc_flops = o_gemm_b * o_gemm_m * o_gemm_k * o_gemm_n * 2
+        self.calc_flops = 0
+    
+        for idx in range(self.batch_size):
+            q_len = self.q_lens[idx]
+            cache_len = self.cache_lens[idx]
+            kv_len = q_len + cache_len
 
-        flops_ratio = (self.cache_len + 1 + self.kv_seq_len) * self.q_seq_len / 2 / (self.q_seq_len * self.kv_seq_len) if self.is_causal else 1
-        self.calc_flops = (p_gemm_calc_flops + o_gemm_calc_flops) * flops_ratio
+            # p = q * v, bf16 batch_gemm
+            # o = p * v, bf16 batch_gemm
+            gemm_flops = 2 * self.q_head_num * q_len * self.head_dim * kv_len * 2
+
+            if self.is_causal:
+                flops_ratio = (cache_len + 1 + kv_len) * q_len / 2 / (kv_len * kv_len)
+            else:
+                flops_ratio = 1.
+
+            self.calc_flops += gemm_flops * flops_ratio
 
         # specify create input/output tensors func
         self._create_tensors_func = partial(
@@ -680,268 +1230,6 @@ class FlashAttentionOp(BasicOp):
     def flash_attention_run(self, tensor_mapping):
         raise NotImplementedError
 
-# to be implemented
-class FlashAttentionSessionCache(BasicOp):
-    def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend, *args, **kwargs)
-
-    def prepare(self):
-        self.arg_type = self.args_dict["arg_type"]
-        if not self.arg_type in ["llm_cache_rate"]:
-            raise NotImplementedError
-
-        self.is_causal = self.args_dict.get("is_causal", True)
-        if not self.is_causal:
-            raise NotImplementedError
-
-        self.dtype = self.args_dict.get("dtype", "bfloat16")
-        if not self.dtype in ["bfloat16"]:
-            raise NotImplementedError
-        self.torch_dtype = getattr(torch, self.dtype)
-
-
-        self.q_head_num = self.args_dict["q_head_num"]
-        self.kv_head_num = self.args_dict["kv_head_num"]
-        self.head_dim = self.args_dict["head_dim"]
-
-        self.kv_seq_len = self.args_dict["kv_seq_len"]
-        self.accum_q_seq_len = self.args_dict["accum_q_seq_len"]
-        self.cache_rate = self.args_dict["cache_rate"]
-        
-        self.cache_len = self.kv_seq_len * self.cache_rate // 100
-        self.q_seq_len = self.kv_seq_len - self.cache_len
-
-        # batch_size * q_seq_len >= kv_seq_len
-        self.batch_size = (self.accum_q_seq_len + self.q_seq_len - 1) // self.q_seq_len
-
-        self.softmax_scale = self.head_dim ** (-0.5)
-
-
-        # define basic input/outpus, could be overrided
-        self.input_tensor_info = {
-            "q": OpTensorInfo(
-                shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
-                dtype=self.torch_dtype, 
-                device=self.backend.get_torch_device_name()
-            ), 
-            "k_cache": OpTensorInfo(
-                shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim], 
-                dtype=self.torch_dtype, 
-                device=self.backend.get_torch_device_name()
-            ), 
-            "v_cache": OpTensorInfo(
-                shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim], 
-                dtype=self.torch_dtype, 
-                device=self.backend.get_torch_device_name()
-            ), 
-            "cache_seqlens": OpTensorInfo(
-                    shape=[self.batch_size], 
-                    dtype=torch.int32, 
-                    device=self.backend.get_torch_device_name(),
-                    creator=lambda size, dtype, device: torch.ones(size, dtype=dtype, device=device) * self.kv_seq_len
-                )
-        }
-        self.output_tensor_info = {
-            "out": OpTensorInfo(
-                shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
-                dtype=self.torch_dtype, 
-                device=self.backend.get_torch_device_name()
-            )
-        }
-
-        self.input_tensor_size = sum([
-            calc_tensor_size(info) for info in self.input_tensor_info.values()
-        ])
-        self.output_tensor_size = sum([
-            calc_tensor_size(info) for info in self.output_tensor_info.values()
-        ])
-        self.tensor_size = self.input_tensor_size + self.output_tensor_size
-
-        self.read_bytes = self.input_tensor_size
-        self.write_bytes = self.output_tensor_size
-        self.io_bytes = self.read_bytes + self.write_bytes
-
-        p_gemm_b = self.batch_size * self.q_head_num
-        p_gemm_m = self.q_seq_len
-        p_gemm_k = self.head_dim
-        p_gemm_n = self.kv_seq_len
-        p_gemm_calc_flops = p_gemm_b * p_gemm_m * p_gemm_k * p_gemm_n * 2
-
-        o_gemm_b = self.batch_size * self.q_head_num
-        o_gemm_m = self.q_seq_len
-        o_gemm_k = self.kv_seq_len
-        o_gemm_n = self.head_dim
-        o_gemm_calc_flops = o_gemm_b * o_gemm_m * o_gemm_k * o_gemm_n * 2
-
-        flops_ratio = (self.cache_len + 1 + self.kv_seq_len) * self.q_seq_len / 2 / (self.q_seq_len * self.kv_seq_len) if self.is_causal else 1
-        self.calc_flops = (p_gemm_calc_flops + o_gemm_calc_flops) * flops_ratio
-
-        # specify create input/output tensors func
-        self._create_tensors_func = partial(
-            self._create_in_out_tensors,
-            create_inputs=True,
-            create_outputs=False,
-        )
-        
-        # specify run function
-        self._run_func = self.flash_attention_session_cache_run
-
-    def flash_attention_session_cache_run(self, tensor_mapping):
-        raise NotImplementedError
-
-# to be implemented
-class FlashDecodingOp(BasicOp):
-    def __init__(self, args_dict, backend, *args, **kwargs):
-        super().__init__(args_dict, backend, *args, **kwargs)
-
-    def prepare(self):
-        # parse args
-        self.arg_type = self.args_dict["arg_type"]
-        if not self.arg_type in ["llm"]:
-            raise NotImplementedError
-        
-        self.dtype = self.args_dict.get("dtype", "bfloat16")
-        if not self.dtype in ["bfloat16", "bfloat16_c8"]:
-            raise NotImplementedError
-        
-        if self.dtype == "bfloat16":
-            self.torch_dtype = getattr(torch, self.dtype)
-        elif self.dtype == "bfloat16_c8":
-            self.torch_dtype = torch.int8
-
-        self.is_causal = self.args_dict.get("is_causal", True)
-        if not self.is_causal:
-            raise NotImplementedError
-        
-        self.q_head_num = self.args_dict["q_head_num"]
-        self.kv_head_num = self.args_dict["kv_head_num"]
-        self.head_dim = self.args_dict["head_dim"]
-
-        self.batch_size = self.args_dict["batch_size"]
-        self.q_seq_len = self.args_dict["q_seq_len"]
-        self.kv_seq_len = self.args_dict["kv_seq_len"]
-    
-        self.softmax_scale = self.head_dim ** (-0.5)
-
-        """
-        define basic input/outpus, could be overrided
-        assume that store_kv_cache already executed
-        kv_seq_len = q_seq_len + cache_len
-        """
-        if self.dtype == "bfloat16":
-            self.input_tensor_info = {
-                "q": OpTensorInfo(
-                    shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
-                    dtype=torch.bfloat16, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "k_cache": OpTensorInfo(
-                    shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim], 
-                    dtype=torch.bfloat16, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "v_cache": OpTensorInfo(
-                    shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim], 
-                    dtype=torch.bfloat16, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "cache_seqlens": OpTensorInfo(
-                    shape=[self.batch_size], 
-                    dtype=torch.int32, 
-                    device=self.backend.get_torch_device_name(),
-                    creator=lambda size, dtype, device: torch.ones(size, dtype=dtype, device=device) * self.kv_seq_len
-                )
-            }
-            self.output_tensor_info = {
-                "out": OpTensorInfo(
-                    shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
-                    dtype=torch.bfloat16, 
-                    device=self.backend.get_torch_device_name()
-                )
-            }
-        elif self.dtype == "bfloat16_c8":
-            self.input_tensor_info = {
-                "q": OpTensorInfo(
-                    shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
-                    dtype=torch.bfloat16, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "k_cache": OpTensorInfo(
-                    shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim], 
-                    dtype=torch.int8, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "v_cache": OpTensorInfo(
-                    shape=[self.batch_size, self.kv_seq_len, self.kv_head_num, self.head_dim], 
-                    dtype=torch.int8, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "k_scale": OpTensorInfo(
-                    shape=[self.kv_head_num, self.head_dim], 
-                    dtype=torch.float32, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "v_scale": OpTensorInfo(
-                    shape=[self.kv_head_num, self.head_dim], 
-                    dtype=torch.float32, 
-                    device=self.backend.get_torch_device_name()
-                ), 
-                "cache_seqlens": OpTensorInfo(
-                    shape=[self.batch_size], 
-                    dtype=torch.int32, 
-                    device=self.backend.get_torch_device_name(),
-                    creator=lambda size, dtype, device: torch.ones(size, dtype=dtype, device=device) * self.kv_seq_len
-                )
-            }
-            self.output_tensor_info = {
-                "out": OpTensorInfo(
-                    shape=[self.batch_size, self.q_seq_len, self.q_head_num, self.head_dim], 
-                    dtype=torch.bfloat16, 
-                    device=self.backend.get_torch_device_name()
-                )
-            }
-            
-
-        self.input_tensor_size = sum([
-            calc_tensor_size(info) for info in self.input_tensor_info.values()
-        ])
-        self.output_tensor_size = sum([
-            calc_tensor_size(info) for info in self.output_tensor_info.values()
-        ])
-        self.tensor_size = self.input_tensor_size + self.output_tensor_size
-
-        self.read_bytes = self.input_tensor_size
-        self.write_bytes = self.output_tensor_size
-        self.io_bytes = self.read_bytes + self.write_bytes
-
-        p_gemm_b = self.batch_size * self.q_head_num
-        p_gemm_m = self.q_seq_len
-        p_gemm_k = self.head_dim
-        p_gemm_n = self.kv_seq_len
-        p_gemm_calc_flops = p_gemm_b * p_gemm_m * p_gemm_k * p_gemm_n * 2
-
-        o_gemm_b = self.batch_size * self.q_head_num
-        o_gemm_m = self.q_seq_len
-        o_gemm_k = self.kv_seq_len
-        o_gemm_n = self.head_dim
-        o_gemm_calc_flops = o_gemm_b * o_gemm_m * o_gemm_k * o_gemm_n * 2
-
-        self.calc_flops = p_gemm_calc_flops + o_gemm_calc_flops
-
-        # specify create input/output tensors func
-        self._create_tensors_func = partial(
-            self._create_in_out_tensors,
-            create_inputs=True,
-            create_outputs=False,
-        )
-        
-        # specify run function
-        self._run_func = self.flash_decoding_run
-
-
-    def flash_decoding_run(self, tensor_mapping):
-        raise NotImplementedError
-    
 
 
 
@@ -1290,7 +1578,7 @@ class MoeScatterDynamicQuantOp(BasicOp):
                 shape=[self.max_scatter_tokens], 
                 dtype=torch.int32, 
                 device=self.backend.get_torch_device_name(),
-                creator=lambda size, dtype, device: torch.ones * -1
+                creator=lambda size, dtype, device: torch.ones(size, dtype=dtype, device=device) * -1
             ), 
             # partial (shared_experts + experts) token count
             "experts_token_count": OpTensorInfo(
@@ -1360,8 +1648,6 @@ class MoeScatterDynamicQuantOp(BasicOp):
         experts_token_count = tensor_mapping["experts_token_count"]
         experts_token_start = tensor_mapping["experts_token_start"]
         
-
-
         # shared experts
         for idx in range(self.shared_experts_per_rank):
             expert_idx = idx
@@ -1385,8 +1671,8 @@ class MoeScatterDynamicQuantOp(BasicOp):
             experts_token_count[expert_idx] = self.num_tokens
             experts_token_start[expert_idx] = output_token_start
             scatter_tokens_offset[output_token_start:output_token_end] = torch.arange(
-                start=output_token_start, 
-                end=output_token_end, 
+                start=input_token_start, 
+                end=input_token_end, 
                 dtype=torch.int32, 
                 device=self.backend.get_torch_device_name()
             )
@@ -1421,15 +1707,7 @@ class MoeScatterDynamicQuantOp(BasicOp):
                 # assign output
                 scatter_tokens[output_token_start:output_token_end] = quant_tokens
                 scatter_per_token_scale[output_token_start:output_token_end] = tokens_scale
-                scatter_tokens_offset[output_token_start:output_token_end] = torch.arange(
-                    start=output_token_start, 
-                    end=output_token_end, 
-                    dtype=torch.int32, 
-                    device=self.backend.get_torch_device_name(), 
-                )
-
-
-
+                scatter_tokens_offset[output_token_start:output_token_end] = token_indices.type(scatter_tokens_offset.dtype)
 
 
 
@@ -1909,24 +2187,22 @@ class MoeGatherOp(BasicOp):
         self.allocated_tokens_per_expert = self.allocated_tokens // self.experts_per_rank
         self.allocated_tokens_per_expert_remainder = self.allocated_tokens % self.experts_per_rank
 
-        self.token_list = []
-        self.token_start_list = []
-        self.token_offset_list = []
-        temp_token_start = 0
-        for i in range(self.shared_experts_per_rank):
-            self.token_start_list.append(temp_token_start)
-            self.token_list.append(self.shared_tokens_per_sp)
-            self.token_offset_list.extend(range(temp_token_start, temp_token_start + self.token_list[-1]))
-            temp_token_start += self.token_list[-1]
 
-        for i in range(self.experts_per_rank):
-            self.token_start_list.append(temp_token_start)
-            if i < self.allocated_tokens_per_expert_remainder:
-                self.token_list.append(self.allocated_tokens_per_expert + 1)
-            else:
-                self.token_list.append(self.allocated_tokens_per_expert)
-            self.token_offset_list.extend(range(temp_token_start, temp_token_start + self.token_list[-1]))
-            temp_token_start += self.token_list[-1]
+        self.token_offset_list = []
+
+        
+        # for shared experts
+        for _ in range(self.shared_experts_per_rank):
+            self.token_offset_list.extend(
+                range(self.shared_token_sp_start, self.shared_token_sp_end)
+            )
+
+        # for experts
+        for expert_idx in range(self.experts_per_rank):
+            cur_select_token = expert_idx
+            while cur_select_token // self.topk < self.tokens_per_ep:
+                self.token_offset_list.append(cur_select_token // self.topk + self.tokens_ep_start)
+                cur_select_token += self.experts_per_rank
 
 
         self.total_experts_num = self.shared_experts_per_rank + self.experts_per_rank
@@ -1989,21 +2265,19 @@ class MoeGatherOp(BasicOp):
         # run func
         self._run_func = self.moe_gather_run
 
+
     def moe_gather_run(self, tensor_mapping):
+        # get pre-allocated input tensors
         scatter_tokens = tensor_mapping["scatter_tokens"]
         scatter_tokens_offset = tensor_mapping["scatter_tokens_offset"]
+
+        # get pre-allocated output tensors
         convergent_tokens = tensor_mapping["convergent_tokens"]
+
+        # [num_scatter_tokens, hidden_size] --> [num_tokens, hidden_size]
         convergent_tokens.index_add_(0, scatter_tokens_offset, scatter_tokens)
+
         return convergent_tokens
-
-
-
-
-
-
-
-
-
 
 
 
@@ -2241,12 +2515,3 @@ class MoeDispatchTokensOp(BasicOp):
             
 
         
-
-
-
-
-
-
-
-
-

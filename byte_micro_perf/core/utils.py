@@ -78,6 +78,7 @@ OpTensorInfo = namedtuple(
 
 
 
+
 def calc_tensor_size(tensor_info: OpTensorInfo):
     tensor_size = 1
     for dim in tensor_info.shape:
