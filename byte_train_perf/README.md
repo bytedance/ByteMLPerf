@@ -86,3 +86,6 @@
 *   **1200 卡集群**：预估 MFU 为**XX%\~XX%**（较 240 卡下降幅度小于 8%），在超大规模集群下，仍能维持较高的计算效率，满足万亿级模型训练的需求。
 
 
+## 五、详细的测试方案
+请参考文档 ByteMlPerf 训练评估方案， https://bytedance.larkoffice.com/docx/G3zndk3W2ojR4fx11bBc3UHKnze?from=from_copylink
+该文档有详细介绍算子测试， 双机，四机测试用的ckpt, 数据和GPU对比的loss log， 以及模型超参。 
