@@ -7,6 +7,8 @@ from typing import List
 from collections import namedtuple
 from functools import partial
 
+import habana_frameworks.torch.core as htcore
+
 FILE_DIR = pathlib.Path(__file__).parent.absolute()
 MICRO_PERF_DIR = FILE_DIR.parent
 
@@ -90,6 +92,9 @@ class BasicOp:
     ):
         all_tensor_list = []
 
+        htcore.mark_step()
+        torch.hpu.synchronize()
+
         # create first instance
         first_tensor_mapping = {}
         if create_inputs:
@@ -112,6 +117,8 @@ class BasicOp:
                     first_tensor_mapping[key] = first_tensor_mapping[key].pin_memory()
         all_tensor_list.append(first_tensor_mapping)
 
+        htcore.mark_step()
+        # torch.hpu.synchronize()
 
         # clone following instances
         for _ in range(instance_num - 1):
@@ -119,6 +126,8 @@ class BasicOp:
             for key, value in first_tensor_mapping.items():
                 tensor_mapping[key] = value.clone()
             all_tensor_list.append(tensor_mapping)
+            htcore.mark_step()
+            # torch.hpu.synchronize()
 
         return all_tensor_list
 
