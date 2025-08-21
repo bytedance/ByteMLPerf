@@ -43,13 +43,6 @@ class BackendHPU(Backend):
     def __init__(self):
         super().__init__()
 
-    def __del__(self):
-        if self.numa_rank == 0:
-            PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling")
-            if PROFILER_DIR.exists():
-                # shutil.rmtree(PROFILER_DIR)
-                pass
-
     def get_torch_device_name(self):
         return "hpu"
 
