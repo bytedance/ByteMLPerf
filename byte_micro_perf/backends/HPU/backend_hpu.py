@@ -119,67 +119,14 @@ class BackendHPU(Backend):
         self, op_instance, 
         warmup_iterations, prefer_iterations, 
         tensor_list, 
-        profiling=True
+        profiling=False
     ):
         op_group = op_instance.op_group
         group_size = op_instance.group_size
 
-        
-        # op_instance.core_run=torch.compile(op_instance.core_run,backend="hpu_backend")
+        if profiling:
+            raise NotImplementedError("Profiling mode is not supported for HPU")
 
-        # if not op_instance.is_concurrent and profiling:
-        #     process_id = os.getpid()
-        #     PROFILER_DIR = pathlib.Path.cwd().joinpath("profiling", f"{process_id}")
-        #     PROFILER_DIR.mkdir(parents=True, exist_ok=True)
-        #     TRACE_FILE = PROFILER_DIR.joinpath("trace.json")
-
-        #     # profiling
-        #     with torch.profiler.profile(
-        #         activities=[torch.profiler.ProfilerActivity.HPU], 
-        #         schedule=torch.profiler.schedule(
-        #             wait=0, 
-        #             warmup=warmup_iterations, 
-        #             active=prefer_iterations, 
-        #             repeat=1
-        #         ), 
-        #         on_trace_ready=lambda prof: prof.export_chrome_trace(str(TRACE_FILE))
-        #     ) as prof:
-        #         for i in range(prefer_iterations + warmup_iterations):
-        #             op_instance.core_run(tensor_list[i % len(tensor_list)])
-        #             self.device_synchronize()
-        #             prof.step()
-
-        #     # parse and delete profiling json file
-        #     average_latency = 0.
-        #     kernel_latency_list = {}
-        #     if PROFILER_DIR.exists():
-        #         json_files = list(PROFILER_DIR.glob("*.json"))
-        #         if json_files:
-        #             profiling_data = json.load(open(json_files[0]))
-        #             for event in profiling_data["traceEvents"]:
-        #                 if event.get("cat", None) in ["hpu_op"] and event.get("name", None) in ["synchronizeEvent (accel0)"]:
-        #                     kernel_name = event["name"]
-        #                     kernel_latency = event["dur"]
-        #                     if kernel_name not in kernel_latency_list:
-        #                         kernel_latency_list[kernel_name] = []
-        #                     kernel_latency_list[kernel_name].append(kernel_latency)
-
-        #             take_iters = prefer_iterations // 2
-        #             iters_offset = prefer_iterations - take_iters
-
-        #             removed_keys = []
-        #             for kernel in kernel_latency_list:
-        #                 if len(kernel_latency_list[kernel]) != prefer_iterations:
-        #                     removed_keys.append(kernel)
-        #                 average_latency += sum(kernel_latency_list[kernel][iters_offset:])
-        #             for kernel in removed_keys:
-        #                 kernel_latency_list.pop(kernel)
-
-        #             average_latency /= take_iters
-        #         TRACE_FILE.unlink()
-        #     return average_latency, list(kernel_latency_list.keys())
-
-        # else:
         ht.core.mark_step()
         for i in range(warmup_iterations):
             index = random.randint(0, len(tensor_list) - 1)
@@ -192,7 +139,7 @@ class BackendHPU(Backend):
         self.op_group_barrier(op_group=op_group, group_size=group_size)
         start_event.record()
         for i in range(prefer_iterations):
-            op_instance.core_run(tensor_list[i % len(tensor_list)])
+            _ = op_instance.core_run(tensor_list[i % len(tensor_list)])
             ht.core.mark_step()
         self.device_synchronize()
         end_event.record()
