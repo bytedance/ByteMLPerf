@@ -90,11 +90,13 @@ class HeadRMSNormOp(BasicOp):
 
         # in-place norm on specified heads
         head_data = token_data[:, self.norm_head_start:self.norm_head_end, :]
-        head_data = torch.nn.functional.rms_norm(
-            head_data, 
-            normalized_shape=head_data.shape[-1:],
-            weight=norm_weight,
-            eps=self.eps
+        head_data.copy_(
+            torch.nn.functional.rms_norm(
+                head_data,
+                normalized_shape=head_data.shape[-1:],
+                weight=norm_weight,
+                eps=self.eps,
+            )
         )
 
         return token_data
