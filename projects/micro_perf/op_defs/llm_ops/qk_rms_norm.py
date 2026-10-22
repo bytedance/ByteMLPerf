@@ -102,17 +102,21 @@ class QKRMSNormOp(BasicOp):
         k_head_data = token_data[:, k_start:k_end]
         k_head_data = k_head_data.view(-1, self.kv_head_num, self.qk_head_dim)
 
-        q_head_data = torch.nn.functional.rms_norm(
-            q_head_data, 
-            normalized_shape=q_head_data.shape[-1:],
-            weight=q_norm_weight, 
-            eps=self.eps
+        q_head_data.copy_(
+            torch.nn.functional.rms_norm(
+                q_head_data,
+                normalized_shape=q_head_data.shape[-1:],
+                weight=q_norm_weight,
+                eps=self.eps,
+            )
         )
-        k_head_data = torch.nn.functional.rms_norm(
-            k_head_data, 
-            normalized_shape=k_head_data.shape[-1:],
-            weight=k_norm_weight, 
-            eps=self.eps
+        k_head_data.copy_(
+            torch.nn.functional.rms_norm(
+                k_head_data,
+                normalized_shape=k_head_data.shape[-1:],
+                weight=k_norm_weight,
+                eps=self.eps,
+            )
         )
 
         return token_data
